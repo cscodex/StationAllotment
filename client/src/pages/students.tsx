@@ -14,7 +14,7 @@ export default function Students() {
   const [page, setPage] = useState(0);
   const limit = 50;
 
-  const { data: studentsData, isLoading } = useQuery({
+  const { data: studentsData, isLoading } = useQuery<{students: Student[], total: number}>({
     queryKey: ["/api/students", { limit, offset: page * limit }],
   });
 
@@ -78,29 +78,67 @@ export default function Students() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead>App No.</TableHead>
                         <TableHead>Merit No.</TableHead>
                         <TableHead>Name</TableHead>
                         <TableHead>Stream</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Allotted District</TableHead>
-                        <TableHead>Top Choices</TableHead>
+                        <TableHead>District Choices</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredStudents.map((student: Student) => (
-                        <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
-                          <TableCell className="font-medium">{student.meritNumber}</TableCell>
-                          <TableCell>{student.name}</TableCell>
-                          <TableCell>{student.stream}</TableCell>
-                          <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
-                          <TableCell>{student.allottedDistrict || '-'}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {[student.choice1, student.choice2, student.choice3]
-                              .filter(Boolean)
-                              .join(', ') || '-'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredStudents.map((student: Student) => {
+                        const getChoiceDisplay = () => {
+                          const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5, 
+                                         student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                            .filter(Boolean);
+                          
+                          return choices.map((choice, index) => {
+                            const isAllocated = student.allocationStatus === 'allotted' && choice === student.allottedDistrict;
+                            const isRejected = student.allocationStatus === 'allotted' && choice !== student.allottedDistrict;
+                            
+                            return (
+                              <span 
+                                key={index} 
+                                className={`inline-block px-2 py-1 rounded text-xs mr-1 mb-1 ${
+                                  isAllocated 
+                                    ? 'bg-green-100 text-green-800 font-medium' 
+                                    : isRejected 
+                                    ? 'bg-red-100 text-red-600' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                {choice}
+                              </span>
+                            );
+                          });
+                        };
+
+                        return (
+                          <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                            <TableCell className="font-mono text-sm">{student.applicationNumber}</TableCell>
+                            <TableCell className="font-medium">{student.meritNumber}</TableCell>
+                            <TableCell>{student.name}</TableCell>
+                            <TableCell>
+                              <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>
+                                {student.stream}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
+                            <TableCell>
+                              {student.allottedDistrict ? (
+                                <Badge className="bg-green-100 text-green-800">{student.allottedDistrict}</Badge>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="max-w-md">
+                              <div className="flex flex-wrap">
+                                {getChoiceDisplay()}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

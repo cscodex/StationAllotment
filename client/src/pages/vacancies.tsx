@@ -7,7 +7,7 @@ import { MapPin } from "lucide-react";
 import type { Vacancy } from "@/types";
 
 export default function Vacancies() {
-  const { data: vacancies, isLoading } = useQuery({
+  const { data: vacancies, isLoading } = useQuery<Vacancy[]>({
     queryKey: ["/api/vacancies"],
   });
 
