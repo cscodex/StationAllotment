@@ -24,12 +24,11 @@ import {
   AlertTriangle,
   CheckCircle
 } from "lucide-react";
-import type { Student } from "@/types";
+import type { Student } from "@shared/schema";
+import { DISTRICTS as PUNJAB_DISTRICTS } from "@shared/schema";
 
-const DISTRICTS = [
-  'Amritsar', 'Ludhiana', 'Patiala', 'SAS Nagar', 'Jalandhar',
-  'Bathinda', 'Ferozepur', 'Sangrur', 'Gurdaspur', 'Talwara'
-];
+// Use DISTRICTS from shared schema
+const DISTRICTS = PUNJAB_DISTRICTS;
 
 const STREAMS = ['Medical', 'Commerce', 'NonMedical'];
 
@@ -55,14 +54,14 @@ export default function DistrictAdmin() {
   const queryClient = useQueryClient();
 
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ["/api/students", { limit: 100, offset: 0 }],
+    queryKey: ["/api/students", { limit: 200, offset: 0, district: user?.district }],
   });
 
   const { data: settings } = useQuery({
     queryKey: ["/api/settings"],
   });
 
-  const deadline = settings?.find((s: any) => s.key === 'allocation_deadline')?.value;
+  const deadline = (settings as any)?.find((s: any) => s.key === 'allocation_deadline')?.value;
   const deadlineDate = deadline ? new Date(deadline) : null;
   const isDeadlinePassed = deadlineDate ? new Date() > deadlineDate : false;
 
@@ -105,10 +104,10 @@ export default function DistrictAdmin() {
     },
   });
 
-  const filteredStudents = studentsData?.students?.filter((student: Student) => 
+  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
-    student.applicationNumber?.includes(searchTerm)
+    student.appNo?.includes(searchTerm)
   ) || [];
 
   const startEditing = (student: Student) => {

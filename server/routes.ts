@@ -188,11 +188,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: user.id, 
         username: user.username, 
         role: user.role, 
-        district: user.district 
+        district: user.district,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email
       });
     } catch (error) {
       console.error("Create user error:", error);
       res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  // Update user route
+  app.put('/api/users/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const updateData = req.body;
+      
+      const user = await storage.updateUser(id, updateData);
+      
+      await auditService.log(req.user.id, 'user_update', 'users', id, {
+        username: user.username,
+        role: user.role,
+        updates: updateData,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(user);
+    } catch (error) {
+      console.error("Update user error:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Delete user route
+  app.delete('/api/users/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      await storage.deleteUser(id);
+      
+      await auditService.log(req.user.id, 'user_delete', 'users', id, {
+        username: user.username,
+        role: user.role,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 
@@ -437,6 +485,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Export CSV error:", error);
       res.status(500).json({ message: "Failed to export CSV" });
+    }
+  });
+
+  // Export remaining vacancies as CSV
+  app.get('/api/export/vacancies/csv', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvData = await exportService.exportVacanciesAsCSV();
+      
+      await auditService.log(req.user.id, 'export_vacancies_csv', 'export', 'vacancies', {
+        format: 'csv',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=remaining_vacancies.csv');
+      res.send(csvData);
+    } catch (error) {
+      console.error("Export vacancies CSV error:", error);
+      res.status(500).json({ message: "Failed to export vacancies CSV" });
+    }
+  });
+
+  // Export remaining vacancies as PDF
+  app.get('/api/export/vacancies/pdf', isCentralAdmin, async (req: any, res) => {
+    try {
+      const pdfBuffer = await exportService.exportVacanciesAsPDF();
+      
+      await auditService.log(req.user.id, 'export_vacancies_pdf', 'export', 'vacancies', {
+        format: 'pdf',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=remaining_vacancies.pdf');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Export vacancies PDF error:", error);
+      res.status(500).json({ message: "Failed to export vacancies PDF" });
     }
   });
 
