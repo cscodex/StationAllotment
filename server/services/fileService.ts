@@ -2,7 +2,7 @@ import XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
 import { IStorage } from '../storage';
-import { InsertStudent, InsertVacancy, DISTRICTS, STREAMS } from '@shared/schema';
+import { InsertStudent, InsertVacancy, InsertStudentsEntranceResult, DISTRICTS, STREAMS } from '@shared/schema';
 
 export class FileService {
   constructor(private storage: IStorage) {}
@@ -127,6 +127,107 @@ export class FileService {
     }
   }
 
+  async processEntranceResultsFile(file: Express.Multer.File, uploadedBy: string) {
+    const fileUpload = await this.storage.createFileUpload({
+      filename: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+      type: 'entrance_results',
+      status: 'uploaded',
+      uploadedBy,
+    });
+
+    try {
+      const entranceResults = await this.parseEntranceResultsFile(file);
+      const validationResults = this.validateEntranceResults(entranceResults);
+
+      if (validationResults.errors.length > 0) {
+        await this.storage.updateFileUpload(fileUpload.id, {
+          status: 'failed',
+          validationResults,
+        });
+        return { ...fileUpload, status: 'failed', validationResults };
+      }
+
+      // Insert entrance results (don't clear existing ones, allow additions)
+      await this.storage.bulkCreateStudentsEntranceResults(entranceResults);
+
+      await this.storage.updateFileUpload(fileUpload.id, {
+        status: 'processed',
+        validationResults: { 
+          errors: [], 
+          processed: entranceResults.length,
+          message: `Successfully processed ${entranceResults.length} entrance result records` 
+        },
+      });
+
+      return { 
+        ...fileUpload, 
+        status: 'processed', 
+        validationResults: { 
+          errors: [], 
+          processed: entranceResults.length,
+          message: `Successfully processed ${entranceResults.length} entrance result records` 
+        } 
+      };
+    } catch (error) {
+      await this.storage.updateFileUpload(fileUpload.id, {
+        status: 'failed',
+        validationResults: { 
+          errors: [error instanceof Error ? error.message : 'Unknown error'],
+          processed: 0 
+        },
+      });
+      throw error;
+    } finally {
+      // Clean up uploaded file
+      fs.unlinkSync(file.path);
+    }
+  }
+
+  generateEntranceResultsTemplate(): string {
+    const headers = [
+      'Merit No',
+      'Application No', 
+      'Roll No',
+      'Student Name',
+      'Marks',
+      'Gender',
+      'Stream'
+    ];
+
+    const sampleRows = [
+      ['1001', 'APP2024001', 'ROLL001', 'Sample Student 1', '485', 'Male', 'Medical'],
+      ['1002', 'APP2024002', 'ROLL002', 'Sample Student 2', '480', 'Female', 'Commerce'],
+      ['1003', 'APP2024003', 'ROLL003', 'Sample Student 3', '475', 'Male', 'NonMedical']
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...sampleRows.map(row => row.join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  private async parseEntranceResultsFile(file: Express.Multer.File): Promise<InsertStudentsEntranceResult[]> {
+    const workbook = XLSX.readFile(file.path);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet);
+
+    return data.map((row: any) => ({
+      meritNo: parseInt(row['Merit No'] || row.MeritNo || row.merit_no || row.meritNumber || row.merit_number) || 0,
+      applicationNo: String(row['Application No'] || row.ApplicationNo || row.application_no || row.app_no || row.AppNo || ''),
+      rollNo: String(row['Roll No'] || row.RollNo || row.roll_no || row.rollNumber || row.roll_number || ''),
+      studentName: String(row['Student Name'] || row.StudentName || row.student_name || row.Name || row.name || ''),
+      marks: parseInt(row.Marks || row.marks || row.Score || row.score || row.TotalMarks || row.total_marks) || 0,
+      gender: String(row.Gender || row.gender || row.Sex || row.sex || ''),
+      stream: String(row.Stream || row.stream || row.Category || row.category || ''),
+    }));
+  }
+
   private async parseStudentFile(file: Express.Multer.File): Promise<InsertStudent[]> {
     const workbook = XLSX.readFile(file.path);
     const sheetName = workbook.SheetNames[0];
@@ -227,5 +328,60 @@ export class FileService {
     });
 
     return { errors, processed: vacancies.length };
+  }
+
+  private validateEntranceResults(entranceResults: InsertStudentsEntranceResult[]): { errors: string[]; processed: number } {
+    const errors: string[] = [];
+    const seenMeritNumbers = new Set<number>();
+    const seenAppNumbers = new Set<string>();
+    const seenRollNumbers = new Set<string>();
+    const validGenders = ['Male', 'Female', 'Other'];
+
+    entranceResults.forEach((result, index) => {
+      const row = index + 1;
+
+      // Check required fields
+      if (!result.meritNo) {
+        errors.push(`Row ${row}: Merit Number is required`);
+      } else if (seenMeritNumbers.has(result.meritNo)) {
+        errors.push(`Row ${row}: Duplicate Merit Number ${result.meritNo}`);
+      } else {
+        seenMeritNumbers.add(result.meritNo);
+      }
+
+      if (!result.applicationNo || String(result.applicationNo).trim() === '') {
+        errors.push(`Row ${row}: Application Number is required`);
+      } else if (seenAppNumbers.has(result.applicationNo)) {
+        errors.push(`Row ${row}: Duplicate Application Number ${result.applicationNo}`);
+      } else {
+        seenAppNumbers.add(result.applicationNo);
+      }
+
+      if (!result.rollNo || String(result.rollNo).trim() === '') {
+        errors.push(`Row ${row}: Roll Number is required`);
+      } else if (seenRollNumbers.has(result.rollNo)) {
+        errors.push(`Row ${row}: Duplicate Roll Number ${result.rollNo}`);
+      } else {
+        seenRollNumbers.add(result.rollNo);
+      }
+
+      if (!result.studentName || String(result.studentName).trim() === '') {
+        errors.push(`Row ${row}: Student Name is required`);
+      }
+
+      if (!result.marks || result.marks < 0 || result.marks > 500) {
+        errors.push(`Row ${row}: Marks must be between 0 and 500`);
+      }
+
+      if (!result.gender || !validGenders.includes(result.gender)) {
+        errors.push(`Row ${row}: Gender must be one of: ${validGenders.join(', ')}`);
+      }
+
+      if (!result.stream || !STREAMS.includes(result.stream as any)) {
+        errors.push(`Row ${row}: Invalid stream. Must be one of: ${STREAMS.join(', ')}`);
+      }
+    });
+
+    return { errors, processed: entranceResults.length };
   }
 }

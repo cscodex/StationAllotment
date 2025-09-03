@@ -287,6 +287,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/files/upload/entrance-results', isCentralAdmin, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const result = await fileService.processEntranceResultsFile(req.file, req.user.id);
+      
+      await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
+        filename: result.originalName,
+        type: 'entrance_results',
+        status: result.status,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(result);
+    } catch (error) {
+      console.error("Upload entrance results file error:", error);
+      res.status(500).json({ message: "Failed to upload file" });
+    }
+  });
+
+  app.get('/api/files/template/entrance-results', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvContent = fileService.generateEntranceResultsTemplate();
+      
+      await auditService.log(req.user.id, 'template_download', 'files', 'entrance_results_template', {
+        type: 'entrance_results',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=entrance_results_template.csv');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Download entrance results template error:", error);
+      res.status(500).json({ message: "Failed to download template" });
+    }
+  });
+
   app.get('/api/files', isAuthenticated, async (req, res) => {
     try {
       const files = await storage.getFileUploads(50);

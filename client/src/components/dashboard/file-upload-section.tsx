@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { Upload, FileSpreadsheet, Check, Eye, X } from "lucide-react";
+import { Upload, FileSpreadsheet, Check, Eye, X, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Student, Vacancy } from "@shared/schema";
@@ -15,6 +15,7 @@ export default function FileUploadSection() {
   const queryClient = useQueryClient();
   const studentFileRef = useRef<HTMLInputElement>(null);
   const vacancyFileRef = useRef<HTMLInputElement>(null);
+  const entranceResultsFileRef = useRef<HTMLInputElement>(null);
 
   // Fetch student data for preview
   const { data: studentsData } = useQuery<Student[]>({
@@ -94,6 +95,70 @@ export default function FileUploadSection() {
     },
   });
 
+  const uploadEntranceResultsMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/files/upload/entrance-results', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/files"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students-entrance-results"] });
+      toast({
+        title: "File uploaded successfully",
+        description: data.validationResults?.message || "Entrance results file processed",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const downloadTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/files/template/entrance-results', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to download template');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'entrance_results_template.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template downloaded",
+        description: "CSV template has been downloaded successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -104,7 +169,7 @@ export default function FileUploadSection() {
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent, type: 'students' | 'vacancies') => {
+  const handleDrop = (e: React.DragEvent, type: 'students' | 'vacancies' | 'entrance-results') => {
     e.preventDefault();
     setIsDragging(false);
     
@@ -114,15 +179,17 @@ export default function FileUploadSection() {
     }
   };
 
-  const handleFileUpload = (file: File, type: 'students' | 'vacancies') => {
+  const handleFileUpload = (file: File, type: 'students' | 'vacancies' | 'entrance-results') => {
     if (type === 'students') {
       uploadStudentsMutation.mutate(file);
-    } else {
+    } else if (type === 'vacancies') {
       uploadVacanciesMutation.mutate(file);
+    } else {
+      uploadEntranceResultsMutation.mutate(file);
     }
   };
 
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'students' | 'vacancies') => {
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'students' | 'vacancies' | 'entrance-results') => {
     const files = e.target.files;
     if (files && files.length > 0) {
       handleFileUpload(files[0], type);
@@ -137,10 +204,56 @@ export default function FileUploadSection() {
           <Upload className="w-5 h-5 mr-2 text-primary" />
           File Management
         </CardTitle>
-        <p className="text-sm text-muted-foreground">Upload student choices and vacancy data</p>
+        <p className="text-sm text-muted-foreground">Upload entrance results, student choices and vacancy data</p>
       </CardHeader>
       
       <CardContent className="space-y-6">
+        {/* Entrance Results Upload */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-sm font-medium">Student Entrance Results</label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadTemplateMutation.mutate()}
+              disabled={downloadTemplateMutation.isPending}
+              data-testid="button-download-template"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloadTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+            </Button>
+          </div>
+          <div 
+            className={cn(
+              "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+              isDragging ? "border-primary/50 bg-primary/5" : "border-border hover:border-primary/50"
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, 'entrance-results')}
+            onClick={() => entranceResultsFileRef.current?.click()}
+            data-testid="upload-area-entrance-results"
+          >
+            <FileSpreadsheet className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm font-medium">Click to upload or drag and drop</p>
+            <p className="text-xs text-muted-foreground mt-1">Excel (.xlsx) or CSV files only</p>
+            <input
+              ref={entranceResultsFileRef}
+              type="file"
+              className="hidden"
+              accept=".xlsx,.csv"
+              onChange={(e) => handleFileInputChange(e, 'entrance-results')}
+              data-testid="input-entrance-results-file"
+            />
+          </div>
+          {uploadEntranceResultsMutation.isSuccess && (
+            <div className="mt-2 flex items-center text-sm text-green-600">
+              <Check className="w-4 h-4 mr-1" />
+              <span>Entrance results file uploaded successfully</span>
+            </div>
+          )}
+        </div>
+
         {/* Student Choices Upload */}
         <div>
           <label className="block text-sm font-medium mb-3">Student Choices File</label>
@@ -212,11 +325,11 @@ export default function FileUploadSection() {
         <div className="flex space-x-3">
           <Button 
             className="flex-1"
-            disabled={uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending}
+            disabled={uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending || uploadEntranceResultsMutation.isPending}
             data-testid="button-validate-files"
           >
             <Check className="w-4 h-4 mr-2" />
-            {uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending ? "Processing..." : "Validate Files"}
+            {(uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending || uploadEntranceResultsMutation.isPending) ? "Processing..." : "Validate Files"}
           </Button>
           <Button 
             variant="outline" 
