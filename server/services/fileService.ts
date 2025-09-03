@@ -134,20 +134,20 @@ export class FileService {
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     return data.map((row: any) => ({
-      appNo: row.AppNo || row.app_no || row['App No'] || row.ApplicationNumber || row.application_number || row['Application Number'],
-      meritNumber: parseInt(row.MeritNumber) || parseInt(row.merit_number) || parseInt(row['Merit Number']),
-      name: row.Name || row.name || row['Student Name'],
-      stream: row.Stream || row.stream,
-      choice1: row.Choice1 || row.choice1 || row['Choice 1'],
-      choice2: row.Choice2 || row.choice2 || row['Choice 2'],
-      choice3: row.Choice3 || row.choice3 || row['Choice 3'],
-      choice4: row.Choice4 || row.choice4 || row['Choice 4'],
-      choice5: row.Choice5 || row.choice5 || row['Choice 5'],
-      choice6: row.Choice6 || row.choice6 || row['Choice 6'],
-      choice7: row.Choice7 || row.choice7 || row['Choice 7'],
-      choice8: row.Choice8 || row.choice8 || row['Choice 8'],
-      choice9: row.Choice9 || row.choice9 || row['Choice 9'],
-      choice10: row.Choice10 || row.choice10 || row['Choice 10'],
+      appNo: String(row['App No'] || row.AppNo || row.app_no || row.ApplicationNumber || row.application_number || row['Application Number'] || ''),
+      meritNumber: parseInt(row.MeritNo || row.MeritNumber || row.merit_number || row['Merit Number']) || 0,
+      name: String(row.Name || row.name || row['Student Name'] || ''),
+      stream: String(row.Stream || row.stream || ''),
+      choice1: row.choice1 || row.Choice1 || row['Choice 1'] || null,
+      choice2: row.choice2 || row.Choice2 || row['Choice 2'] || null,
+      choice3: row.choice3 || row.Choice3 || row['Choice 3'] || null,
+      choice4: row.choice4 || row.Choice4 || row['Choice 4'] || null,
+      choice5: row.choice5 || row.Choice5 || row['Choice 5'] || null,
+      choice6: row.choice6 || row.Choice6 || row['Choice 6'] || null,
+      choice7: row.choice7 || row.Choice7 || row['Choice 7'] || null,
+      choice8: row.choice8 || row.Choice8 || row['Choice 8'] || null,
+      choice9: row.choice9 || row.Choice9 || row['Choice 9'] || null,
+      choice10: row.choice10 || row.Choice10 || row['Choice 10'] || null,
       allocationStatus: 'pending',
     }));
   }
@@ -174,7 +174,7 @@ export class FileService {
       const row = index + 1;
 
       // Check required fields
-      if (!student.appNo || student.appNo.trim() === '') {
+      if (!student.appNo || String(student.appNo).trim() === '') {
         errors.push(`Row ${row}: Application Number (App No) is required`);
       }
 
@@ -186,7 +186,7 @@ export class FileService {
         seenMeritNumbers.add(student.meritNumber);
       }
 
-      if (!student.name || student.name.trim() === '') {
+      if (!student.name || String(student.name).trim() === '') {
         errors.push(`Row ${row}: Student Name is required`);
       }
 
