@@ -134,8 +134,8 @@ export class FileService {
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     return data.map((row: any) => ({
+      appNo: row.AppNo || row.app_no || row['App No'] || row.ApplicationNumber || row.application_number || row['Application Number'],
       meritNumber: parseInt(row.MeritNumber) || parseInt(row.merit_number) || parseInt(row['Merit Number']),
-      applicationNumber: row.ApplicationNumber || row.application_number || row['Application Number'],
       name: row.Name || row.name || row['Student Name'],
       stream: row.Stream || row.stream,
       choice1: row.Choice1 || row.choice1 || row['Choice 1'],
@@ -174,6 +174,10 @@ export class FileService {
       const row = index + 1;
 
       // Check required fields
+      if (!student.appNo || student.appNo.trim() === '') {
+        errors.push(`Row ${row}: Application Number (App No) is required`);
+      }
+
       if (!student.meritNumber) {
         errors.push(`Row ${row}: Merit Number is required`);
       } else if (seenMeritNumbers.has(student.meritNumber)) {

@@ -43,8 +43,8 @@ export const users = pgTable("users", {
 // Students table
 export const students = pgTable("students", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  appNo: varchar("app_no").notNull().unique(), // Application number as first data column
   meritNumber: integer("merit_number").notNull().unique(),
-  applicationNumber: varchar("application_number"),
   name: varchar("name").notNull(),
   stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
   choice1: varchar("choice1"),

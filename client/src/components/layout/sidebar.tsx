@@ -33,6 +33,7 @@ const navigation = [
     name: "Operations",
     items: [
       { name: "Run Allocation", href: "/allocation", icon: Settings, roles: ["central_admin"] },
+      { name: "Reports", href: "/reports", icon: BarChart3, roles: ["central_admin", "district_admin"] },
       { name: "Export Results", href: "/export-results", icon: Download, roles: ["central_admin"] },
       { name: "Audit Log", href: "/audit-log", icon: History, roles: ["central_admin"] },
       { name: "District Admin", href: "/district-admin", icon: ShieldQuestion, roles: ["district_admin"] },
@@ -99,19 +100,19 @@ export default function Sidebar({ className }: SidebarProps) {
             {section.items
               .filter((item) => item.roles.includes(user.role))
               .map((item) => (
-                <Link key={item.name} href={item.href}>
-                  <a
-                    className={cn(
-                      "flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm",
-                      location === item.href
-                        ? "bg-primary text-primary-foreground font-medium"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                    )}
-                    data-testid={`link-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    <span>{item.name}</span>
-                  </a>
+                <Link 
+                  key={item.name} 
+                  href={item.href}
+                  className={cn(
+                    "flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm",
+                    location === item.href
+                      ? "bg-primary text-primary-foreground font-medium"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  )}
+                  data-testid={`link-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span>{item.name}</span>
                 </Link>
               ))}
           </div>

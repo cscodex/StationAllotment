@@ -103,7 +103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      req.session.userId = user.id;
+      (req.session as any).userId = user.id;
       
       await auditService.log(user.id, 'user_login', 'auth', user.id, {
         username: user.username,
@@ -244,6 +244,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
+      const allocated = req.query.allocated === 'true';
+      
+      if (allocated) {
+        // For the reports page - return all students
+        const students = await storage.getStudents(10000, 0);
+        return res.json(students);
+      }
+      
       const students = await storage.getStudents(limit, offset);
       const total = await storage.getStudentsCount();
       
@@ -346,6 +354,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get allocation status error:", error);
       res.status(500).json({ message: "Failed to fetch allocation status" });
+    }
+  });
+
+  app.get('/api/allocation/stats', isAuthenticated, async (req, res) => {
+    try {
+      const students = await storage.getStudents(10000, 0); // Get all students
+      const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
+      const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
+      
+      // Group allotted students by district
+      const allocationsByDistrict: Record<string, number> = {};
+      allottedStudents.forEach(student => {
+        if (student.allottedDistrict) {
+          allocationsByDistrict[student.allottedDistrict] = (allocationsByDistrict[student.allottedDistrict] || 0) + 1;
+        }
+      });
+
+      res.json({
+        totalStudents: students.length,
+        allottedStudents: allottedStudents.length,
+        notAllottedStudents: notAllottedStudents.length,
+        allocationsByDistrict,
+      });
+    } catch (error) {
+      console.error("Get allocation stats error:", error);
+      res.status(500).json({ message: "Failed to fetch allocation stats" });
     }
   });
 
