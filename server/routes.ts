@@ -157,6 +157,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User management (Central Admin only)
+  app.get('/api/users', isCentralAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Get users error:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
   app.post('/api/users', isCentralAdmin, async (req: any, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);

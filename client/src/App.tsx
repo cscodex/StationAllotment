@@ -14,6 +14,7 @@ import Allocation from "@/pages/allocation";
 import ExportResults from "@/pages/export-results";
 import AuditLog from "@/pages/audit-log";
 import DistrictAdmin from "@/pages/district-admin";
+import DistrictAdminList from "@/pages/district-admin-list";
 import Reports from "@/pages/reports";
 import MainLayout from "@/components/layout/main-layout";
 
@@ -44,6 +45,7 @@ function Router() {
         <Route path="/reports" component={Reports} />
         <Route path="/audit-log" component={AuditLog} />
         <Route path="/district-admin" component={DistrictAdmin} />
+        <Route path="/district-admin-list" component={DistrictAdminList} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>
