@@ -1,0 +1,112 @@
+Got it ✅ What you need is a **clear, structured prompt** that gives an AI agent (like Augment or another code generator) enough detail to build the **full seat allotment app (frontend + backend + database)**. Right now your draft mixes requirements but isn’t in a developer-friendly breakdown.
+
+Here’s an **improved prompt** you can use directly:
+
+---
+
+### 🔹 Improved Prompt for Full Seat Allotment App
+
+Build a **full-stack web application (HTML, CSS, JavaScript frontend + backend + SQL database)** for a **Seat Allotment System** with the following features:
+
+---
+
+#### 1. Data Import & Formats
+
+* **Student Choices Upload (Excel/CSV):**
+
+  * Columns: `MeritNumber, Stream (Medical/Commerce/NonMedical), Choice1, Choice2, ..., Choice10`
+  * Districts for choices: *Amritsar, Ludhiana, Patiala, SAS Nagar, Jalandhar, Bathinda, Ferozepur, Sangrur, Gurdaspur, Talwara*.
+
+* **Vacancy Upload (CSV):**
+
+  * Columns: `District, NonMedical_vac, Medical_vac, Commerce_vac`
+
+* Both files should be validated on upload.
+
+---
+
+#### 2. User Roles & Login
+
+* **Central Admin**
+
+  * Can import student choices file & vacancy file.
+  * Can schedule the final allotment run (allocation only runs once after the deadline).
+  * Can export allotment results in **CSV & PDF**.
+
+* **District Admin**
+
+  * Logs in with credentials.
+  * Can set/edit **preferences of stream + station for incoming candidates** until the closing deadline.
+  * After the deadline, this interface becomes read-only.
+
+---
+
+#### 3. Seat Allocation Algorithm
+
+* Allocation is done **only by Central Admin** after the deadline.
+* Rules:
+
+  1. Students are sorted by **MeritNumber (ascending = higher merit first)**.
+  2. For each student:
+
+     * Check their stream.
+     * Check their **Choice1 → Choice10** in order.
+     * If vacancy exists in that district for the stream, allot the seat.
+     * Reduce vacancy count accordingly.
+  3. If no choice has vacancy, mark student as **Not Allotted**.
+
+---
+
+#### 4. Interfaces
+
+* **Central Admin Dashboard**:
+
+  * Import student choices file & vacancy file.
+  * View uploaded records (tables).
+  * Run **seat allotment algorithm** (once only).
+  * Export results as **CSV & PDF**.
+
+* **District Admin Dashboard**:
+
+  * Search student by `ApplicationNo / MeritNumber`.
+  * Assign stream + district preferences.
+  * Lock choices before deadline.
+  * After deadline → read-only.
+
+---
+
+#### 5. Database Schema (SQL)
+
+* **Students Table**:
+  `id, MeritNumber, Stream, Choice1..Choice10, AllottedDistrict (nullable), AllottedStream (nullable)`
+* **Vacancy Table**:
+  `id, District, NonMedical_vac, Medical_vac, Commerce_vac`
+* **Users Table** (for login):
+  `id, username, password_hash, role (central_admin / district_admin), district (nullable)`
+* **Settings Table**:
+  `id, deadline_datetime, allocation_run (boolean)`
+
+---
+
+#### 6. Technology Requirements
+
+* **Frontend:** HTML, CSS, JavaScript
+* **Backend:** Node.js (Express preferred)
+* **Database:** PostgreSQL or MySQL (pick one)
+* **Export:** Use a library for **CSV + PDF generation**
+* **Auth:** Simple session-based login system
+
+---
+
+### 🔹 Deliverables
+
+* Complete **JS/HTML/CSS frontend** with responsive UI.
+* **Backend API** for login, file upload, allocation, and export.
+* **Database schema + migration script**.
+* **Documentation** (README) on how to run locally.
+
+---
+
+👉 This structured prompt ensures the agent understands **exact entities, roles, workflow, and output** so it can generate a production-ready app.
+
+Do you want me to also **refine this into a step-by-step "build order"** (first login, then file upload, then allocation, etc.) so the agent generates code in modular pieces instead of dumping everything at once?
