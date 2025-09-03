@@ -264,7 +264,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/students/:meritNumber', isAuthenticated, async (req, res) => {
     try {
-      const meritNumber = parseInt(req.params.meritNumber);
+      const meritNumberParam = req.params.meritNumber;
+      
+      // Validate that merit number is a valid number
+      if (!meritNumberParam || meritNumberParam === '[object Object]' || isNaN(Number(meritNumberParam))) {
+        return res.status(400).json({ message: "Invalid merit number provided" });
+      }
+      
+      const meritNumber = parseInt(meritNumberParam);
       const student = await storage.getStudentByMeritNumber(meritNumber);
       
       if (!student) {
