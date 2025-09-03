@@ -47,8 +47,7 @@ function StudentPreferenceManagement() {
 
   // Search students entrance results
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ['search-entrance-results', searchQuery],
-    queryFn: () => apiRequest(`/api/students-entrance-results/search?q=${encodeURIComponent(searchQuery)}`),
+    queryKey: [`/api/students-entrance-results/search?q=${encodeURIComponent(searchQuery)}`],
     enabled: searchQuery.length >= 2,
     staleTime: 30000,
   });
@@ -56,7 +55,6 @@ function StudentPreferenceManagement() {
   // Get vacancies for district options
   const { data: vacancies = [] } = useQuery({
     queryKey: ['/api/vacancies'],
-    queryFn: () => apiRequest('/api/vacancies'),
     staleTime: 300000, // 5 minutes
   });
 
@@ -121,7 +119,11 @@ function StudentPreferenceManagement() {
     
     // Check if student already exists in students table
     try {
-      const existingStudents = await apiRequest('/api/students?limit=10000', {}, 60000); // 60 second timeout
+      const response = await fetch('/api/students?limit=10000', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to fetch students');
+      const existingStudents = await response.json();
       const existingStudent = (existingStudents as any).students?.find(
         (s: any) => s.appNo === student.applicationNo || s.meritNumber === student.meritNo
       );
