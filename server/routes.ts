@@ -278,6 +278,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/students/:id', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const student = await storage.getStudent(id);
+      
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+      
+      res.json(student);
+    } catch (error) {
+      console.error("Get student error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get('/api/students/:meritNumber', isAuthenticated, async (req, res) => {
     try {
       const meritNumberParam = req.params.meritNumber;

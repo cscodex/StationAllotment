@@ -46,6 +46,7 @@ export default function FileUploadSection() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       toast({
         title: "File uploaded successfully",
         description: data.validationResults?.message || "Student choices file processed",
@@ -78,8 +79,9 @@ export default function FileUploadSection() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
       toast({
-        title: "File uploaded successfully",
+        title: "File uploaded successfully", 
         description: data.validationResults?.message || "Vacancy data file processed",
       });
     },

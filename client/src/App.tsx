@@ -15,6 +15,7 @@ import ExportResults from "@/pages/export-results";
 import AuditLog from "@/pages/audit-log";
 import DistrictAdmin from "@/pages/district-admin";
 import DistrictAdminList from "@/pages/district-admin-list";
+import StudentDetails from "@/pages/student-details";
 import Reports from "@/pages/reports";
 import MainLayout from "@/components/layout/main-layout";
 
@@ -46,6 +47,7 @@ function Router() {
         <Route path="/audit-log" component={AuditLog} />
         <Route path="/district-admin" component={DistrictAdmin} />
         <Route path="/district-admin-list" component={DistrictAdminList} />
+        <Route path="/student/:id" component={StudentDetails} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>

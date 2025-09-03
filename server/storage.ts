@@ -31,6 +31,7 @@ export interface IStorage {
 
   // Student operations
   getStudents(limit?: number, offset?: number): Promise<Student[]>;
+  getStudent(id: string): Promise<Student | undefined>;
   getStudentByMeritNumber(meritNumber: number): Promise<Student | undefined>;
   createStudent(student: InsertStudent): Promise<Student>;
   updateStudent(id: string, student: Partial<InsertStudent>): Promise<Student>;
@@ -111,6 +112,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(students.meritNumber))
       .limit(limit)
       .offset(offset);
+  }
+
+  async getStudent(id: string): Promise<Student | undefined> {
+    const [student] = await db.select().from(students).where(eq(students.id, id));
+    return student;
   }
 
   async getStudentByMeritNumber(meritNumber: number): Promise<Student | undefined> {

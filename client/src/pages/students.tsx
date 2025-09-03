@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Users } from "lucide-react";
-import type { Student } from "@/types";
+import { Search, Users, Eye } from "lucide-react";
+import type { Student } from "@shared/schema";
 
 export default function Students() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -21,7 +22,7 @@ export default function Students() {
   const filteredStudents = studentsData?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
-    student.applicationNumber?.includes(searchTerm)
+    student.appNo?.includes(searchTerm)
   ) || [];
 
   const getStatusBadge = (status: string) => {
@@ -84,61 +85,35 @@ export default function Students() {
                         <TableHead>Stream</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Allotted District</TableHead>
-                        <TableHead>District Choices</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredStudents.map((student: Student) => {
-                        const getChoiceDisplay = () => {
-                          const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5, 
-                                         student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
-                            .filter(Boolean);
-                          
-                          return choices.map((choice, index) => {
-                            const isAllocated = student.allocationStatus === 'allotted' && choice === student.allottedDistrict;
-                            const isRejected = student.allocationStatus === 'allotted' && choice !== student.allottedDistrict;
-                            
-                            return (
-                              <span 
-                                key={index} 
-                                className={`inline-block px-2 py-1 rounded text-xs mr-1 mb-1 ${
-                                  isAllocated 
-                                    ? 'bg-green-100 text-green-800 font-medium' 
-                                    : isRejected 
-                                    ? 'bg-red-100 text-red-600' 
-                                    : 'bg-gray-100 text-gray-600'
-                                }`}
-                              >
-                                {choice}
-                              </span>
-                            );
-                          });
-                        };
-
-                        return (
-                          <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
-                            <TableCell className="font-mono text-sm">{student.applicationNumber}</TableCell>
-                            <TableCell className="font-medium">{student.meritNumber}</TableCell>
-                            <TableCell>{student.name}</TableCell>
-                            <TableCell>
-                              <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>
-                                {student.stream}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
-                            <TableCell>
-                              {student.allottedDistrict ? (
-                                <Badge className="bg-green-100 text-green-800">{student.allottedDistrict}</Badge>
-                              ) : '-'}
-                            </TableCell>
-                            <TableCell className="max-w-md">
-                              <div className="flex flex-wrap">
-                                {getChoiceDisplay()}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {filteredStudents.map((student: Student) => (
+                        <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                          <TableCell className="font-mono text-sm">{student.appNo}</TableCell>
+                          <TableCell className="font-medium">{student.meritNumber}</TableCell>
+                          <TableCell>{student.name}</TableCell>
+                          <TableCell>
+                            <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>
+                              {student.stream}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
+                          <TableCell>
+                            {student.allottedDistrict ? (
+                              <Badge className="bg-green-100 text-green-800">{student.allottedDistrict}</Badge>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <Link href={`/student/${student.id}`}>
+                              <Button variant="ghost" size="sm" data-testid={`button-view-${student.meritNumber}`}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
