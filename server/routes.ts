@@ -255,7 +255,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const students = await storage.getStudents(limit, offset);
       const total = await storage.getStudentsCount();
       
-      res.json({ students, total });
+      // Map database fields to frontend expected fields
+      const mappedStudents = students.map(student => ({
+        ...student,
+        applicationNumber: student.appNo, // Map appNo to applicationNumber
+      }));
+      
+      res.json({ students: mappedStudents, total });
     } catch (error) {
       console.error("Get students error:", error);
       res.status(500).json({ message: "Failed to fetch students" });

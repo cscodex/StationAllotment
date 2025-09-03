@@ -183,17 +183,30 @@ export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type FileUpload = typeof fileUploads.$inferSelect;
 export type InsertFileUpload = z.infer<typeof insertFileUploadSchema>;
 
-// Constants
+// Constants - All 23 districts of Punjab
 export const DISTRICTS = [
   'Amritsar',
-  'Ludhiana', 
-  'Patiala',
-  'SAS Nagar',
-  'Jalandhar',
+  'Barnala', 
   'Bathinda',
+  'Faridkot',
+  'Fatehgarh Sahib',
+  'Fazilka',
   'Ferozepur',
-  'Sangrur',
   'Gurdaspur',
+  'Hoshiarpur',
+  'Jalandhar',
+  'Kapurthala',
+  'Ludhiana',
+  'Mansa',
+  'Moga',
+  'Muktsar',
+  'Nawanshahr',
+  'Pathankot',
+  'Patiala',
+  'Rupnagar',
+  'SAS Nagar',
+  'Sangrur',
+  'Tarn Taran',
   'Talwara'
 ] as const;
 
