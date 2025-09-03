@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seat Allotment Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                },
+                fontFamily: {
+                    sans: ["Inter", "system-ui", "sans-serif"],
+                }
+            },
+        }
+    };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --background: hsl(210 40% 98%);
+            --foreground: hsl(222.2 84% 4.9%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(222.2 84% 4.9%);
+            --popover: hsl(0 0% 100%);
+            --popover-foreground: hsl(222.2 84% 4.9%);
+            --primary: hsl(214 84% 56%);
+            --primary-foreground: hsl(210 40% 98%);
+            --secondary: hsl(210 40% 96%);
+            --secondary-foreground: hsl(222.2 84% 4.9%);
+            --muted: hsl(210 40% 96%);
+            --muted-foreground: hsl(215.4 16.3% 46.9%);
+            --accent: hsl(210 40% 96%);
+            --accent-foreground: hsl(222.2 84% 4.9%);
+            --destructive: hsl(0 84.2% 60.2%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(214.3 31.8% 91.4%);
+            --input: hsl(214.3 31.8% 91.4%);
+            --ring: hsl(214 84% 56%);
+            --radius: 8px;
+        }
+
+        .dark {
+            --background: hsl(222.2 84% 4.9%);
+            --foreground: hsl(210 40% 98%);
+            --card: hsl(222.2 84% 4.9%);
+            --card-foreground: hsl(210 40% 98%);
+            --popover: hsl(222.2 84% 4.9%);
+            --popover-foreground: hsl(210 40% 98%);
+            --primary: hsl(214 84% 56%);
+            --primary-foreground: hsl(222.2 84% 4.9%);
+            --secondary: hsl(217.2 32.6% 17.5%);
+            --secondary-foreground: hsl(210 40% 98%);
+            --muted: hsl(217.2 32.6% 17.5%);
+            --muted-foreground: hsl(215 20.2% 65.1%);
+            --accent: hsl(217.2 32.6% 17.5%);
+            --accent-foreground: hsl(210 40% 98%);
+            --destructive: hsl(0 62.8% 30.6%);
+            --destructive-foreground: hsl(210 40% 98%);
+            --border: hsl(217.2 32.6% 17.5%);
+            --input: hsl(217.2 32.6% 17.5%);
+            --ring: hsl(214 84% 56%);
+        }
+
+        .sidebar-transition {
+            transition: transform 0.3s ease-in-out;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar-hidden {
+                transform: translateX(-100%);
+            }
+        }
+    </style>
+</head>
+<body class="h-full bg-background text-foreground font-sans">
+    <!-- @COMPONENT: MainLayout -->
+    <div class="h-full flex">
+        <!-- Sidebar -->
+        <!-- @COMPONENT: Sidebar [role-based navigation] -->
+        <div id="sidebar" class="w-64 bg-card border-r border-border flex flex-col sidebar-transition">
+            <div class="p-6 border-b border-border">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-graduation-cap text-primary-foreground text-sm"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-semibold">Seat Allotment</h1>
+                        <p class="text-xs text-muted-foreground">Management System</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-2">
+                <div class="mb-4">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-2">Main</p>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md bg-primary text-primary-foreground font-medium">
+                        <i class="fas fa-chart-line w-4"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-upload w-4"></i>
+                        <span>File Management</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-users w-4"></i>
+                        <span>Students</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-map-marker-alt w-4"></i>
+                        <span>Vacancies</span>
+                    </a>
+                </div>
+
+                <div class="mb-4">
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-2">Operations</p>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-cogs w-4"></i>
+                        <span>Run Allocation</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-download w-4"></i>
+                        <span>Export Results</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-history w-4"></i>
+                        <span>Audit Log</span>
+                    </a>
+                </div>
+
+                <div>
+                    <p class="text-xs text-muted-foreground uppercase tracking-wider mb-2">Settings</p>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-calendar-alt w-4"></i>
+                        <span>Deadlines</span>
+                    </a>
+                    <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors">
+                        <i class="fas fa-user-shield w-4"></i>
+                        <span>User Management</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="p-4 border-t border-border">
+                <!-- @COMPONENT: UserProfile [current user info] -->
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
+                        <i class="fas fa-user-tie text-secondary-foreground text-xs"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium truncate" data-bind="user.name">Central Admin</p>
+                        <p class="text-xs text-muted-foreground" data-bind="user.role">Administrator</p>
+                    </div>
+                    <button class="text-muted-foreground hover:text-foreground">
+                        <i class="fas fa-sign-out-alt text-sm"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: Sidebar -->
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Header -->
+            <!-- @COMPONENT: Header [breadcrumbs, notifications, actions] -->
+            <header class="bg-card border-b border-border p-6">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <button id="mobile-menu-btn" class="md:hidden text-muted-foreground hover:text-foreground">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <div>
+                            <h2 class="text-2xl font-bold">Dashboard</h2>
+                            <nav class="flex items-center space-x-2 text-sm text-muted-foreground">
+                                <span>Home</span>
+                                <i class="fas fa-chevron-right text-xs"></i>
+                                <span class="text-foreground">Dashboard</span>
+                            </nav>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <!-- Deadline Status -->
+                        <div class="flex items-center space-x-2 px-3 py-1 bg-accent rounded-md">
+                            <i class="fas fa-clock text-accent-foreground text-sm"></i>
+                            <span class="text-sm font-medium text-accent-foreground">Deadline: 3 days left</span>
+                        </div>
+                        
+                        <!-- Notification Bell -->
+                        <button class="relative text-muted-foreground hover:text-foreground">
+                            <i class="fas fa-bell"></i>
+                            <span class="absolute -top-1 -right-1 w-3 h-3 bg-destructive rounded-full flex items-center justify-center">
+                                <span class="text-xs text-destructive-foreground font-bold">3</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+            <!-- @END_COMPONENT: Header -->
+
+            <!-- Main Content Area -->
+            <main class="flex-1 p-6 overflow-auto">
+                <!-- Stats Overview -->
+                <!-- @COMPONENT: StatsCards [key metrics display] -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-card rounded-lg border border-border p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-muted-foreground">Total Students</p>
+                                <p class="text-3xl font-bold" data-bind="stats.totalStudents">2,458</p>
+                            </div>
+                            <div class="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-users text-primary"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center mt-4 text-sm">
+                            <i class="fas fa-arrow-up text-green-500 mr-1"></i>
+                            <span class="text-green-500 font-medium">12.5%</span>
+                            <span class="text-muted-foreground ml-1">from last year</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-card rounded-lg border border-border p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-muted-foreground">Total Vacancies</p>
+                                <p class="text-3xl font-bold" data-bind="stats.totalVacancies">1,890</p>
+                            </div>
+                            <div class="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-map-marker-alt text-green-500"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center mt-4 text-sm">
+                            <i class="fas fa-arrow-up text-green-500 mr-1"></i>
+                            <span class="text-green-500 font-medium">8.2%</span>
+                            <span class="text-muted-foreground ml-1">available seats</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-card rounded-lg border border-border p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-muted-foreground">Pending Allocations</p>
+                                <p class="text-3xl font-bold" data-bind="stats.pendingAllocations">568</p>
+                            </div>
+                            <div class="w-12 h-12 bg-amber-500/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-clock text-amber-500"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center mt-4 text-sm">
+                            <i class="fas fa-arrow-down text-amber-500 mr-1"></i>
+                            <span class="text-amber-500 font-medium">23.1%</span>
+                            <span class="text-muted-foreground ml-1">awaiting process</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-card rounded-lg border border-border p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-muted-foreground">Completion Rate</p>
+                                <p class="text-3xl font-bold" data-bind="stats.completionRate">76.9%</p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-chart-pie text-blue-500"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center mt-4 text-sm">
+                            <i class="fas fa-arrow-up text-green-500 mr-1"></i>
+                            <span class="text-green-500 font-medium">4.3%</span>
+                            <span class="text-muted-foreground ml-1">improvement</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: StatsCards -->
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- File Upload Section -->
+                    <!-- @COMPONENT: FileUploadSection [drag-drop upload with validation] -->
+                    <div class="lg:col-span-2">
+                        <div class="bg-card rounded-lg border border-border">
+                            <div class="p-6 border-b border-border">
+                                <h3 class="text-lg font-semibold flex items-center">
+                                    <i class="fas fa-upload mr-2 text-primary"></i>
+                                    File Management
+                                </h3>
+                                <p class="text-sm text-muted-foreground mt-1">Upload student choices and vacancy data</p>
+                            </div>
+                            
+                            <div class="p-6 space-y-6">
+                                <!-- Student Choices Upload -->
+                                <div>
+                                    <label class="block text-sm font-medium mb-3">Student Choices File</label>
+                                    <div class="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer">
+                                        <i class="fas fa-file-excel text-4xl text-muted-foreground mb-3"></i>
+                                        <p class="text-sm font-medium">Click to upload or drag and drop</p>
+                                        <p class="text-xs text-muted-foreground mt-1">Excel (.xlsx) or CSV files only</p>
+                                        <!-- @FUNCTIONALITY: File validation for student choices format -->
+                                        <input type="file" class="hidden" accept=".xlsx,.csv" data-mock="true">
+                                    </div>
+                                    <div class="mt-2 flex items-center text-sm text-green-600">
+                                        <i class="fas fa-check-circle mr-1"></i>
+                                        <span>student_choices_2024.xlsx uploaded successfully</span>
+                                    </div>
+                                </div>
+
+                                <!-- Vacancy Upload -->
+                                <div>
+                                    <label class="block text-sm font-medium mb-3">Vacancy Data File</label>
+                                    <div class="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer">
+                                        <i class="fas fa-file-csv text-4xl text-muted-foreground mb-3"></i>
+                                        <p class="text-sm font-medium">Click to upload or drag and drop</p>
+                                        <p class="text-xs text-muted-foreground mt-1">CSV files only</p>
+                                        <input type="file" class="hidden" accept=".csv" data-mock="true">
+                                    </div>
+                                </div>
+
+                                <div class="flex space-x-3">
+                                    <button class="flex-1 bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors">
+                                        <i class="fas fa-check mr-2"></i>
+                                        Validate Files
+                                    </button>
+                                    <button class="flex-1 border border-border px-4 py-2 rounded-md font-medium hover:bg-accent transition-colors">
+                                        <i class="fas fa-eye mr-2"></i>
+                                        Preview Data
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: FileUploadSection -->
+
+                    <!-- Quick Actions & Status -->
+                    <!-- @COMPONENT: QuickActionsPanel [key operations] -->
+                    <div class="space-y-6">
+                        <!-- Allocation Status -->
+                        <div class="bg-card rounded-lg border border-border p-6">
+                            <h3 class="text-lg font-semibold mb-4">Allocation Status</h3>
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm">Data Upload</span>
+                                    <div class="flex items-center">
+                                        <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                        <span class="text-sm font-medium text-green-600">Complete</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm">Validation</span>
+                                    <div class="flex items-center">
+                                        <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                        <span class="text-sm font-medium text-green-600">Passed</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm">Allocation Run</span>
+                                    <div class="flex items-center">
+                                        <i class="fas fa-clock text-amber-500 mr-2"></i>
+                                        <span class="text-sm font-medium text-amber-600">Pending</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button class="w-full mt-4 bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors" data-event="click:runAllocation">
+                                <i class="fas fa-play mr-2"></i>
+                                Run Allocation
+                            </button>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="bg-card rounded-lg border border-border p-6">
+                            <h3 class="text-lg font-semibold mb-4">Quick Actions</h3>
+                            <div class="space-y-3">
+                                <button class="w-full flex items-center justify-center space-x-2 border border-border px-4 py-2 rounded-md hover:bg-accent transition-colors">
+                                    <i class="fas fa-search"></i>
+                                    <span>Search Student</span>
+                                </button>
+                                <button class="w-full flex items-center justify-center space-x-2 border border-border px-4 py-2 rounded-md hover:bg-accent transition-colors">
+                                    <i class="fas fa-download"></i>
+                                    <span>Export Results</span>
+                                </button>
+                                <button class="w-full flex items-center justify-center space-x-2 border border-border px-4 py-2 rounded-md hover:bg-accent transition-colors">
+                                    <i class="fas fa-history"></i>
+                                    <span>View Audit Log</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: QuickActionsPanel -->
+                </div>
+
+                <!-- Recent Activity & Data Tables -->
+                <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Recent Activity -->
+                    <!-- @COMPONENT: AuditLogPreview [recent system activities] -->
+                    <div class="bg-card rounded-lg border border-border">
+                        <div class="p-6 border-b border-border">
+                            <h3 class="text-lg font-semibold flex items-center">
+                                <i class="fas fa-history mr-2 text-primary"></i>
+                                Recent Activity
+                            </h3>
+                        </div>
+                        <div class="p-6">
+                            <div class="space-y-4">
+                                <!-- @MAP: auditLogs.slice(0,5).map(log => ( -->
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium">File uploaded successfully</p>
+                                        <p class="text-xs text-muted-foreground">student_choices_2024.xlsx by Admin</p>
+                                        <p class="text-xs text-muted-foreground">2 minutes ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium">Data validation completed</p>
+                                        <p class="text-xs text-muted-foreground">2,458 records validated successfully</p>
+                                        <p class="text-xs text-muted-foreground">15 minutes ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-amber-500 rounded-full mt-2"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium">District admin login</p>
+                                        <p class="text-xs text-muted-foreground">Amritsar district admin accessed system</p>
+                                        <p class="text-xs text-muted-foreground">1 hour ago</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start space-x-3" data-mock="true">
+                                    <div class="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium">Student preferences updated</p>
+                                        <p class="text-xs text-muted-foreground">Merit No. 1247 preferences modified</p>
+                                        <p class="text-xs text-muted-foreground">2 hours ago</p>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                            <button class="w-full mt-4 text-primary hover:text-primary/80 text-sm font-medium">
+                                View full audit log →
+                            </button>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: AuditLogPreview -->
+
+                    <!-- District Summary -->
+                    <!-- @COMPONENT: DistrictSummary [vacancy overview by district] -->
+                    <div class="bg-card rounded-lg border border-border">
+                        <div class="p-6 border-b border-border">
+                            <h3 class="text-lg font-semibold flex items-center">
+                                <i class="fas fa-map-marker-alt mr-2 text-primary"></i>
+                                District Vacancy Summary
+                            </h3>
+                        </div>
+                        <div class="p-6">
+                            <div class="space-y-4">
+                                <!-- @MAP: districts.map(district => ( -->
+                                <div class="flex items-center justify-between p-3 border border-border rounded-lg" data-mock="true">
+                                    <div>
+                                        <p class="font-medium">Amritsar</p>
+                                        <p class="text-sm text-muted-foreground">Medical: 45 | Commerce: 32 | Non-Medical: 67</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-lg font-bold">144</p>
+                                        <p class="text-xs text-muted-foreground">Total</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between p-3 border border-border rounded-lg" data-mock="true">
+                                    <div>
+                                        <p class="font-medium">Ludhiana</p>
+                                        <p class="text-sm text-muted-foreground">Medical: 38 | Commerce: 29 | Non-Medical: 54</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-lg font-bold">121</p>
+                                        <p class="text-xs text-muted-foreground">Total</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between p-3 border border-border rounded-lg" data-mock="true">
+                                    <div>
+                                        <p class="font-medium">Patiala</p>
+                                        <p class="text-sm text-muted-foreground">Medical: 52 | Commerce: 41 | Non-Medical: 73</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-lg font-bold">166</p>
+                                        <p class="text-xs text-muted-foreground">Total</p>
+                                    </div>
+                                </div>
+                                <!-- @END_MAP )) -->
+                            </div>
+                            <button class="w-full mt-4 text-primary hover:text-primary/80 text-sm font-medium">
+                                View all districts →
+                            </button>
+                        </div>
+                    </div>
+                    <!-- @END_COMPONENT: DistrictSummary -->
+                </div>
+            </main>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: MainLayout -->
+
+    <!-- Modal for Allocation Process -->
+    <!-- @COMPONENT: AllocationModal [progress tracking during allocation] -->
+    <div id="allocationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-card rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="p-6 border-b border-border">
+                <h3 class="text-lg font-semibold">Running Seat Allocation</h3>
+                <p class="text-sm text-muted-foreground mt-1">Processing student choices and vacancy data</p>
+            </div>
+            <div class="p-6">
+                <div class="space-y-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                            <i class="fas fa-check text-white text-xs"></i>
+                        </div>
+                        <span class="text-sm">Data validation completed</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-4 h-4 bg-primary rounded-full animate-pulse"></div>
+                        <span class="text-sm">Processing allocations...</span>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-4 h-4 bg-muted rounded-full"></div>
+                        <span class="text-sm text-muted-foreground">Generating reports</span>
+                    </div>
+                </div>
+                
+                <div class="mt-6">
+                    <div class="flex justify-between text-sm mb-2">
+                        <span>Progress</span>
+                        <span data-bind="allocation.progress">67%</span>
+                    </div>
+                    <div class="w-full bg-muted rounded-full h-2">
+                        <div class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 67%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: AllocationModal -->
+
+    <script>
+        (function() {
+            // Mobile menu toggle
+            const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+            const sidebar = document.getElementById('sidebar');
+            
+            mobileMenuBtn?.addEventListener('click', function() {
+                sidebar.classList.toggle('sidebar-hidden');
+            });
+
+            // Mock allocation process
+            function simulateAllocation() {
+                const modal = document.getElementById('allocationModal');
+                modal.classList.remove('hidden');
+                
+                // TODO: Implement actual allocation algorithm
+                // This would connect to backend API for real processing
+                
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    // Show success notification
+                    showNotification('Allocation completed successfully!', 'success');
+                }, 3000);
+            }
+
+            // Notification system
+            function showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+                    type === 'success' ? 'bg-green-500 text-white' : 
+                    type === 'error' ? 'bg-red-500 text-white' : 
+                    'bg-blue-500 text-white'
+                }`;
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 4000);
+            }
+
+            // File upload handling
+            const fileInputs = document.querySelectorAll('input[type="file"]');
+            fileInputs.forEach(input => {
+                input.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        // TODO: Implement file validation and upload
+                        showNotification(`File ${file.name} selected for upload`, 'info');
+                    }
+                });
+            });
+
+            // Allocation button
+            const allocationBtn = document.querySelector('[data-event="click:runAllocation"]');
+            allocationBtn?.addEventListener('click', simulateAllocation);
+
+            // Initialize tooltips and other interactive elements
+            // TODO: Add real-time updates via WebSocket connection
+            // TODO: Implement proper error handling and validation
+            // TODO: Add keyboard navigation support for accessibility
+        })();
+    </script>
+</body>
+</html>
