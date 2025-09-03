@@ -40,6 +40,20 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Students entrance results table
+export const studentsEntranceResult = pgTable("students_entrance_result", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  meritNo: integer("merit_no").notNull().unique(),
+  applicationNo: varchar("application_no").notNull().unique(),
+  rollNo: varchar("roll_no").notNull().unique(),
+  studentName: varchar("student_name").notNull(),
+  marks: integer("marks").notNull(),
+  gender: varchar("gender").notNull(), // 'Male' | 'Female' | 'Other'
+  stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Students table
 export const students = pgTable("students", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -57,6 +71,8 @@ export const students = pgTable("students", {
   choice8: varchar("choice8"),
   choice9: varchar("choice9"),
   choice10: varchar("choice10"),
+  counselingDistrict: varchar("counseling_district"), // District where counseling was done
+  districtAdmin: varchar("district_admin"), // Name of the district admin who set preferences
   allottedDistrict: varchar("allotted_district"),
   allottedStream: varchar("allotted_stream"),
   allocationStatus: varchar("allocation_status").default('pending'), // 'pending' | 'allotted' | 'not_allotted'
@@ -141,6 +157,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 });
 
+export const insertStudentsEntranceResultSchema = createInsertSchema(studentsEntranceResult).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertStudentSchema = createInsertSchema(students).omit({
   id: true,
   createdAt: true,
@@ -172,6 +194,8 @@ export const insertFileUploadSchema = createInsertSchema(fileUploads).omit({
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type StudentsEntranceResult = typeof studentsEntranceResult.$inferSelect;
+export type InsertStudentsEntranceResult = z.infer<typeof insertStudentsEntranceResultSchema>;
 export type Student = typeof students.$inferSelect;
 export type InsertStudent = z.infer<typeof insertStudentSchema>;
 export type Vacancy = typeof vacancies.$inferSelect;

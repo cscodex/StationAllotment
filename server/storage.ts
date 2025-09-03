@@ -1,6 +1,7 @@
 import {
   users,
   students,
+  studentsEntranceResult,
   vacancies,
   settings,
   auditLogs,
@@ -9,6 +10,8 @@ import {
   type InsertUser,
   type Student,
   type InsertStudent,
+  type StudentsEntranceResult,
+  type InsertStudentsEntranceResult,
   type Vacancy,
   type InsertVacancy,
   type Setting,
@@ -19,7 +22,7 @@ import {
   type InsertFileUpload,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, asc, sql } from "drizzle-orm";
+import { eq, desc, and, asc, sql, or, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -40,6 +43,18 @@ export interface IStorage {
   deleteAllStudents(): Promise<void>;
   getStudentsCount(): Promise<number>;
   getStudentsByStatus(status: string): Promise<Student[]>;
+
+  // Students entrance result operations
+  getStudentsEntranceResults(limit?: number, offset?: number): Promise<StudentsEntranceResult[]>;
+  getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined>;
+  searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]>;
+  createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult>;
+  bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[]): Promise<StudentsEntranceResult[]>;
+  updateStudentPreferences(studentId: string, preferences: {
+    choice1?: string; choice2?: string; choice3?: string; choice4?: string; choice5?: string;
+    choice6?: string; choice7?: string; choice8?: string; choice9?: string; choice10?: string;
+    counselingDistrict?: string; districtAdmin?: string;
+  }): Promise<Student>;
 
   // Vacancy operations
   getVacancies(): Promise<Vacancy[]>;
@@ -167,6 +182,61 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(students)
       .where(eq(students.allocationStatus, status))
       .orderBy(asc(students.meritNumber));
+  }
+
+  // Students entrance result operations
+  async getStudentsEntranceResults(limit = 50, offset = 0): Promise<StudentsEntranceResult[]> {
+    return db.select().from(studentsEntranceResult)
+      .orderBy(asc(studentsEntranceResult.meritNo))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined> {
+    const [result] = await db.select().from(studentsEntranceResult).where(eq(studentsEntranceResult.id, id));
+    return result;
+  }
+
+  async searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]> {
+    return db.select().from(studentsEntranceResult)
+      .where(
+        or(
+          ilike(studentsEntranceResult.studentName, `%${query}%`),
+          ilike(studentsEntranceResult.applicationNo, `%${query}%`),
+          ilike(studentsEntranceResult.rollNo, `%${query}%`),
+          sql`${studentsEntranceResult.meritNo}::text ILIKE ${'%' + query + '%'}`
+        )
+      )
+      .orderBy(asc(studentsEntranceResult.meritNo))
+      .limit(20);
+  }
+
+  async createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult> {
+    const [created] = await db
+      .insert(studentsEntranceResult)
+      .values({ ...result, updatedAt: new Date() })
+      .returning();
+    return created;
+  }
+
+  async bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[]): Promise<StudentsEntranceResult[]> {
+    return db
+      .insert(studentsEntranceResult)
+      .values(results.map(r => ({ ...r, updatedAt: new Date() })))
+      .returning();
+  }
+
+  async updateStudentPreferences(studentId: string, preferences: {
+    choice1?: string; choice2?: string; choice3?: string; choice4?: string; choice5?: string;
+    choice6?: string; choice7?: string; choice8?: string; choice9?: string; choice10?: string;
+    counselingDistrict?: string; districtAdmin?: string;
+  }): Promise<Student> {
+    const [updated] = await db
+      .update(students)
+      .set({ ...preferences, updatedAt: new Date() })
+      .where(eq(students.id, studentId))
+      .returning();
+    return updated;
   }
 
   // Vacancy operations

@@ -12,6 +12,7 @@ import {
   History,
   GraduationCap,
   ShieldQuestion,
+  UserCog,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ const navigation = [
   {
     name: "Operations",
     items: [
+      { name: "Student Preferences", href: "/student-preference-management", icon: UserCog, roles: ["district_admin"] },
       { name: "Run Allocation", href: "/allocation", icon: Settings, roles: ["central_admin"] },
       { name: "Reports", href: "/reports", icon: BarChart3, roles: ["central_admin", "district_admin"] },
       { name: "Export Results", href: "/export-results", icon: Download, roles: ["central_admin"] },

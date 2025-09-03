@@ -7,7 +7,7 @@ import connectPg from "connect-pg-simple";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
-import { insertUserSchema, insertStudentSchema, insertVacancySchema, USER_ROLES } from "@shared/schema";
+import { insertUserSchema, insertStudentSchema, insertVacancySchema, insertStudentsEntranceResultSchema, USER_ROLES } from "@shared/schema";
 import { FileService } from "./services/fileService";
 import { AllocationService } from "./services/allocationService";
 import { ExportService } from "./services/exportService";
@@ -387,6 +387,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update student preferences error:", error);
       res.status(500).json({ message: "Failed to update preferences" });
+    }
+  });
+
+  // Students entrance results routes
+  app.get('/api/students-entrance-results', isDistrictAdmin, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      const results = await storage.getStudentsEntranceResults(limit, offset);
+      res.json(results);
+    } catch (error) {
+      console.error("Get students entrance results error:", error);
+      res.status(500).json({ message: "Failed to fetch entrance results" });
+    }
+  });
+
+  app.get('/api/students-entrance-results/search', isDistrictAdmin, async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      
+      if (!query || query.trim().length < 2) {
+        return res.json([]);
+      }
+      
+      const results = await storage.searchStudentsEntranceResults(query.trim());
+      res.json(results);
+    } catch (error) {
+      console.error("Search students entrance results error:", error);
+      res.status(500).json({ message: "Failed to search entrance results" });
+    }
+  });
+
+  app.post('/api/students-entrance-results', isCentralAdmin, async (req: any, res) => {
+    try {
+      const resultData = insertStudentsEntranceResultSchema.parse(req.body);
+      const result = await storage.createStudentsEntranceResult(resultData);
+      
+      await auditService.log(req.user.id, 'entrance_result_create', 'entrance_results', result.id, {
+        meritNo: result.meritNo,
+        studentName: result.studentName,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(result);
+    } catch (error) {
+      console.error("Create entrance result error:", error);
+      res.status(500).json({ message: "Failed to create entrance result" });
+    }
+  });
+
+  app.put('/api/students-entrance-results/:entranceResultId/preferences', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { entranceResultId } = req.params;
+      const { studentId, preferences } = req.body;
+      
+      // Validate deadline hasn't passed
+      const deadline = await storage.getSetting('allocation_deadline');
+      if (deadline && new Date() > new Date(deadline.value)) {
+        return res.status(403).json({ message: "Deadline has passed. Cannot modify preferences." });
+      }
+
+      // Add counseling district and district admin info
+      const preferencesWithDistrict = {
+        ...preferences,
+        counselingDistrict: req.user.district,
+        districtAdmin: `${req.user.firstName} ${req.user.lastName}`.trim(),
+      };
+
+      const student = await storage.updateStudentPreferences(studentId, preferencesWithDistrict);
+      
+      await auditService.log(req.user.id, 'student_preferences_set', 'students', studentId, {
+        entranceResultId,
+        preferences: preferencesWithDistrict,
+        userDistrict: req.user.district,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(student);
+    } catch (error) {
+      console.error("Update student preferences from entrance result error:", error);
+      res.status(500).json({ message: "Failed to update student preferences" });
     }
   });
 
