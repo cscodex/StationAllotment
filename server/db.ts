@@ -10,7 +10,7 @@ if (!process.env.DATABASE_URL) {
 
 // Use postgres-js instead of neon for better compatibility
 const sql = postgres(process.env.DATABASE_URL, {
-  ssl: false, // Disable SSL for development
+  ssl: 'require', // Enable SSL for Replit database
   max: 10, // Connection pool size
 });
 
