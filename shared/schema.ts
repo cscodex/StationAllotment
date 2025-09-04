@@ -36,6 +36,7 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  isBlocked: boolean("is_blocked").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -49,6 +50,7 @@ export const studentsEntranceResult = pgTable("students_entrance_result", {
   studentName: varchar("student_name").notNull(),
   marks: integer("marks").notNull(),
   gender: varchar("gender").notNull(), // 'Male' | 'Female' | 'Other'
+  category: varchar("category").notNull(), // 'Open' | 'WHH' | 'Disabled' | 'Private'
   stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -60,6 +62,8 @@ export const students = pgTable("students", {
   appNo: varchar("app_no").notNull().unique(), // Application number as first data column
   meritNumber: integer("merit_number").notNull().unique(),
   name: varchar("name").notNull(),
+  gender: varchar("gender").notNull(), // 'Male' | 'Female' | 'Other'
+  category: varchar("category").notNull(), // 'Open' | 'WHH' | 'Disabled' | 'Private'
   stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
   choice1: varchar("choice1"),
   choice2: varchar("choice2"),
@@ -84,13 +88,15 @@ export const students = pgTable("students", {
 export const vacancies = pgTable("vacancies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   district: varchar("district").notNull(),
-  medicalVacancies: integer("medical_vacancies").default(0),
-  commerceVacancies: integer("commerce_vacancies").default(0),
-  nonMedicalVacancies: integer("non_medical_vacancies").default(0),
+  stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
+  gender: varchar("gender").notNull(), // 'Male' | 'Female' | 'Other'
+  category: varchar("category").notNull(), // 'Open' | 'WHH' | 'Disabled' | 'Private'
+  totalSeats: integer("total_seats").default(0),
+  availableSeats: integer("available_seats").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  unique().on(table.district)
+  unique().on(table.district, table.stream, table.gender, table.category)
 ]);
 
 // Settings table for system configuration
@@ -235,4 +241,6 @@ export const DISTRICTS = [
 ] as const;
 
 export const STREAMS = ['Medical', 'Commerce', 'NonMedical'] as const;
+export const GENDERS = ['Male', 'Female', 'Other'] as const;
+export const CATEGORIES = ['Open', 'WHH', 'Disabled', 'Private'] as const;
 export const USER_ROLES = ['central_admin', 'district_admin'] as const;

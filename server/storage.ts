@@ -47,6 +47,7 @@ export interface IStorage {
   // Students entrance result operations
   getStudentsEntranceResults(limit?: number, offset?: number): Promise<StudentsEntranceResult[]>;
   getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined>;
+  getStudentsEntranceResultsCount(): Promise<number>;
   searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]>;
   createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult>;
   bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[]): Promise<StudentsEntranceResult[]>;
@@ -195,6 +196,11 @@ export class DatabaseStorage implements IStorage {
   async getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined> {
     const [result] = await db.select().from(studentsEntranceResult).where(eq(studentsEntranceResult.id, id));
     return result;
+  }
+
+  async getStudentsEntranceResultsCount(): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
+    return result.count;
   }
 
   async searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]> {
@@ -386,7 +392,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(students.allocationStatus, 'allotted'));
 
     const vacancyResults = await db.select({
-      total: sql<number>`sum(medical_vacancies + commerce_vacancies + non_medical_vacancies)`
+      total: sql<number>`sum(total_seats)`
     }).from(vacancies);
 
     const totalVacancies = vacancyResults[0]?.total || 0;

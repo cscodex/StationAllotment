@@ -40,8 +40,15 @@ function getSession() {
   });
 }
 
-const isAuthenticated = (req: any, res: any, next: any) => {
+const isAuthenticated = async (req: any, res: any, next: any) => {
   if (req.session && req.session.userId) {
+    const user = await storage.getUser(req.session.userId);
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    if (user.isBlocked) {
+      return res.status(403).json({ message: "Account has been blocked" });
+    }
     return next();
   }
   return res.status(401).json({ message: "Unauthorized" });
@@ -57,6 +64,10 @@ const isCentralAdmin = async (req: any, res: any, next: any) => {
     return res.status(403).json({ message: "Forbidden - Central Admin access required" });
   }
   
+  if (user.isBlocked) {
+    return res.status(403).json({ message: "Account has been blocked" });
+  }
+  
   req.user = user;
   return next();
 };
@@ -69,6 +80,10 @@ const isDistrictAdmin = async (req: any, res: any, next: any) => {
   const user = await storage.getUser(req.session.userId);
   if (!user || !['central_admin', 'district_admin'].includes(user.role)) {
     return res.status(403).json({ message: "Forbidden - Admin access required" });
+  }
+  
+  if (user.isBlocked) {
+    return res.status(403).json({ message: "Account has been blocked" });
   }
   
   req.user = user;
@@ -241,6 +256,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete user error:", error);
       res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // Block user route
+  app.put('/api/users/:id/block', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.role === 'central_admin') {
+        return res.status(400).json({ message: "Cannot block central admin" });
+      }
+      
+      const updatedUser = await storage.updateUser(id, { isBlocked: true });
+      
+      await auditService.log(req.user.id, 'user_block', 'users', id, {
+        username: user.username,
+        role: user.role,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ 
+        id: updatedUser.id, 
+        username: updatedUser.username, 
+        role: updatedUser.role, 
+        district: updatedUser.district,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        isBlocked: updatedUser.isBlocked,
+        email: updatedUser.email
+      });
+    } catch (error) {
+      console.error("Block user error:", error);
+      res.status(500).json({ message: "Failed to block user" });
+    }
+  });
+
+  // Unblock user route
+  app.put('/api/users/:id/unblock', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const updatedUser = await storage.updateUser(id, { isBlocked: false });
+      
+      await auditService.log(req.user.id, 'user_unblock', 'users', id, {
+        username: user.username,
+        role: user.role,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ 
+        id: updatedUser.id, 
+        username: updatedUser.username, 
+        role: updatedUser.role, 
+        district: updatedUser.district,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        isBlocked: updatedUser.isBlocked,
+        email: updatedUser.email
+      });
+    } catch (error) {
+      console.error("Unblock user error:", error);
+      res.status(500).json({ message: "Failed to unblock user" });
     }
   });
 
@@ -435,7 +520,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = parseInt(req.query.offset as string) || 0;
       
       const results = await storage.getStudentsEntranceResults(limit, offset);
-      res.json(results);
+      const total = await storage.getStudentsEntranceResultsCount();
+      
+      res.json({ students: results, total });
     } catch (error) {
       console.error("Get students entrance results error:", error);
       res.status(500).json({ message: "Failed to fetch entrance results" });

@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { DataPagination } from "@/components/ui/data-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { 
@@ -21,7 +23,9 @@ import {
   Trash2, 
   Save, 
   X,
-  UserPlus
+  UserPlus,
+  Ban,
+  Shield
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import { DISTRICTS } from "@shared/schema";
@@ -40,6 +44,8 @@ const updateAdminSchema = createAdminSchema.partial().omit({ password: true });
 export default function ManageDistrictAdmins() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<User | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -48,6 +54,12 @@ export default function ManageDistrictAdmins() {
   });
 
   const districtAdmins = users?.filter(user => user.role === 'district_admin') || [];
+  
+  // Pagination logic
+  const totalAdmins = districtAdmins.length;
+  const startIndex = currentPage * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedAdmins = districtAdmins.slice(startIndex, endIndex);
 
   const createForm = useForm<z.infer<typeof createAdminSchema>>({
     resolver: zodResolver(createAdminSchema),
@@ -139,6 +151,46 @@ export default function ManageDistrictAdmins() {
     },
   });
 
+  const blockMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PUT", `/api/users/${id}/block`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Admin Blocked",
+        description: "District administrator has been blocked successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Block Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PUT", `/api/users/${id}/unblock`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Admin Unblocked",
+        description: "District administrator has been unblocked successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Unblock Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const startEdit = (admin: User) => {
     setEditingAdmin(admin);
     editForm.reset({
@@ -165,11 +217,6 @@ export default function ManageDistrictAdmins() {
     }
   };
 
-  const handleDelete = (admin: User) => {
-    if (confirm(`Are you sure you want to delete ${admin.firstName} ${admin.lastName}?`)) {
-      deleteMutation.mutate(admin.id);
-    }
-  };
 
   return (
     <div className="flex-1 flex flex-col">
@@ -330,7 +377,7 @@ export default function ManageDistrictAdmins() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {districtAdmins.map((admin) => (
+                      {paginatedAdmins.map((admin) => (
                         <TableRow key={admin.id}>
                           <TableCell>
                             <div className="font-medium" data-testid={`text-name-${admin.id}`}>
@@ -346,10 +393,16 @@ export default function ManageDistrictAdmins() {
                           <TableCell data-testid={`text-district-${admin.id}`}>
                             <Badge variant="outline">{admin.district}</Badge>
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="bg-green-100 text-green-800">
-                              Active
-                            </Badge>
+                          <TableCell data-testid={`status-${admin.id}`}>
+                            {admin.isBlocked ? (
+                              <Badge variant="destructive">
+                                Blocked
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                Active
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
@@ -361,15 +414,106 @@ export default function ManageDistrictAdmins() {
                               >
                                 <Edit2 className="w-3 h-3" />
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-red-600 hover:text-red-700"
-                                onClick={() => handleDelete(admin)}
-                                data-testid={`button-delete-${admin.id}`}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
+                              
+                              {admin.isBlocked ? (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-green-600 hover:text-green-700"
+                                      data-testid={`button-unblock-${admin.id}`}
+                                    >
+                                      <Shield className="w-3 h-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Unblock Administrator</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to unblock {admin.firstName} {admin.lastName}? 
+                                        They will be able to access the system again.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => unblockMutation.mutate(admin.id)}
+                                        disabled={unblockMutation.isPending}
+                                        data-testid={`confirm-unblock-${admin.id}`}
+                                      >
+                                        {unblockMutation.isPending ? "Unblocking..." : "Unblock"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              ) : (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-orange-600 hover:text-orange-700"
+                                      data-testid={`button-block-${admin.id}`}
+                                    >
+                                      <Ban className="w-3 h-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Block Administrator</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to block {admin.firstName} {admin.lastName}? 
+                                        They will not be able to access the system until unblocked.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => blockMutation.mutate(admin.id)}
+                                        disabled={blockMutation.isPending}
+                                        data-testid={`confirm-block-${admin.id}`}
+                                        className="bg-orange-600 hover:bg-orange-700"
+                                      >
+                                        {blockMutation.isPending ? "Blocking..." : "Block"}
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+                              
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 hover:text-red-700"
+                                    data-testid={`button-delete-${admin.id}`}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Administrator</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete {admin.firstName} {admin.lastName}? 
+                                      This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteMutation.mutate(admin.id)}
+                                      disabled={deleteMutation.isPending}
+                                      data-testid={`confirm-delete-${admin.id}`}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -377,6 +521,19 @@ export default function ManageDistrictAdmins() {
                     </TableBody>
                   </Table>
                 </div>
+                
+                <DataPagination
+                  currentPage={currentPage}
+                  totalItems={totalAdmins}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={(newLimit) => {
+                    setItemsPerPage(newLimit);
+                    setCurrentPage(0); // Reset to first page when changing items per page
+                  }}
+                  showItemsPerPageSelector={true}
+                  itemsPerPageOptions={[10, 25, 50, 100]}
+                />
               </div>
             )}
           </CardContent>
