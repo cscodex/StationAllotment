@@ -104,21 +104,27 @@ function StudentPreferenceManagement() {
     setSelectedStudent(student);
     
     // Check if student already exists in students table
+    let existingStudent = null;
+    
     try {
       const response = await apiRequest('GET', '/api/students?limit=10000');
       
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Server returned non-JSON response');
+      if (contentType && contentType.includes('application/json')) {
+        const existingStudents = await response.json();
+        existingStudent = (existingStudents as any).students?.find(
+          (s: any) => s.appNo === student.applicationNo || s.meritNumber === student.meritNo
+        );
       }
-      
-      const existingStudents = await response.json();
-      const existingStudent = (existingStudents as any).students?.find(
-        (s: any) => s.appNo === student.applicationNo || s.meritNumber === student.meritNo
-      );
+    } catch (error) {
+      console.warn('Could not fetch existing students, will create new:', error);
+      // Continue to create new student
+    }
 
+    try {
       if (existingStudent) {
+        console.log('Found existing student:', existingStudent);
         // Load existing preferences
         setStudentId(existingStudent.id);
         setPreferences({
@@ -137,6 +143,7 @@ function StudentPreferenceManagement() {
         setIsLocked(existingStudent.isLocked || false);
         setEditableStream(existingStudent.stream || student.stream);
       } else {
+        console.log('Creating new student for:', student);
         // Create new student record
         const newStudentData = {
           appNo: student.applicationNo,
@@ -147,18 +154,31 @@ function StudentPreferenceManagement() {
 
         const newStudent = await createStudentMutation.mutateAsync(newStudentData);
         console.log('Created new student:', newStudent);
-        setStudentId(newStudent.id);
-        setPreferences({});
-        setIsLocked(false);
-        setEditableStream(student.stream);
+        
+        if (newStudent && newStudent.id) {
+          setStudentId(newStudent.id);
+          setPreferences({});
+          setIsLocked(false);
+          setEditableStream(student.stream);
+          toast({
+            title: "Student Record Created",
+            description: `Created new record for ${student.studentName}`,
+          });
+        } else {
+          throw new Error('Student creation failed - no ID returned');
+        }
       }
     } catch (error) {
-      console.error('Error handling student selection:', error);
+      console.error('Error in student selection/creation:', error);
       toast({
         title: "Error",
-        description: "Failed to load student data",
+        description: "Failed to load or create student record",
         variant: "destructive",
       });
+      // Reset state on error
+      setSelectedStudent(null);
+      setStudentId('');
+      setPreferences({});
     }
   };
 
@@ -170,9 +190,6 @@ function StudentPreferenceManagement() {
   };
 
   const handleSubmit = () => {
-    console.log('handleSubmit called - selectedStudent:', selectedStudent);
-    console.log('handleSubmit called - studentId:', studentId);
-    
     if (!selectedStudent || !studentId) {
       toast({
         title: "Error",

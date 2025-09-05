@@ -552,7 +552,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const student = await storage.createStudent(studentData);
-      console.log('Created student:', student);
       
       await auditService.log(req.user.id, 'student_create', 'students', student.id, {
         studentData,
