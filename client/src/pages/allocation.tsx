@@ -55,91 +55,88 @@ export default function Allocation() {
   const students = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
   const entranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
 
-  // Enhanced validation checks
-  const hasValidStudents = students && students.length > 0;
-  const hasValidVacancies = vacancies && vacancies.length > 0;
-  const hasValidEntranceResults = entranceResults && entranceResults.length > 0;
+  // Minimum data requirements for allocation
+  const hasEntranceResults = entranceResults && entranceResults.length > 0;
+  const hasVacancyData = vacancies && vacancies.length > 0;
+  const totalVacancySeats = vacancies?.reduce((sum: number, v: any) => sum + (v.totalSeats || 0), 0) || 0;
   
-  // Check if students have valid preferences and match entrance results
-  const studentsWithValidChoices = students?.filter((s: any) => s.choice1 || s.choice2 || s.choice3)?.length || 0;
-  const studentsMatchingEntrance = students?.filter((s: any) => 
-    entranceResults?.some((er: any) => er.applicationNo === s.appNo)
+  // Check if students have valid preferences (stream and at least one district choice)
+  const studentsWithCompleteData = students?.filter((s: any) => {
+    // Must have stream and at least one district choice
+    const hasStream = s.stream && ['Medical', 'Commerce', 'NonMedical'].includes(s.stream);
+    const hasDistrictChoice = s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 || 
+                             s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10;
+    return hasStream && hasDistrictChoice;
+  })?.length || 0;
+  
+  // Check if students exist in entrance results (for merit-based allocation)
+  const studentsWithMeritData = students?.filter((s: any) => 
+    entranceResults?.some((er: any) => er.applicationNo === s.appNo && er.meritNo)
   )?.length || 0;
 
-  // Check vacancy coverage for all districts and categories
-  const requiredDistricts = 22; // Punjab has 22 districts
-  const availableDistricts = new Set(vacancies?.map((v: any) => v.district))?.size || 0;
-  
-  const canRunAllocation = studentFile && vacancyFile && entranceFile && 
-                          hasValidStudents && hasValidVacancies && hasValidEntranceResults &&
-                          studentsMatchingEntrance > 0 && availableDistricts >= requiredDistricts &&
-                          !allocationStatus?.completed;
+  // Minimum requirements for allocation
+  const canRunAllocation = hasEntranceResults && // At least one entrance result
+                          hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
+                          studentsWithCompleteData > 0 && // At least one student with complete data
+                          studentsWithMeritData > 0 && // Students must have merit data
+                          !allocationStatus?.completed; // Not already completed
 
   const preflightChecks = [
     {
-      title: "Entrance Results File",
-      status: entranceFile ? "complete" : "missing",
-      description: entranceFile 
-        ? `${entranceFile.originalName} - ${entranceResults?.length || 0} students with merit numbers`
-        : "Upload entrance results file with merit numbers",
-      icon: entranceFile ? Check : AlertTriangle,
-      color: entranceFile ? "text-green-500" : "text-red-500",
+      title: "Entrance Results Data",
+      status: hasEntranceResults ? "complete" : "missing",
+      description: hasEntranceResults 
+        ? `${entranceResults?.length || 0} entrance results with merit numbers available`
+        : "No entrance results found - upload entrance results file first",
+      icon: hasEntranceResults ? Check : AlertTriangle,
+      color: hasEntranceResults ? "text-green-500" : "text-red-500",
     },
     {
-      title: "Student Choices File",
-      status: studentFile ? "complete" : "missing",
-      description: studentFile 
-        ? `${studentFile.originalName} - ${studentsWithValidChoices} students with preferences`
-        : "Upload student choices file with district preferences",
-      icon: studentFile ? Check : AlertTriangle,
-      color: studentFile ? "text-green-500" : "text-red-500",
+      title: "Vacancy Seat Availability",
+      status: hasVacancyData && totalVacancySeats > 0 ? "complete" : "missing",
+      description: hasVacancyData && totalVacancySeats > 0
+        ? `${totalVacancySeats} total seats available across districts`
+        : "No vacancy seats found - upload vacancy data file first",
+      icon: hasVacancyData && totalVacancySeats > 0 ? Check : AlertTriangle,
+      color: hasVacancyData && totalVacancySeats > 0 ? "text-green-500" : "text-red-500",
     },
     {
-      title: "Vacancy Data File", 
-      status: vacancyFile ? "complete" : "missing",
-      description: vacancyFile
-        ? `${vacancyFile.originalName} - ${availableDistricts} districts covered`
-        : "Upload vacancy data file with district-wise seats",
-      icon: vacancyFile ? Check : AlertTriangle,
-      color: vacancyFile ? "text-green-500" : "text-red-500",
+      title: "Student Choice Data", 
+      status: studentsWithCompleteData > 0 ? "complete" : "missing",
+      description: studentsWithCompleteData > 0
+        ? `${studentsWithCompleteData} students have stream and district preferences set`
+        : "No students found with complete stream and district choice data",
+      icon: studentsWithCompleteData > 0 ? Check : AlertTriangle,
+      color: studentsWithCompleteData > 0 ? "text-green-500" : "text-red-500",
     },
     {
-      title: "Student-Merit Data Matching",
-      status: studentsMatchingEntrance > 0 ? "complete" : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults ? "error" : "pending",
-      description: studentsMatchingEntrance > 0 
-        ? `${studentsMatchingEntrance} students matched with entrance results`
-        : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults
-        ? "No students match between choices and entrance results - check Application Numbers"
-        : "Waiting for student data upload",
-      icon: studentsMatchingEntrance > 0 ? Check : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults ? AlertTriangle : Clock,
-      color: studentsMatchingEntrance > 0 ? "text-green-500" : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults ? "text-red-500" : "text-amber-500",
+      title: "Merit-Based Matching",
+      status: studentsWithMeritData > 0 ? "complete" : studentsWithCompleteData > 0 && hasEntranceResults ? "error" : "pending",
+      description: studentsWithMeritData > 0 
+        ? `${studentsWithMeritData} students matched with entrance merit data`
+        : studentsWithCompleteData > 0 && hasEntranceResults
+        ? "Students found but no merit matching - check application numbers between student choices and entrance results"
+        : "Waiting for student choice and entrance result data",
+      icon: studentsWithMeritData > 0 ? Check : studentsWithCompleteData > 0 && hasEntranceResults ? AlertTriangle : Clock,
+      color: studentsWithMeritData > 0 ? "text-green-500" : studentsWithCompleteData > 0 && hasEntranceResults ? "text-red-500" : "text-amber-500",
     },
     {
-      title: "District Coverage Validation",
-      status: availableDistricts >= requiredDistricts ? "complete" : availableDistricts > 0 ? "warning" : "pending",
-      description: availableDistricts >= requiredDistricts
-        ? `All ${requiredDistricts} Punjab districts covered`
-        : availableDistricts > 0
-        ? `Only ${availableDistricts}/${requiredDistricts} districts covered - some students may not get allocated`
-        : "Waiting for vacancy data",
-      icon: availableDistricts >= requiredDistricts ? Check : availableDistricts > 0 ? AlertTriangle : Clock,
-      color: availableDistricts >= requiredDistricts ? "text-green-500" : availableDistricts > 0 ? "text-amber-500" : "text-amber-500",
+      title: "Minimum Allocation Data",
+      status: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 ? "complete" : "pending",
+      description: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0
+        ? "Minimum data requirements met for allocation process"
+        : "Need: entrance results + vacancy data + students with choices",
+      icon: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 ? Check : Clock,
+      color: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 ? "text-green-500" : "text-amber-500",
     },
     {
-      title: "Data Integrity Check",
-      status: hasValidStudents && hasValidVacancies && hasValidEntranceResults ? "complete" : "pending",
-      description: hasValidStudents && hasValidVacancies && hasValidEntranceResults
-        ? "All data files contain valid records"
-        : "Waiting for complete data validation",
-      icon: hasValidStudents && hasValidVacancies && hasValidEntranceResults ? Check : Clock,
-      color: hasValidStudents && hasValidVacancies && hasValidEntranceResults ? "text-green-500" : "text-amber-500",
-    },
-    {
-      title: "Allocation Status",
-      status: allocationStatus?.completed ? "complete" : "ready",
+      title: "Allocation Process",
+      status: allocationStatus?.completed ? "complete" : canRunAllocation ? "ready" : "pending",
       description: allocationStatus?.completed
-        ? "Allocation has been completed successfully"
-        : canRunAllocation ? "Ready to run allocation process" : "Prerequisites not met",
+        ? "Seat allocation has been completed successfully"
+        : canRunAllocation 
+        ? "Ready to run allocation - all minimum requirements met"
+        : "Prerequisites not met - need minimum data before allocation",
       icon: allocationStatus?.completed ? Check : canRunAllocation ? Clock : AlertTriangle,
       color: allocationStatus?.completed ? "text-green-500" : canRunAllocation ? "text-blue-500" : "text-amber-500",
     },

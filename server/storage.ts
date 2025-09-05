@@ -280,9 +280,10 @@ export class DatabaseStorage implements IStorage {
         .insert(vacancies)
         .values({ ...vacancy, updatedAt: new Date() })
         .onConflictDoUpdate({
-          target: vacancies.district,
+          target: [vacancies.district, vacancies.stream, vacancies.gender, vacancies.category],
           set: { 
-            ...vacancy,
+            totalSeats: vacancy.totalSeats,
+            availableSeats: vacancy.availableSeats,
             updatedAt: new Date(),
           },
         })
