@@ -35,7 +35,7 @@ export default function Allocation() {
     queryKey: ["/api/files"],
   });
 
-  const { data: students } = useQuery<any[]>({
+  const { data: studentsResponse } = useQuery<any>({
     queryKey: ["/api/students"],
   });
 
@@ -43,13 +43,17 @@ export default function Allocation() {
     queryKey: ["/api/vacancies"],
   });
 
-  const { data: entranceResults } = useQuery<any[]>({
+  const { data: entranceResultsResponse } = useQuery<any>({
     queryKey: ["/api/students-entrance-results"],
   });
 
   const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
   const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
   const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
+
+  // Handle different API response formats
+  const students = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
+  const entranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
 
   // Enhanced validation checks
   const hasValidStudents = students && students.length > 0;
