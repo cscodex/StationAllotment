@@ -47,18 +47,42 @@ export default function Reports() {
     return acc;
   }, {} as Record<string, Record<string, Student[]>>);
 
-  // Calculate remaining vacancies
-  const remainingVacancies = vacancies?.map(vacancy => {
-    const districtAllotments = allotmentsByDistrict[vacancy.district] || { Medical: [], Commerce: [], NonMedical: [] };
+  // Group vacancies by district and stream for calculations
+  const vacancySummaryByDistrict = vacancies?.reduce((acc, vacancy) => {
+    const { district, stream } = vacancy;
+    if (!acc[district]) {
+      acc[district] = { Medical: { total: 0, available: 0 }, Commerce: { total: 0, available: 0 }, NonMedical: { total: 0, available: 0 } };
+    }
+    
+    acc[district][stream as keyof typeof acc[string]].total += vacancy.totalSeats || 0;
+    acc[district][stream as keyof typeof acc[string]].available += vacancy.availableSeats || 0;
+    return acc;
+  }, {} as Record<string, Record<string, { total: number, available: number }>>);
+
+  // Calculate remaining vacancies per district
+  const remainingVacancies = Object.entries(vacancySummaryByDistrict || {}).map(([district, streams]) => {
+    const districtAllotments = allotmentsByDistrict[district] || { Medical: [], Commerce: [], NonMedical: [] };
+    
+    const medicalTotal = streams.Medical.total;
+    const commerceTotal = streams.Commerce.total;
+    const nonMedicalTotal = streams.NonMedical.total;
+    
+    const medicalAllocated = districtAllotments.Medical.length;
+    const commerceAllocated = districtAllotments.Commerce.length;
+    const nonMedicalAllocated = districtAllotments.NonMedical.length;
+    
     return {
-      ...vacancy,
-      remainingMedical: vacancy.medicalVacancies! - districtAllotments.Medical.length,
-      remainingCommerce: vacancy.commerceVacancies! - districtAllotments.Commerce.length,
-      remainingNonMedical: vacancy.nonMedicalVacancies! - districtAllotments.NonMedical.length,
-      totalAllocated: districtAllotments.Medical.length + districtAllotments.Commerce.length + districtAllotments.NonMedical.length,
-      totalVacancies: vacancy.medicalVacancies! + vacancy.commerceVacancies! + vacancy.nonMedicalVacancies!
+      district,
+      medicalVacancies: medicalTotal,
+      commerceVacancies: commerceTotal,
+      nonMedicalVacancies: nonMedicalTotal,
+      remainingMedical: medicalTotal - medicalAllocated,
+      remainingCommerce: commerceTotal - commerceAllocated,
+      remainingNonMedical: nonMedicalTotal - nonMedicalAllocated,
+      totalAllocated: medicalAllocated + commerceAllocated + nonMedicalAllocated,
+      totalVacancies: medicalTotal + commerceTotal + nonMedicalTotal
     };
-  }) || [];
+  });
 
   const exportToCSV = () => {
     if (activeTab === 'station-allotments') {
@@ -75,13 +99,13 @@ export default function Reports() {
       const csvData = remainingVacancies.map(vacancy => ({
         'District': vacancy.district,
         'Medical Vacancies': vacancy.medicalVacancies,
-        'Medical Allocated': vacancy.medicalVacancies! - vacancy.remainingMedical,
+        'Medical Allocated': vacancy.medicalVacancies - vacancy.remainingMedical,
         'Medical Remaining': vacancy.remainingMedical,
         'Commerce Vacancies': vacancy.commerceVacancies,
-        'Commerce Allocated': vacancy.commerceVacancies! - vacancy.remainingCommerce,
+        'Commerce Allocated': vacancy.commerceVacancies - vacancy.remainingCommerce,
         'Commerce Remaining': vacancy.remainingCommerce,
         'NonMedical Vacancies': vacancy.nonMedicalVacancies,
-        'NonMedical Allocated': vacancy.nonMedicalVacancies! - vacancy.remainingNonMedical,
+        'NonMedical Allocated': vacancy.nonMedicalVacancies - vacancy.remainingNonMedical,
         'NonMedical Remaining': vacancy.remainingNonMedical,
         'Total Allocated': vacancy.totalAllocated,
         'Total Remaining': vacancy.totalVacancies - vacancy.totalAllocated
@@ -299,8 +323,8 @@ export default function Reports() {
                       </tr>
                     </thead>
                     <tbody>
-                      {remainingVacancies.map(vacancy => (
-                        <tr key={vacancy.district}>
+                      {remainingVacancies.map((vacancy, index) => (
+                        <tr key={`vacancy-${vacancy.district}-${index}`}>
                           <td className="border border-border p-3 font-medium">
                             {vacancy.district}
                           </td>

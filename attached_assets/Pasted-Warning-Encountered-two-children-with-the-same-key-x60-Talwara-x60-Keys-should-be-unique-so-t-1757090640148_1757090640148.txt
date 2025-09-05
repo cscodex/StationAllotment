@@ -1,0 +1,61 @@
+Warning: Encountered two children with the same key, &#x60;Talwara&#x60;. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+    at tbody
+    at table
+    at div
+    at div
+    at _c9 (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/ui/card.tsx:114:12)
+    at div
+    at _c (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/ui/card.tsx:20:11)
+    at div
+    at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-BOL2CCOG.js?v=4609bb1c:42:13
+    at Presence (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-QVRXHI5R.js?v=4609bb1c:24:11)
+    at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=4609bb1c:385:13
+    at _c5 (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/ui/tabs.tsx:72:12)
+    at div
+    at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-BOL2CCOG.js?v=4609bb1c:42:13
+    at Provider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=4609bb1c:38:15)
+    at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=4609bb1c:263:7
+    at div
+    at Reports (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/pages/reports.tsx:27:37)
+    at Route (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=4609bb1c:323:16)
+    at Switch (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=4609bb1c:379:17)
+    at div
+    at div
+    at MainLayout (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/layout/main-layout.tsx:21:38)
+    at Router (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/App.tsx?v=NRun4IQSL8UlHhwd6ek0w:42:48)
+    at Provider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=4609bb1c:38:15)
+    at TooltipProvider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=4609bb1c:60:5)
+    at QueryClientProvider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=4609bb1c:2805:3)
+    at App
+at tbody
+at table
+at div
+at div
+at _c9 (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/ui/card.tsx:114:12)
+at div
+at _c (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/ui/card.tsx:20:11)
+at div
+at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-BOL2CCOG.js?v=4609bb1c:42:13
+at Presence (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-QVRXHI5R.js?v=4609bb1c:24:11)
+at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=4609bb1c:385:13
+at _c5 (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/ui/tabs.tsx:72:12)
+at div
+at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-BOL2CCOG.js?v=4609bb1c:42:13
+at Provider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=4609bb1c:38:15)
+at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tabs.js?v=4609bb1c:263:7
+at div
+at Reports (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/pages/reports.tsx:27:37)
+at Route (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=4609bb1c:323:16)
+at Switch (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/wouter.js?v=4609bb1c:379:17)
+at div
+at div
+at MainLayout (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/components/layout/main-layout.tsx:21:38)
+at Router (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/src/App.tsx?v=NRun4IQSL8UlHhwd6ek0w:42:48)
+at Provider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-OXZDJRWN.js?v=4609bb1c:38:15)
+at TooltipProvider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=4609bb1c:60:5)
+at QueryClientProvider (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/@tanstack_react-query.js?v=4609bb1c:2805:3)
+at App
+at t.value (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:17465)
+at new t (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:12630)
+at t.value (https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:32766)
+at https://f64b7e8f-4abe-420e-8cac-1cc525117929-00-1g3k23dgn4059.riker.replit.dev/__replco/static/devtools/eruda/3.2.3/eruda.js:2:34400
