@@ -106,6 +106,13 @@ function StudentPreferenceManagement() {
     // Check if student already exists in students table
     try {
       const response = await apiRequest('GET', '/api/students?limit=10000');
+      
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const existingStudents = await response.json();
       const existingStudent = (existingStudents as any).students?.find(
         (s: any) => s.appNo === student.applicationNo || s.meritNumber === student.meritNo
@@ -139,6 +146,7 @@ function StudentPreferenceManagement() {
         };
 
         const newStudent = await createStudentMutation.mutateAsync(newStudentData);
+        console.log('Created new student:', newStudent);
         setStudentId(newStudent.id);
         setPreferences({});
         setIsLocked(false);
@@ -162,6 +170,9 @@ function StudentPreferenceManagement() {
   };
 
   const handleSubmit = () => {
+    console.log('handleSubmit called - selectedStudent:', selectedStudent);
+    console.log('handleSubmit called - studentId:', studentId);
+    
     if (!selectedStudent || !studentId) {
       toast({
         title: "Error",
@@ -226,6 +237,7 @@ function StudentPreferenceManagement() {
   const availableDistricts = Array.isArray(vacancies) 
     ? vacancies
         .map((v: any) => v.district)
+        .filter((district: string) => district && district.trim() !== '') // Filter out empty/null values
         .filter((district: string, index: number, array: string[]) => array.indexOf(district) === index)
         .sort()
     : [];
