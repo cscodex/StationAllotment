@@ -23,30 +23,70 @@ export default function Allocation() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: allocationStatus } = useQuery({
+  const { data: allocationStatus } = useQuery<any>({
     queryKey: ["/api/allocation/status"],
   });
 
-  const { data: stats } = useQuery({
+  const { data: stats } = useQuery<any>({
     queryKey: ["/api/dashboard/stats"],
   });
 
-  const { data: files } = useQuery({
+  const { data: files } = useQuery<any[]>({
     queryKey: ["/api/files"],
+  });
+
+  const { data: students } = useQuery<any[]>({
+    queryKey: ["/api/students"],
+  });
+
+  const { data: vacancies } = useQuery<any[]>({
+    queryKey: ["/api/vacancies"],
+  });
+
+  const { data: entranceResults } = useQuery<any[]>({
+    queryKey: ["/api/students-entrance-results"],
   });
 
   const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
   const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
+  const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
 
-  const canRunAllocation = studentFile && vacancyFile && !allocationStatus?.completed;
+  // Enhanced validation checks
+  const hasValidStudents = students && students.length > 0;
+  const hasValidVacancies = vacancies && vacancies.length > 0;
+  const hasValidEntranceResults = entranceResults && entranceResults.length > 0;
+  
+  // Check if students have valid preferences and match entrance results
+  const studentsWithValidChoices = students?.filter((s: any) => s.choice1 || s.choice2 || s.choice3)?.length || 0;
+  const studentsMatchingEntrance = students?.filter((s: any) => 
+    entranceResults?.some((er: any) => er.applicationNo === s.appNo)
+  )?.length || 0;
+
+  // Check vacancy coverage for all districts and categories
+  const requiredDistricts = 22; // Punjab has 22 districts
+  const availableDistricts = new Set(vacancies?.map((v: any) => v.district))?.size || 0;
+  
+  const canRunAllocation = studentFile && vacancyFile && entranceFile && 
+                          hasValidStudents && hasValidVacancies && hasValidEntranceResults &&
+                          studentsMatchingEntrance > 0 && availableDistricts >= requiredDistricts &&
+                          !allocationStatus?.completed;
 
   const preflightChecks = [
+    {
+      title: "Entrance Results File",
+      status: entranceFile ? "complete" : "missing",
+      description: entranceFile 
+        ? `${entranceFile.originalName} - ${entranceResults?.length || 0} students with merit numbers`
+        : "Upload entrance results file with merit numbers",
+      icon: entranceFile ? Check : AlertTriangle,
+      color: entranceFile ? "text-green-500" : "text-red-500",
+    },
     {
       title: "Student Choices File",
       status: studentFile ? "complete" : "missing",
       description: studentFile 
-        ? `${studentFile.originalName} uploaded and validated`
-        : "Upload student choices file to proceed",
+        ? `${studentFile.originalName} - ${studentsWithValidChoices} students with preferences`
+        : "Upload student choices file with district preferences",
       icon: studentFile ? Check : AlertTriangle,
       color: studentFile ? "text-green-500" : "text-red-500",
     },
@@ -54,28 +94,50 @@ export default function Allocation() {
       title: "Vacancy Data File", 
       status: vacancyFile ? "complete" : "missing",
       description: vacancyFile
-        ? `${vacancyFile.originalName} uploaded and validated`
-        : "Upload vacancy data file to proceed",
+        ? `${vacancyFile.originalName} - ${availableDistricts} districts covered`
+        : "Upload vacancy data file with district-wise seats",
       icon: vacancyFile ? Check : AlertTriangle,
       color: vacancyFile ? "text-green-500" : "text-red-500",
     },
     {
-      title: "Data Validation",
-      status: (studentFile && vacancyFile) ? "complete" : "pending",
-      description: (studentFile && vacancyFile)
-        ? "All data files validated successfully"
-        : "Waiting for file uploads",
-      icon: (studentFile && vacancyFile) ? Check : Clock,
-      color: (studentFile && vacancyFile) ? "text-green-500" : "text-amber-500",
+      title: "Student-Merit Data Matching",
+      status: studentsMatchingEntrance > 0 ? "complete" : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults ? "error" : "pending",
+      description: studentsMatchingEntrance > 0 
+        ? `${studentsMatchingEntrance} students matched with entrance results`
+        : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults
+        ? "No students match between choices and entrance results - check Application Numbers"
+        : "Waiting for student data upload",
+      icon: studentsMatchingEntrance > 0 ? Check : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults ? AlertTriangle : Clock,
+      color: studentsMatchingEntrance > 0 ? "text-green-500" : studentsMatchingEntrance === 0 && hasValidStudents && hasValidEntranceResults ? "text-red-500" : "text-amber-500",
+    },
+    {
+      title: "District Coverage Validation",
+      status: availableDistricts >= requiredDistricts ? "complete" : availableDistricts > 0 ? "warning" : "pending",
+      description: availableDistricts >= requiredDistricts
+        ? `All ${requiredDistricts} Punjab districts covered`
+        : availableDistricts > 0
+        ? `Only ${availableDistricts}/${requiredDistricts} districts covered - some students may not get allocated`
+        : "Waiting for vacancy data",
+      icon: availableDistricts >= requiredDistricts ? Check : availableDistricts > 0 ? AlertTriangle : Clock,
+      color: availableDistricts >= requiredDistricts ? "text-green-500" : availableDistricts > 0 ? "text-amber-500" : "text-amber-500",
+    },
+    {
+      title: "Data Integrity Check",
+      status: hasValidStudents && hasValidVacancies && hasValidEntranceResults ? "complete" : "pending",
+      description: hasValidStudents && hasValidVacancies && hasValidEntranceResults
+        ? "All data files contain valid records"
+        : "Waiting for complete data validation",
+      icon: hasValidStudents && hasValidVacancies && hasValidEntranceResults ? Check : Clock,
+      color: hasValidStudents && hasValidVacancies && hasValidEntranceResults ? "text-green-500" : "text-amber-500",
     },
     {
       title: "Allocation Status",
-      status: allocationStatus?.completed ? "complete" : "pending",
+      status: allocationStatus?.completed ? "complete" : "ready",
       description: allocationStatus?.completed
-        ? "Allocation has been completed"
-        : "Ready to run allocation process",
-      icon: allocationStatus?.completed ? Check : Clock,
-      color: allocationStatus?.completed ? "text-green-500" : "text-amber-500",
+        ? "Allocation has been completed successfully"
+        : canRunAllocation ? "Ready to run allocation process" : "Prerequisites not met",
+      icon: allocationStatus?.completed ? Check : canRunAllocation ? Clock : AlertTriangle,
+      color: allocationStatus?.completed ? "text-green-500" : canRunAllocation ? "text-blue-500" : "text-amber-500",
     },
   ];
 

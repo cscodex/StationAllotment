@@ -49,7 +49,7 @@ export default function FileManagement() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {files?.map((file: any) => (
+                {(files as any[])?.map((file: any) => (
                   <div key={file.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate" data-testid={`file-${file.id}`}>

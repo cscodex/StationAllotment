@@ -410,6 +410,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/files/template/student-choices', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvContent = fileService.generateStudentChoicesTemplate();
+      
+      await auditService.log(req.user.id, 'template_download', 'files', 'student_choices_template', {
+        type: 'student_choices',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=student_choices_template.csv');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Download student choices template error:", error);
+      res.status(500).json({ message: "Failed to download template" });
+    }
+  });
+
+  app.get('/api/files/template/vacancies', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvContent = fileService.generateVacanciesTemplate();
+      
+      await auditService.log(req.user.id, 'template_download', 'files', 'vacancies_template', {
+        type: 'vacancies',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=vacancies_template.csv');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Download vacancies template error:", error);
+      res.status(500).json({ message: "Failed to download template" });
+    }
+  });
+
   app.get('/api/files', isAuthenticated, async (req, res) => {
     try {
       const files = await storage.getFileUploads(50);

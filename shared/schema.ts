@@ -244,3 +244,15 @@ export const STREAMS = ['Medical', 'Commerce', 'NonMedical'] as const;
 export const GENDERS = ['Male', 'Female', 'Other'] as const;
 export const CATEGORIES = ['Open', 'WHH', 'Disabled', 'Private'] as const;
 export const USER_ROLES = ['central_admin', 'district_admin'] as const;
+
+// Gender-specific categories
+export const FEMALE_CATEGORIES = ['WHH', 'Private', 'Disabled', 'Open'] as const;
+export const MALE_CATEGORIES = ['Private', 'Open', 'Disabled'] as const;
+
+// Helper function to get categories based on gender
+export function getCategoriesForGender(gender: string): readonly string[] {
+  if (gender === 'Female') {
+    return FEMALE_CATEGORIES;
+  }
+  return MALE_CATEGORIES;
+}

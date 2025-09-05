@@ -194,13 +194,78 @@ export class FileService {
       'Student Name',
       'Marks',
       'Gender',
+      'Category',
       'Stream'
     ];
 
     const sampleRows = [
-      ['1001', 'APP2024001', 'ROLL001', 'Sample Student 1', '485', 'Male', 'Medical'],
-      ['1002', 'APP2024002', 'ROLL002', 'Sample Student 2', '480', 'Female', 'Commerce'],
-      ['1003', 'APP2024003', 'ROLL003', 'Sample Student 3', '475', 'Male', 'NonMedical']
+      ['1001', 'APP2024001', 'ROLL001', 'Sample Student 1', '485', 'Male', 'Open', 'Medical'],
+      ['1002', 'APP2024002', 'ROLL002', 'Sample Student 2', '480', 'Female', 'WHH', 'Commerce'],
+      ['1003', 'APP2024003', 'ROLL003', 'Sample Student 3', '475', 'Male', 'Disabled', 'NonMedical']
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...sampleRows.map(row => row.join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  generateStudentChoicesTemplate(): string {
+    const headers = [
+      'App No',
+      'Merit Number',
+      'Name',
+      'Gender',
+      'Category',
+      'Stream',
+      'Choice 1',
+      'Choice 2',
+      'Choice 3',
+      'Choice 4',
+      'Choice 5',
+      'Choice 6',
+      'Choice 7',
+      'Choice 8',
+      'Choice 9',
+      'Choice 10'
+    ];
+
+    const sampleRows = [
+      ['APP2024001', '1001', 'Sample Student 1', 'Male', 'Open', 'Medical', 'Amritsar', 'Ludhiana', 'Jalandhar', '', '', '', '', '', '', ''],
+      ['APP2024002', '1002', 'Sample Student 2', 'Female', 'WHH', 'Commerce', 'Patiala', 'Bathinda', 'Moga', 'Barnala', '', '', '', '', '', ''],
+      ['APP2024003', '1003', 'Sample Student 3', 'Male', 'Disabled', 'NonMedical', 'Gurdaspur', 'Pathankot', 'Hoshiarpur', 'Jalandhar', 'Kapurthala', '', '', '', '', '']
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...sampleRows.map(row => row.join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  generateVacanciesTemplate(): string {
+    const headers = [
+      'District',
+      'Stream',
+      'Gender',
+      'Category',
+      'Total Seats',
+      'Available Seats'
+    ];
+
+    const sampleRows = [
+      ['Amritsar', 'Medical', 'Male', 'Open', '50', '50'],
+      ['Amritsar', 'Medical', 'Male', 'Disabled', '5', '5'],
+      ['Amritsar', 'Medical', 'Male', 'Private', '20', '20'],
+      ['Amritsar', 'Medical', 'Female', 'Open', '40', '40'],
+      ['Amritsar', 'Medical', 'Female', 'WHH', '15', '15'],
+      ['Amritsar', 'Medical', 'Female', 'Disabled', '5', '5'],
+      ['Amritsar', 'Medical', 'Female', 'Private', '25', '25'],
+      ['Amritsar', 'Commerce', 'Male', 'Open', '60', '60'],
+      ['Amritsar', 'Commerce', 'Female', 'WHH', '20', '20']
     ];
 
     const csvContent = [
@@ -224,7 +289,8 @@ export class FileService {
       studentName: String(row['Student Name'] || row.StudentName || row.student_name || row.Name || row.name || ''),
       marks: parseInt(row.Marks || row.marks || row.Score || row.score || row.TotalMarks || row.total_marks) || 0,
       gender: String(row.Gender || row.gender || row.Sex || row.sex || ''),
-      stream: String(row.Stream || row.stream || row.Category || row.category || ''),
+      category: String(row.Category || row.category || row.Quota || row.quota || ''),
+      stream: String(row.Stream || row.stream || ''),
     }));
   }
 
@@ -238,6 +304,8 @@ export class FileService {
       appNo: String(row['App No'] || row.AppNo || row.app_no || row.ApplicationNumber || row.application_number || row['Application Number'] || ''),
       meritNumber: parseInt(row.MeritNo || row.MeritNumber || row.merit_number || row['Merit Number']) || 0,
       name: String(row.Name || row.name || row['Student Name'] || ''),
+      gender: String(row.Gender || row.gender || ''),
+      category: String(row.Category || row.category || ''),
       stream: String(row.Stream || row.stream || ''),
       choice1: row.choice1 || row.Choice1 || row['Choice 1'] || null,
       choice2: row.choice2 || row.Choice2 || row['Choice 2'] || null,
@@ -260,10 +328,12 @@ export class FileService {
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     return data.map((row: any) => ({
-      district: row.District || row.district,
-      medicalVacancies: parseInt(row.Medical_vac || row.medical_vac || row['Medical Vacancies']) || 0,
-      commerceVacancies: parseInt(row.Commerce_vac || row.commerce_vac || row['Commerce Vacancies']) || 0,
-      nonMedicalVacancies: parseInt(row.NonMedical_vac || row.non_medical_vac || row['NonMedical Vacancies']) || 0,
+      district: String(row.District || row.district || ''),
+      stream: String(row.Stream || row.stream || ''),
+      gender: String(row.Gender || row.gender || ''),
+      category: String(row.Category || row.category || ''),
+      totalSeats: parseInt(row['Total Seats'] || row.totalSeats || row.total_seats || row.TotalSeats) || 0,
+      availableSeats: parseInt(row['Available Seats'] || row.availableSeats || row.available_seats || row.AvailableSeats) || 0,
     }));
   }
 
@@ -309,21 +379,40 @@ export class FileService {
 
   private validateVacancies(vacancies: InsertVacancy[]): { errors: string[]; processed: number } {
     const errors: string[] = [];
-    const seenDistricts = new Set<string>();
+    const seenCombinations = new Set<string>();
 
     vacancies.forEach((vacancy, index) => {
       const row = index + 1;
+      const combination = `${vacancy.district}-${vacancy.stream}-${vacancy.gender}-${vacancy.category}`;
 
       if (!vacancy.district || !DISTRICTS.includes(vacancy.district as any)) {
         errors.push(`Row ${row}: Invalid district. Must be one of: ${DISTRICTS.join(', ')}`);
-      } else if (seenDistricts.has(vacancy.district)) {
-        errors.push(`Row ${row}: Duplicate district ${vacancy.district}`);
-      } else {
-        seenDistricts.add(vacancy.district);
       }
 
-      if (vacancy.medicalVacancies! < 0 || vacancy.commerceVacancies! < 0 || vacancy.nonMedicalVacancies! < 0) {
-        errors.push(`Row ${row}: Vacancy counts cannot be negative`);
+      if (!vacancy.stream || !STREAMS.includes(vacancy.stream as any)) {
+        errors.push(`Row ${row}: Invalid stream. Must be one of: ${STREAMS.join(', ')}`);
+      }
+
+      if (!vacancy.gender || !['Male', 'Female', 'Other'].includes(vacancy.gender)) {
+        errors.push(`Row ${row}: Invalid gender. Must be one of: Male, Female, Other`);
+      }
+
+      if (!vacancy.category || !['Open', 'WHH', 'Disabled', 'Private'].includes(vacancy.category)) {
+        errors.push(`Row ${row}: Invalid category. Must be one of: Open, WHH, Disabled, Private`);
+      }
+
+      if (seenCombinations.has(combination)) {
+        errors.push(`Row ${row}: Duplicate combination of District-Stream-Gender-Category: ${combination}`);
+      } else {
+        seenCombinations.add(combination);
+      }
+
+      if (vacancy.totalSeats! < 0 || vacancy.availableSeats! < 0) {
+        errors.push(`Row ${row}: Seat counts cannot be negative`);
+      }
+
+      if (vacancy.availableSeats! > vacancy.totalSeats!) {
+        errors.push(`Row ${row}: Available seats cannot exceed total seats`);
       }
     });
 

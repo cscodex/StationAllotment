@@ -127,7 +127,7 @@ export default function FileUploadSection() {
     },
   });
 
-  const downloadTemplateMutation = useMutation({
+  const downloadEntranceResultsTemplateMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch('/api/files/template/entrance-results', {
         credentials: 'include',
@@ -147,7 +147,71 @@ export default function FileUploadSection() {
     onSuccess: () => {
       toast({
         title: "Template downloaded",
-        description: "CSV template has been downloaded successfully",
+        description: "Entrance results template has been downloaded successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const downloadStudentChoicesTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/files/template/student-choices', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to download template');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'student_choices_template.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template downloaded",
+        description: "Student choices template has been downloaded successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const downloadVacanciesTemplateMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/files/template/vacancies', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to download template');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'vacancies_template.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Template downloaded",
+        description: "Vacancies template has been downloaded successfully",
       });
     },
     onError: (error) => {
@@ -215,12 +279,12 @@ export default function FileUploadSection() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => downloadTemplateMutation.mutate()}
-              disabled={downloadTemplateMutation.isPending}
-              data-testid="button-download-template"
+              onClick={() => downloadEntranceResultsTemplateMutation.mutate()}
+              disabled={downloadEntranceResultsTemplateMutation.isPending}
+              data-testid="button-download-entrance-template"
             >
               <Download className="w-4 h-4 mr-2" />
-              {downloadTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+              {downloadEntranceResultsTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
             </Button>
           </div>
           <div 
@@ -256,7 +320,19 @@ export default function FileUploadSection() {
 
         {/* Student Choices Upload */}
         <div>
-          <label className="block text-sm font-medium mb-3">Student Choices File</label>
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-sm font-medium">Student Choices File</label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadStudentChoicesTemplateMutation.mutate()}
+              disabled={downloadStudentChoicesTemplateMutation.isPending}
+              data-testid="button-download-student-template"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloadStudentChoicesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+            </Button>
+          </div>
           <div 
             className={cn(
               "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
@@ -290,7 +366,19 @@ export default function FileUploadSection() {
 
         {/* Vacancy Upload */}
         <div>
-          <label className="block text-sm font-medium mb-3">Vacancy Data File</label>
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-sm font-medium">Vacancy Data File</label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => downloadVacanciesTemplateMutation.mutate()}
+              disabled={downloadVacanciesTemplateMutation.isPending}
+              data-testid="button-download-vacancy-template"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloadVacanciesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+            </Button>
+          </div>
           <div 
             className={cn(
               "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
