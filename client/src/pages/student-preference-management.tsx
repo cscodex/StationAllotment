@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Search, Save, CheckCircle } from 'lucide-react';
+import { AlertCircle, Search, Save, CheckCircle, Lock, Unlock, Edit3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { DISTRICTS } from '@shared/schema';
@@ -42,6 +42,9 @@ function StudentPreferenceManagement() {
   const [selectedStudent, setSelectedStudent] = useState<StudentsEntranceResult | null>(null);
   const [preferences, setPreferences] = useState<StudentPreferences>({});
   const [studentId, setStudentId] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
+  const [editableStream, setEditableStream] = useState('');
+  const [isEditingStream, setIsEditingStream] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -61,14 +64,7 @@ function StudentPreferenceManagement() {
   // Create or update student record mutation
   const createStudentMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await fetch('/api/students', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error('Failed to create student');
+      const response = await apiRequest('POST', '/api/students', data);
       return response.json();
     },
     onSuccess: () => {
@@ -83,14 +79,7 @@ function StudentPreferenceManagement() {
       studentId: string;
       preferences: StudentPreferences;
     }) => {
-      const response = await fetch(`/api/students-entrance-results/${entranceResultId}/preferences`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ studentId, preferences }),
-      });
-      if (!response.ok) throw new Error('Failed to update preferences');
+      const response = await apiRequest('PUT', `/api/students-entrance-results/${entranceResultId}/preferences`, { studentId, preferences });
       return response.json();
     },
     onSuccess: () => {
@@ -119,10 +108,7 @@ function StudentPreferenceManagement() {
     
     // Check if student already exists in students table
     try {
-      const response = await fetch('/api/students?limit=10000', {
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error('Failed to fetch students');
+      const response = await apiRequest('GET', '/api/students?limit=10000');
       const existingStudents = await response.json();
       const existingStudent = (existingStudents as any).students?.find(
         (s: any) => s.appNo === student.applicationNo || s.meritNumber === student.meritNo
@@ -143,6 +129,9 @@ function StudentPreferenceManagement() {
           choice9: existingStudent.choice9,
           choice10: existingStudent.choice10,
         });
+        // Load lock status and stream
+        setIsLocked(existingStudent.isLocked || false);
+        setEditableStream(existingStudent.stream || student.stream);
       } else {
         // Create new student record
         const newStudentData = {
@@ -155,6 +144,8 @@ function StudentPreferenceManagement() {
         const newStudent = await createStudentMutation.mutateAsync(newStudentData);
         setStudentId(newStudent.id);
         setPreferences({});
+        setIsLocked(false);
+        setEditableStream(student.stream);
       }
     } catch (error) {
       console.error('Error handling student selection:', error);
@@ -183,11 +174,55 @@ function StudentPreferenceManagement() {
       return;
     }
 
+    if (isLocked) {
+      toast({
+        title: "Error",
+        description: "Preferences are locked and cannot be modified",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Include stream in preferences if it was edited
+    const finalPreferences = {
+      ...preferences,
+      ...(isEditingStream && editableStream !== selectedStudent.stream ? { stream: editableStream } : {}),
+    };
+
     updatePreferencesMutation.mutate({
       entranceResultId: selectedStudent.id,
       studentId,
-      preferences,
+      preferences: finalPreferences,
     });
+  };
+
+  const handleToggleLock = async () => {
+    if (!selectedStudent || !studentId) {
+      toast({
+        title: "Error",
+        description: "Please select a student first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const newLockStatus = !isLocked;
+      const response = await apiRequest('PUT', `/api/students/${studentId}/lock`, { isLocked: newLockStatus });
+      await response.json();
+      
+      setIsLocked(newLockStatus);
+      toast({
+        title: "Success",
+        description: `Preferences ${newLockStatus ? 'locked' : 'unlocked'} successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update lock status",
+        variant: "destructive",
+      });
+    }
   };
 
   // Get unique districts from vacancies
@@ -290,7 +325,24 @@ function StudentPreferenceManagement() {
           <CardContent className="space-y-6">
             {/* Selected Student Info */}
             <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100">Selected Student:</h3>
+              <div className="flex justify-between items-start">
+                <h3 className="font-semibold text-blue-900 dark:text-blue-100">Selected Student:</h3>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={isLocked ? "destructive" : "outline"}
+                    size="sm"
+                    onClick={handleToggleLock}
+                    disabled={updatePreferencesMutation.isPending}
+                    data-testid="button-toggle-lock"
+                  >
+                    {isLocked ? <Lock className="h-4 w-4 mr-2" /> : <Unlock className="h-4 w-4 mr-2" />}
+                    {isLocked ? 'Locked' : 'Unlocked'}
+                  </Button>
+                  {isLocked && (
+                    <Badge variant="destructive">Preferences Locked</Badge>
+                  )}
+                </div>
+              </div>
               <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Name:</span>
@@ -306,7 +358,35 @@ function StudentPreferenceManagement() {
                 </div>
                 <div>
                   <span className="text-gray-600 dark:text-gray-400">Stream:</span>
-                  <p className="font-medium">{selectedStudent.stream}</p>
+                  <div className="flex items-center gap-2">
+                    {isEditingStream && !isLocked ? (
+                      <Select
+                        value={editableStream}
+                        onValueChange={setEditableStream}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Medical">Medical</SelectItem>
+                          <SelectItem value="Commerce">Commerce</SelectItem>
+                          <SelectItem value="NonMedical">NonMedical</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-medium">{editableStream}</p>
+                    )}
+                    {!isLocked && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEditingStream(!isEditingStream)}
+                        data-testid="button-edit-stream"
+                      >
+                        <Edit3 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -319,9 +399,10 @@ function StudentPreferenceManagement() {
                   <Select
                     value={preferences[`choice${choiceNum}` as keyof StudentPreferences] || ''}
                     onValueChange={(value) => handlePreferenceChange(choiceNum, value)}
+                    disabled={isLocked}
                   >
-                    <SelectTrigger data-testid={`select-choice-${choiceNum}`}>
-                      <SelectValue placeholder="Select district" />
+                    <SelectTrigger data-testid={`select-choice-${choiceNum}`} className={isLocked ? 'opacity-50' : ''}>
+                      <SelectValue placeholder={isLocked ? "Locked" : "Select district"} />
                     </SelectTrigger>
                     <SelectContent>
                       {availableDistricts.map((district: string) => (
@@ -351,11 +432,11 @@ function StudentPreferenceManagement() {
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={updatePreferencesMutation.isPending}
+                disabled={updatePreferencesMutation.isPending || isLocked}
                 data-testid="button-save-preferences"
               >
                 <Save className="h-4 w-4 mr-2" />
-                {updatePreferencesMutation.isPending ? 'Saving...' : 'Save Preferences'}
+                {updatePreferencesMutation.isPending ? 'Saving...' : isLocked ? 'Locked' : 'Save Preferences'}
               </Button>
             </div>
           </CardContent>

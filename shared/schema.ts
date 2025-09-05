@@ -51,7 +51,7 @@ export const studentsEntranceResult = pgTable("students_entrance_result", {
   marks: integer("marks").notNull(),
   gender: varchar("gender").notNull(), // 'Male' | 'Female' | 'Other'
   category: varchar("category").notNull(), // 'Open' | 'WHH' | 'Disabled' | 'Private'
-  stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
+  stream: varchar("stream"), // 'Medical' | 'Commerce' | 'NonMedical' - optional field
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -80,6 +80,7 @@ export const students = pgTable("students", {
   allottedDistrict: varchar("allotted_district"),
   allottedStream: varchar("allotted_stream"),
   allocationStatus: varchar("allocation_status").default('pending'), // 'pending' | 'allotted' | 'not_allotted'
+  isLocked: boolean("is_locked").default(false), // Whether preferences are locked for editing
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

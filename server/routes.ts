@@ -547,6 +547,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Student lock/unlock route
+  app.put('/api/students/:id/lock', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { isLocked } = req.body;
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      const updatedStudent = await storage.updateStudent(id, { isLocked });
+      
+      await auditService.log(req.user.id, 'student_lock_status_change', 'students', id, {
+        isLocked,
+        studentName: student.name,
+        appNo: student.appNo,
+        userDistrict: req.user.district,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Update student lock status error:", error);
+      res.status(500).json({ message: "Failed to update lock status" });
+    }
+  });
+
   // Students entrance results routes
   app.get('/api/students-entrance-results', isDistrictAdmin, async (req, res) => {
     try {
@@ -593,6 +620,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create entrance result error:", error);
       res.status(500).json({ message: "Failed to create entrance result" });
+    }
+  });
+
+  // Update entrance result route
+  app.put('/api/students-entrance-results/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { stream } = req.body;
+      
+      const existingResult = await storage.getStudentsEntranceResult(id);
+      if (!existingResult) {
+        return res.status(404).json({ message: "Entrance result not found" });
+      }
+
+      const updatedResult = await storage.updateStudentsEntranceResult(id, { stream });
+      
+      await auditService.log(req.user.id, 'entrance_result_update', 'entrance_results', id, {
+        field: 'stream',
+        oldValue: existingResult.stream,
+        newValue: stream,
+        studentName: existingResult.studentName,
+        meritNo: existingResult.meritNo,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedResult);
+    } catch (error) {
+      console.error("Update entrance result error:", error);
+      res.status(500).json({ message: "Failed to update entrance result" });
     }
   });
 
@@ -685,9 +740,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/allocation/stats', isAuthenticated, async (req, res) => {
     try {
-      const students = await storage.getStudents(10000, 0); // Get all students
+      // Get total students from entrance results (all students)
+      const totalEntranceResults = await storage.getStudentsEntranceResultsCount();
+      
+      // Get students with allocation data (only those with preferences set)
+      const students = await storage.getStudents(10000, 0);
       const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
       const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
+      const pendingStudents = students.filter(s => s.allocationStatus === 'pending');
+      
+      // Calculate students without preferences (in entrance results but not in students table)
+      const studentsWithoutPreferences = totalEntranceResults - students.length;
       
       // Group allotted students by district
       const allocationsByDistrict: Record<string, number> = {};
@@ -698,9 +761,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.json({
-        totalStudents: students.length,
+        totalStudents: totalEntranceResults, // Total from entrance results
         allottedStudents: allottedStudents.length,
         notAllottedStudents: notAllottedStudents.length,
+        pendingStudents: pendingStudents.length,
+        studentsWithoutPreferences: studentsWithoutPreferences,
+        studentsWithPreferences: students.length,
         allocationsByDistrict,
       });
     } catch (error) {

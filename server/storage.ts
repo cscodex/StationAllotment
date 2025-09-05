@@ -232,6 +232,15 @@ export class DatabaseStorage implements IStorage {
       .returning();
   }
 
+  async updateStudentsEntranceResult(id: string, updateData: Partial<InsertStudentsEntranceResult>): Promise<StudentsEntranceResult> {
+    const [updated] = await db
+      .update(studentsEntranceResult)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(studentsEntranceResult.id, id))
+      .returning();
+    return updated;
+  }
+
   async updateStudentPreferences(studentId: string, preferences: {
     choice1?: string; choice2?: string; choice3?: string; choice4?: string; choice5?: string;
     choice6?: string; choice7?: string; choice8?: string; choice9?: string; choice10?: string;
@@ -384,27 +393,36 @@ export class DatabaseStorage implements IStorage {
     pendingAllocations: number;
     completionRate: number;
   }> {
-    const [studentsCount] = await db.select({ count: sql<number>`count(*)` }).from(students);
+    // Get total students from entrance results (all students who took the entrance exam)
+    const [entranceResultsCount] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
+    
+    // Get allocation status counts from students table (only those with preferences set)
+    const [studentsWithPreferencesCount] = await db.select({ count: sql<number>`count(*)` }).from(students);
     const [pendingCount] = await db.select({ count: sql<number>`count(*)` })
       .from(students)
       .where(eq(students.allocationStatus, 'pending'));
     const [allottedCount] = await db.select({ count: sql<number>`count(*)` })
       .from(students)
       .where(eq(students.allocationStatus, 'allotted'));
+    const [notAllottedCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(students)
+      .where(eq(students.allocationStatus, 'not_allotted'));
 
     const vacancyResults = await db.select({
       total: sql<number>`sum(total_seats)`
     }).from(vacancies);
 
     const totalVacancies = vacancyResults[0]?.total || 0;
-    const totalStudents = studentsCount.count;
-    const pendingAllocations = pendingCount.count;
+    const totalStudents = entranceResultsCount.count; // Use entrance results count
+    // Pending allocations = students without preferences + students with pending status
+    const studentsWithoutPreferences = totalStudents - studentsWithPreferencesCount.count;
+    const pendingAllocations = studentsWithoutPreferences + pendingCount.count;
     const completionRate = totalStudents > 0 ? (allottedCount.count / totalStudents) * 100 : 0;
 
     return {
-      totalStudents,
+      totalStudents, // Total from entrance results
       totalVacancies,
-      pendingAllocations,
+      pendingAllocations, // Students without preferences + pending students
       completionRate: Math.round(completionRate * 10) / 10,
     };
   }

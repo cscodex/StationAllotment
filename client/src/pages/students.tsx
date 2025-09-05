@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, Users, Eye, FileText, UserCheck } from "lucide-react";
+import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { Student, StudentsEntranceResult } from "@shared/schema";
 
 export default function Students() {
@@ -20,7 +23,11 @@ export default function Students() {
   const [limit, setLimit] = useState(50);
   const [selectedStudent, setSelectedStudent] = useState<StudentsEntranceResult | Student | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [editingEntranceResult, setEditingEntranceResult] = useState<string | null>(null);
+  const [editingStream, setEditingStream] = useState<string>("");
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const isDistrictAdmin = user?.role === 'district_admin';
   const isCentralAdmin = user?.role === 'central_admin';
@@ -53,6 +60,46 @@ export default function Students() {
   const handleViewStudent = (student: StudentsEntranceResult | Student) => {
     setSelectedStudent(student);
     setIsViewDialogOpen(true);
+  };
+
+  // Update entrance result mutation
+  const updateEntranceResultMutation = useMutation({
+    mutationFn: async ({ id, stream }: { id: string, stream: string }) => {
+      const response = await apiRequest('PUT', `/api/students-entrance-results/${id}`, { stream });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students-entrance-results"] });
+      toast({
+        title: "Success",
+        description: "Stream updated successfully",
+      });
+      setEditingEntranceResult(null);
+      setEditingStream("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update stream",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditStream = (entranceResult: StudentsEntranceResult) => {
+    setEditingEntranceResult(entranceResult.id);
+    setEditingStream(entranceResult.stream || "");
+  };
+
+  const handleSaveStream = () => {
+    if (editingEntranceResult) {
+      updateEntranceResultMutation.mutate({ id: editingEntranceResult, stream: editingStream });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingEntranceResult(null);
+    setEditingStream("");
   };
 
   const getStatusBadge = (status: string) => {
@@ -121,19 +168,74 @@ export default function Students() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={entranceResult.stream === 'Medical' ? 'default' : entranceResult.stream === 'Commerce' ? 'secondary' : 'outline'}>
-                      {entranceResult.stream}
-                    </Badge>
+                    {editingEntranceResult === entranceResult.id ? (
+                      <Select value={editingStream} onValueChange={setEditingStream}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue placeholder="Select stream" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="Medical">Medical</SelectItem>
+                          <SelectItem value="Commerce">Commerce</SelectItem>
+                          <SelectItem value="NonMedical">NonMedical</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {entranceResult.stream ? (
+                          <Badge variant={entranceResult.stream === 'Medical' ? 'default' : entranceResult.stream === 'Commerce' ? 'secondary' : 'outline'}>
+                            {entranceResult.stream}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">Not Set</Badge>
+                        )}
+                        {isCentralAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditStream(entranceResult)}
+                            data-testid={`button-edit-stream-${entranceResult.meritNo}`}
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleViewStudent(entranceResult)}
-                      data-testid={`button-view-${entranceResult.meritNo}`}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {editingEntranceResult === entranceResult.id ? (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleSaveStream}
+                            disabled={updateEntranceResultMutation.isPending}
+                            data-testid={`button-save-stream-${entranceResult.meritNo}`}
+                          >
+                            <Save className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCancelEdit}
+                            disabled={updateEntranceResultMutation.isPending}
+                            data-testid={`button-cancel-edit-${entranceResult.meritNo}`}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleViewStudent(entranceResult)}
+                          data-testid={`button-view-${entranceResult.meritNo}`}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
