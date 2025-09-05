@@ -47,6 +47,7 @@ export interface IStorage {
   // Students entrance result operations
   getStudentsEntranceResults(limit?: number, offset?: number): Promise<StudentsEntranceResult[]>;
   getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined>;
+  getStudentsEntranceResultByMeritNumber(meritNumber: number): Promise<StudentsEntranceResult | undefined>;
   getStudentsEntranceResultsCount(): Promise<number>;
   searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]>;
   createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult>;
@@ -195,6 +196,11 @@ export class DatabaseStorage implements IStorage {
 
   async getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined> {
     const [result] = await db.select().from(studentsEntranceResult).where(eq(studentsEntranceResult.id, id));
+    return result;
+  }
+
+  async getStudentsEntranceResultByMeritNumber(meritNumber: number): Promise<StudentsEntranceResult | undefined> {
+    const [result] = await db.select().from(studentsEntranceResult).where(eq(studentsEntranceResult.meritNo, meritNumber));
     return result;
   }
 

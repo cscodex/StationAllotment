@@ -88,11 +88,8 @@ function StudentPreferenceManagement() {
         description: "Student preferences updated successfully",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
-      // Reset form
-      setSelectedStudent(null);
-      setPreferences({});
-      setStudentId('');
-      setSearchQuery('');
+      // Don't reset form - keep student selected for further edits
+      // The form will remain in the same state for continued editing
     },
     onError: (error: any) => {
       toast({

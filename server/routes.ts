@@ -522,6 +522,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/students', isDistrictAdmin, async (req: any, res) => {
+    try {
+      // Extract the required fields from the request body
+      const { appNo, meritNumber, name, stream, gender, category } = req.body;
+      
+      // Validate required fields
+      if (!appNo || !meritNumber || !name || !stream) {
+        return res.status(400).json({ 
+          message: "Missing required fields: appNo, meritNumber, name, stream" 
+        });
+      }
+
+      // For new students created from student-preference-management, we need to get gender and category
+      // from the entrance results if not provided
+      let studentData = { appNo, meritNumber, name, stream, gender, category };
+      
+      if (!gender || !category) {
+        // Try to find the student in entrance results to get gender and category
+        const entranceResult = await storage.getStudentsEntranceResultByMeritNumber(meritNumber);
+        if (entranceResult) {
+          studentData.gender = entranceResult.gender;
+          studentData.category = entranceResult.category;
+        } else {
+          return res.status(400).json({ 
+            message: "Gender and category are required when not found in entrance results" 
+          });
+        }
+      }
+
+      const student = await storage.createStudent(studentData);
+      
+      await auditService.log(req.user.id, 'student_create', 'students', student.id, {
+        studentData,
+        userDistrict: req.user.district,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(student);
+    } catch (error) {
+      console.error("Create student error:", error);
+      res.status(500).json({ message: "Failed to create student" });
+    }
+  });
+
   app.put('/api/students/:id/preferences', isDistrictAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
