@@ -25,10 +25,10 @@ import {
   CheckCircle
 } from "lucide-react";
 import type { Student } from "@shared/schema";
-import { DISTRICTS as PUNJAB_DISTRICTS } from "@shared/schema";
+import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 
-// Use DISTRICTS from shared schema
-const DISTRICTS = PUNJAB_DISTRICTS;
+// Use school districts for choice selection (where schools are located)
+const DISTRICTS = SCHOOL_DISTRICTS;
 
 const STREAMS = ['Medical', 'Commerce', 'NonMedical'];
 
@@ -49,6 +49,8 @@ const updatePreferencesSchema = z.object({
 export default function DistrictAdmin() {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
+  const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
+  const [showBatchActions, setShowBatchActions] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -144,11 +146,86 @@ export default function DistrictAdmin() {
     },
   });
 
+  const batchLockMutation = useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      const promises = studentIds.map(id => apiRequest("PUT", `/api/students/${id}/lock`, { isLocked: true }));
+      await Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      setSelectedStudents(new Set());
+      toast({
+        title: "Students Locked",
+        description: `${selectedStudents.size} students have been locked successfully`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Batch Lock Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const batchUnlockMutation = useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      const promises = studentIds.map(id => apiRequest("PUT", `/api/students/${id}/lock`, { isLocked: false }));
+      await Promise.all(promises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      setSelectedStudents(new Set());
+      toast({
+        title: "Students Unlocked",
+        description: `${selectedStudents.size} students have been unlocked successfully`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Batch Unlock Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
     student.appNo?.includes(searchTerm)
   ) || [];
+
+  // Selection helpers
+  const toggleStudentSelection = (studentId: string) => {
+    const newSelection = new Set(selectedStudents);
+    if (newSelection.has(studentId)) {
+      newSelection.delete(studentId);
+    } else {
+      newSelection.add(studentId);
+    }
+    setSelectedStudents(newSelection);
+  };
+
+  const selectAll = () => {
+    const allIds = new Set(filteredStudents.map((s: Student) => s.id));
+    setSelectedStudents(allIds);
+  };
+
+  const clearSelection = () => {
+    setSelectedStudents(new Set());
+  };
+
+  // Batch operations
+  const handleBatchLock = () => {
+    if (selectedStudents.size === 0) return;
+    batchLockMutation.mutate([...selectedStudents]);
+  };
+
+  const handleBatchUnlock = () => {
+    if (selectedStudents.size === 0) return;
+    batchUnlockMutation.mutate([...selectedStudents]);
+  };
 
   const startEditing = (student: Student) => {
     if (isDeadlinePassed) {
@@ -284,11 +361,18 @@ export default function DistrictAdmin() {
           {/* Student Search and Management */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Search className="w-5 h-5 mr-2 text-primary" />
-                Student Preference Management
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Search className="w-5 h-5 mr-2 text-primary" />
+                  Student Preference Management
+                </div>
+                {selectedStudents.size > 0 && (
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                    {selectedStudents.size} selected
+                  </Badge>
+                )}
               </CardTitle>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-between gap-4">
                 <div className="relative flex-1 max-w-md">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -298,6 +382,47 @@ export default function DistrictAdmin() {
                     className="pl-10"
                     data-testid="input-search-students"
                   />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={selectAll}
+                    disabled={filteredStudents.length === 0}
+                    data-testid="button-select-all"
+                  >
+                    Select All
+                  </Button>
+                  {selectedStudents.size > 0 && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={clearSelection}
+                        data-testid="button-clear-selection"
+                      >
+                        Clear
+                      </Button>
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        onClick={handleBatchLock}
+                        disabled={batchLockMutation.isPending || isDeadlinePassed}
+                        data-testid="button-batch-lock"
+                      >
+                        🔒 Lock Selected
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleBatchUnlock}
+                        disabled={batchUnlockMutation.isPending || isDeadlinePassed}
+                        data-testid="button-batch-unlock"
+                      >
+                        🔓 Unlock Selected
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -312,6 +437,15 @@ export default function DistrictAdmin() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-12">
+                            <input
+                              type="checkbox"
+                              checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
+                              onChange={selectedStudents.size === filteredStudents.length ? clearSelection : selectAll}
+                              className="rounded border-gray-300"
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
                           <TableHead>App No.</TableHead>
                           <TableHead>Merit No.</TableHead>
                           <TableHead>Name</TableHead>
@@ -324,6 +458,15 @@ export default function DistrictAdmin() {
                       <TableBody>
                         {filteredStudents.map((student: Student) => (
                           <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                checked={selectedStudents.has(student.id)}
+                                onChange={() => toggleStudentSelection(student.id)}
+                                className="rounded border-gray-300"
+                                data-testid={`checkbox-select-${student.meritNumber}`}
+                              />
+                            </TableCell>
                             <TableCell className="font-medium">{student.appNo}</TableCell>
                             <TableCell className="font-medium">{student.meritNumber}</TableCell>
                             <TableCell>{student.name}</TableCell>
@@ -441,6 +584,13 @@ export default function DistrictAdmin() {
                           </FormItem>
                         )}
                       />
+                    </div>
+
+                    <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <p className="text-sm text-amber-800 dark:text-amber-300">
+                        <strong>District Choices:</strong> Students can select up to 10 districts in order of preference. 
+                        Only the 10 school districts where seats are available are shown. Students will be allocated to their highest available choice during the allocation process.
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
