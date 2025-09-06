@@ -827,6 +827,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create student from entrance result with preferences
+  app.post('/api/students/from-entrance-result', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { entranceStudentId, preferences, stream, counselingDistrict, districtAdmin } = req.body;
+      
+      // Validate deadline hasn't passed
+      const deadline = await storage.getSetting('allocation_deadline');
+      if (deadline && new Date() > new Date(deadline.value)) {
+        return res.status(403).json({ message: "Deadline has passed. Cannot create new students." });
+      }
+
+      // Find the entrance result record
+      const entranceResult = await storage.getStudentsEntranceResult(entranceStudentId);
+      if (!entranceResult) {
+        return res.status(404).json({ message: "Entrance result not found" });
+      }
+
+      // Check if student already exists
+      const existingStudent = await storage.getStudentByMeritNumber(entranceResult.meritNo);
+      if (existingStudent) {
+        return res.status(400).json({ 
+          message: "Student already exists in the system",
+          studentId: existingStudent.id
+        });
+      }
+
+      // Create student from entrance result
+      const newStudent = await storage.createStudent({
+        appNo: entranceResult.applicationNo,
+        meritNumber: entranceResult.meritNo,
+        name: entranceResult.studentName,
+        stream: stream || entranceResult.stream,
+        gender: entranceResult.gender,
+        category: entranceResult.category,
+        counselingDistrict: req.user.district,
+        districtAdmin: `${req.user.firstName} ${req.user.lastName}`.trim(),
+        ...preferences
+      });
+
+      await auditService.log(req.user.id, 'student_create_from_entrance', 'students', newStudent.id, {
+        entranceStudentId,
+        preferences,
+        userDistrict: req.user.district,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(newStudent);
+    } catch (error) {
+      console.error("Create student from entrance result error:", error);
+      res.status(500).json({ message: "Failed to create student from entrance result" });
+    }
+  });
+
   // Vacancies routes
   app.get('/api/vacancies', isAuthenticated, async (req, res) => {
     try {
