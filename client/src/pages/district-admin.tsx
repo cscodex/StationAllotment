@@ -63,6 +63,11 @@ export default function DistrictAdmin() {
     queryKey: ["/api/settings"],
   });
 
+  const { data: districtStatus } = useQuery({
+    queryKey: ["/api/district-status", user?.district],
+    enabled: !!user?.district,
+  });
+
   const deadline = (settings as any)?.find((s: any) => s.key === 'allocation_deadline')?.value;
   const deadlineDate = deadline ? new Date(deadline) : null;
   const isDeadlinePassed = deadlineDate ? new Date() > deadlineDate : false;
@@ -190,6 +195,27 @@ export default function DistrictAdmin() {
     },
   });
 
+  const finalizeDistrictMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/district-status/${user?.district}/finalize`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "District Finalized",
+        description: "District data has been finalized and submitted for allocation",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Finalization Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
@@ -208,7 +234,7 @@ export default function DistrictAdmin() {
   };
 
   const selectAll = () => {
-    const allIds = new Set(filteredStudents.map((s: Student) => s.id));
+    const allIds = new Set<string>(filteredStudents.map((s: Student) => s.id));
     setSelectedStudents(allIds);
   };
 
@@ -219,12 +245,28 @@ export default function DistrictAdmin() {
   // Batch operations
   const handleBatchLock = () => {
     if (selectedStudents.size === 0) return;
-    batchLockMutation.mutate([...selectedStudents]);
+    batchLockMutation.mutate(Array.from(selectedStudents));
   };
 
   const handleBatchUnlock = () => {
     if (selectedStudents.size === 0) return;
-    batchUnlockMutation.mutate([...selectedStudents]);
+    batchUnlockMutation.mutate(Array.from(selectedStudents));
+  };
+
+  // Calculate finalization readiness
+  const totalStudents = filteredStudents.length;
+  const lockedStudents = filteredStudents.filter((s: Student) => s.isLocked).length;
+  const studentsWithChoices = filteredStudents.filter((s: Student) => 
+    s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 || 
+    s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10
+  ).length;
+
+  const canFinalize = lockedStudents === totalStudents && totalStudents > 0 && !isDeadlinePassed;
+  const isFinalized = (districtStatus as any)?.isFinalized;
+
+  const handleFinalize = () => {
+    if (!canFinalize) return;
+    finalizeDistrictMutation.mutate();
   };
 
   const startEditing = (student: Student) => {
@@ -330,12 +372,20 @@ export default function DistrictAdmin() {
                   <div>
                     <h3 className="font-semibold">District: {user?.district || 'All Districts'}</h3>
                     <p className="text-sm text-muted-foreground">
-                      You can modify student preferences until the deadline
+                      {isFinalized ? 
+                        "District data has been finalized and submitted for allocation" :
+                        "You can modify student preferences until the deadline"
+                      }
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {isDeadlinePassed ? (
+                  {isFinalized ? (
+                    <>
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                      <Badge variant="secondary" className="bg-green-100 text-green-800">✓ Finalized</Badge>
+                    </>
+                  ) : isDeadlinePassed ? (
                     <>
                       <AlertTriangle className="w-5 h-5 text-red-500" />
                       <Badge variant="destructive">Deadline Passed</Badge>
@@ -357,6 +407,64 @@ export default function DistrictAdmin() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Finalization Status Card */}
+          {!isFinalized && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2 text-primary" />
+                    District Finalization Status
+                  </div>
+                  <Button
+                    variant={canFinalize ? "default" : "outline"}
+                    size="sm"
+                    onClick={handleFinalize}
+                    disabled={!canFinalize || finalizeDistrictMutation.isPending}
+                    data-testid="button-finalize-district"
+                  >
+                    {finalizeDistrictMutation.isPending ? "Finalizing..." : "Finalize District"}
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-3 border rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{totalStudents}</div>
+                    <div className="text-sm text-muted-foreground">Total Students</div>
+                  </div>
+                  <div className="p-3 border rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{lockedStudents}</div>
+                    <div className="text-sm text-muted-foreground">Locked Students</div>
+                  </div>
+                  <div className="p-3 border rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">{studentsWithChoices}</div>
+                    <div className="text-sm text-muted-foreground">Students with Choices</div>
+                  </div>
+                </div>
+                
+                {!canFinalize && totalStudents > 0 && (
+                  <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                      <strong>To finalize:</strong> All students must be locked before you can finalize the district data.
+                      {lockedStudents < totalStudents && (
+                        <span> You need to lock {totalStudents - lockedStudents} more students.</span>
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {canFinalize && (
+                  <div className="mt-4 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                    <p className="text-sm text-green-800 dark:text-green-300">
+                      <strong>Ready to finalize!</strong> All students are locked and your district is ready for allocation processing.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Student Search and Management */}
           <Card>
