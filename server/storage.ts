@@ -6,6 +6,7 @@ import {
   settings,
   auditLogs,
   fileUploads,
+  districtStatus,
   type User,
   type InsertUser,
   type Student,
@@ -20,6 +21,8 @@ import {
   type InsertAuditLog,
   type FileUpload,
   type InsertFileUpload,
+  type DistrictStatus,
+  type InsertDistrictStatus,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, asc, sql, or, ilike } from "drizzle-orm";
@@ -81,6 +84,18 @@ export interface IStorage {
   getFileUploads(limit?: number): Promise<FileUpload[]>;
   updateFileUpload(id: string, fileUpload: Partial<InsertFileUpload>): Promise<FileUpload>;
   getFileUploadsByType(type: string): Promise<FileUpload[]>;
+
+  // District status operations
+  getDistrictStatus(district: string): Promise<DistrictStatus | undefined>;
+  getAllDistrictStatuses(): Promise<DistrictStatus[]>;
+  createOrUpdateDistrictStatus(status: InsertDistrictStatus): Promise<DistrictStatus>;
+  finalizeDistrict(district: string, userId: string): Promise<DistrictStatus>;
+
+  // Student locking operations
+  lockStudent(studentId: string): Promise<Student>;
+  unlockStudent(studentId: string): Promise<Student>;
+  getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{students: Student[], total: number}>;
+  releaseStudentFromDistrict(studentId: string): Promise<Student>;
 
   // Statistics
   getDashboardStats(): Promise<{
@@ -431,6 +446,99 @@ export class DatabaseStorage implements IStorage {
       pendingAllocations, // Students without preferences + pending students
       completionRate: Math.round(completionRate * 10) / 10,
     };
+  }
+
+  // District status operations
+  async getDistrictStatus(district: string): Promise<DistrictStatus | undefined> {
+    const [status] = await db.select().from(districtStatus).where(eq(districtStatus.district, district));
+    return status;
+  }
+
+  async getAllDistrictStatuses(): Promise<DistrictStatus[]> {
+    return db.select().from(districtStatus).orderBy(asc(districtStatus.district));
+  }
+
+  async createOrUpdateDistrictStatus(status: InsertDistrictStatus): Promise<DistrictStatus> {
+    const existing = await this.getDistrictStatus(status.district);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(districtStatus)
+        .set({ ...status, updatedAt: new Date() })
+        .where(eq(districtStatus.district, status.district))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(districtStatus)
+        .values({ ...status, updatedAt: new Date() })
+        .returning();
+      return created;
+    }
+  }
+
+  async finalizeDistrict(district: string, userId: string): Promise<DistrictStatus> {
+    const [updated] = await db
+      .update(districtStatus)
+      .set({
+        isFinalized: true,
+        finalizedBy: userId,
+        finalizedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(districtStatus.district, district))
+      .returning();
+    return updated;
+  }
+
+  // Student locking operations
+  async lockStudent(studentId: string): Promise<Student> {
+    const [updated] = await db
+      .update(students)
+      .set({ isLocked: true, updatedAt: new Date() })
+      .where(eq(students.id, studentId))
+      .returning();
+    return updated;
+  }
+
+  async unlockStudent(studentId: string): Promise<Student> {
+    const [updated] = await db
+      .update(students)
+      .set({ isLocked: false, updatedAt: new Date() })
+      .where(eq(students.id, studentId))
+      .returning();
+    return updated;
+  }
+
+  async getStudentsByDistrict(district: string, limit = 50, offset = 0): Promise<{students: Student[], total: number}> {
+    const studentsResult = await db.select().from(students)
+      .where(eq(students.counselingDistrict, district))
+      .orderBy(asc(students.meritNumber))
+      .limit(limit)
+      .offset(offset);
+    
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(students)
+      .where(eq(students.counselingDistrict, district));
+    
+    return {
+      students: studentsResult,
+      total: countResult.count
+    };
+  }
+
+  async releaseStudentFromDistrict(studentId: string): Promise<Student> {
+    const [updated] = await db
+      .update(students)
+      .set({
+        counselingDistrict: null,
+        districtAdmin: null,
+        isLocked: false,
+        updatedAt: new Date()
+      })
+      .where(eq(students.id, studentId))
+      .returning();
+    return updated;
   }
 }
 

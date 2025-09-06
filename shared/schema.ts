@@ -100,6 +100,20 @@ export const vacancies = pgTable("vacancies", {
   unique().on(table.district, table.stream, table.gender, table.category)
 ]);
 
+// District status table for tracking finalization
+export const districtStatus = pgTable("district_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  district: varchar("district").notNull().unique(),
+  isFinalized: boolean("is_finalized").default(false),
+  totalStudents: integer("total_students").default(0),
+  lockedStudents: integer("locked_students").default(0),
+  studentsWithChoices: integer("students_with_choices").default(0),
+  finalizedBy: varchar("finalized_by").references(() => users.id),
+  finalizedAt: timestamp("finalized_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Settings table for system configuration
 export const settings = pgTable("settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -157,6 +171,13 @@ export const fileUploadsRelations = relations(fileUploads, ({ one }) => ({
   }),
 }));
 
+export const districtStatusRelations = relations(districtStatus, ({ one }) => ({
+  finalizedByUser: one(users, {
+    fields: [districtStatus.finalizedBy],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -198,6 +219,12 @@ export const insertFileUploadSchema = createInsertSchema(fileUploads).omit({
   createdAt: true,
 });
 
+export const insertDistrictStatusSchema = createInsertSchema(districtStatus).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -213,6 +240,8 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type FileUpload = typeof fileUploads.$inferSelect;
 export type InsertFileUpload = z.infer<typeof insertFileUploadSchema>;
+export type DistrictStatus = typeof districtStatus.$inferSelect;
+export type InsertDistrictStatus = z.infer<typeof insertDistrictStatusSchema>;
 
 // Constants - All 23 districts of Punjab
 export const DISTRICTS = [
