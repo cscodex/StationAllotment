@@ -513,14 +513,20 @@ export class DatabaseStorage implements IStorage {
 
   async getStudentsByDistrict(district: string, limit = 50, offset = 0): Promise<{students: Student[], total: number}> {
     const studentsResult = await db.select().from(students)
-      .where(eq(students.counselingDistrict, district))
+      .where(and(
+        eq(students.counselingDistrict, district),
+        eq(students.isReleased, false)
+      ))
       .orderBy(asc(students.meritNumber))
       .limit(limit)
       .offset(offset);
     
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(students)
-      .where(eq(students.counselingDistrict, district));
+      .where(and(
+        eq(students.counselingDistrict, district),
+        eq(students.isReleased, false)
+      ));
     
     return {
       students: studentsResult,
@@ -535,6 +541,7 @@ export class DatabaseStorage implements IStorage {
         counselingDistrict: null,
         districtAdmin: null,
         isLocked: false,
+        isReleased: true,
         updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
@@ -549,7 +556,16 @@ export class DatabaseStorage implements IStorage {
       return { hasConflict: false };
     }
 
-    if (student.counselingDistrict && student.counselingDistrict !== newDistrict) {
+    // Check if student is already allotted to a district
+    if (student.allottedDistrict) {
+      return { 
+        hasConflict: true, 
+        currentDistrict: student.allottedDistrict 
+      };
+    }
+
+    // Check if student is already selected by another district (and not released)
+    if (student.counselingDistrict && student.counselingDistrict !== newDistrict && !student.isReleased) {
       return { 
         hasConflict: true, 
         currentDistrict: student.counselingDistrict 
