@@ -563,7 +563,6 @@ export default function StudentPreferenceManagement() {
                           <SelectValue placeholder="Select district" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No selection</SelectItem>
                           {districts.map((district) => (
                             <SelectItem key={district} value={district.toString()}>
                               {district}
@@ -628,7 +627,6 @@ export default function StudentPreferenceManagement() {
                           <SelectValue placeholder="Select district" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">No selection</SelectItem>
                           {districts.map((district) => (
                             <SelectItem key={district} value={district.toString()}>
                               {district}
