@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Search, Users, Edit3, Save, X, AlertTriangle, Lock, Unlock } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Search, Users, Edit3, Save, X, AlertTriangle, Lock, Unlock, Plus, UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { Student, DistrictStatus } from "@shared/schema";
+import type { Student, DistrictStatus, StudentsEntranceResult } from "@shared/schema";
 import { SCHOOL_DISTRICTS } from "@shared/schema";
 
 export default function StudentPreferenceManagement() {
@@ -22,6 +23,13 @@ export default function StudentPreferenceManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isOverrideConfirmOpen, setIsOverrideConfirmOpen] = useState(false);
   const [editChoices, setEditChoices] = useState<{[key: string]: string}>({});
+  
+  // State for entrance results
+  const [entranceSearchTerm, setEntranceSearchTerm] = useState("");
+  const [selectedEntranceStudent, setSelectedEntranceStudent] = useState<StudentsEntranceResult | null>(null);
+  const [isAddStudentDialogOpen, setIsAddStudentDialogOpen] = useState(false);
+  const [newStudentChoices, setNewStudentChoices] = useState<{[key: string]: string}>({});
+  
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -41,12 +49,25 @@ export default function StudentPreferenceManagement() {
     queryKey: ["/api/district-status"],
   });
 
+  // Fetch entrance results for district admins to add new students
+  const { data: entranceResultsData, isLoading: entranceLoading } = useQuery<{students: StudentsEntranceResult[], total: number}>({
+    queryKey: ["/api/students-entrance-results", { limit: 1000, offset: 0 }],
+    enabled: user?.role === 'district_admin',
+  });
+
   const filteredStudents = studentsData?.students?.filter((student: Student) => {
     return student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
            student.meritNumber.toString().includes(searchTerm) ||
            student.appNo?.includes(searchTerm) ||
            student.counselingDistrict?.toLowerCase().includes(searchTerm.toLowerCase()) ||
            student.districtAdmin?.toLowerCase().includes(searchTerm.toLowerCase());
+  }) || [];
+
+  const filteredEntranceResults = entranceResultsData?.students?.filter((student: StudentsEntranceResult) => {
+    return student.studentName.toLowerCase().includes(entranceSearchTerm.toLowerCase()) ||
+           student.meritNo.toString().includes(entranceSearchTerm) ||
+           student.applicationNo?.includes(entranceSearchTerm) ||
+           student.rollNo?.includes(entranceSearchTerm);
   }) || [];
 
   const handleEditStudent = (student: Student) => {
@@ -68,6 +89,23 @@ export default function StudentPreferenceManagement() {
 
   const handleChoiceChange = (choiceKey: string, value: string) => {
     setEditChoices(prev => ({
+      ...prev,
+      [choiceKey]: value
+    }));
+  };
+
+  // Handle selection of entrance result student for adding preferences
+  const handleSelectEntranceStudent = (student: StudentsEntranceResult) => {
+    setSelectedEntranceStudent(student);
+    setNewStudentChoices({
+      choice1: '', choice2: '', choice3: '', choice4: '', choice5: '',
+      choice6: '', choice7: '', choice8: '', choice9: '', choice10: ''
+    });
+    setIsAddStudentDialogOpen(true);
+  };
+
+  const handleNewStudentChoiceChange = (choiceKey: string, value: string) => {
+    setNewStudentChoices(prev => ({
       ...prev,
       [choiceKey]: value
     }));
@@ -131,6 +169,40 @@ export default function StudentPreferenceManagement() {
     }
   });
 
+  // Add student with preferences mutation
+  const addStudentMutation = useMutation({
+    mutationFn: async (data: { entranceStudentId: string, preferences: any, stream?: string }) => {
+      const response = await apiRequest('POST', '/api/students/from-entrance-result', {
+        entranceStudentId: data.entranceStudentId,
+        preferences: data.preferences,
+        stream: data.stream,
+        counselingDistrict: user?.district,
+        districtAdmin: user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      const queryKey = user?.role === 'district_admin' 
+        ? ["/api/students", { district: user.district, limit: 1000, offset: 0 }]
+        : ["/api/students", { limit: 1000, offset: 0 }];
+      queryClient.invalidateQueries({ queryKey });
+      toast({
+        title: "Success",
+        description: "Student added with preferences successfully",
+      });
+      setIsAddStudentDialogOpen(false);
+      setSelectedEntranceStudent(null);
+      setNewStudentChoices({});
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add student",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleSavePreferences = () => {
     if (!selectedStudent) return;
     
@@ -159,6 +231,16 @@ export default function StudentPreferenceManagement() {
 
   const handleReleaseStudent = (student: Student) => {
     releaseStudentMutation.mutate(student.id);
+  };
+
+  const handleSaveNewStudent = () => {
+    if (!selectedEntranceStudent) return;
+    
+    addStudentMutation.mutate({
+      entranceStudentId: selectedEntranceStudent.id,
+      preferences: newStudentChoices,
+      stream: selectedEntranceStudent.stream || undefined
+    });
   };
 
   const getDistrictStatusBadge = (district: string) => {
@@ -223,25 +305,40 @@ export default function StudentPreferenceManagement() {
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {user?.role === 'central_admin' ? 'All Students with Preferences' : 'District Students with Preferences'}
-            </CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1 max-w-md">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search by name, merit number, app number, district, or admin..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-search"
-                />
-              </div>
-            </div>
-          </CardHeader>
+        <Tabs defaultValue="existing" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="existing">
+              <Users className="w-4 h-4 mr-2" />
+              Existing Students ({filteredStudents.length})
+            </TabsTrigger>
+            {user?.role === 'district_admin' && (
+              <TabsTrigger value="add-new">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add from Entrance Results ({filteredEntranceResults.length})
+              </TabsTrigger>
+            )}
+          </TabsList>
+
+          <TabsContent value="existing">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {user?.role === 'central_admin' ? 'All Students with Preferences' : 'District Students with Preferences'}
+                </CardTitle>
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Search by name, merit number, app number, district, or admin..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-search"
+                    />
+                  </div>
+                </div>
+              </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <Table>
@@ -340,7 +437,166 @@ export default function StudentPreferenceManagement() {
               </Table>
             </div>
           </CardContent>
-        </Card>
+            </Card>
+          </TabsContent>
+
+          {/* Tab for adding new students - District Admin only */}
+          {user?.role === 'district_admin' && (
+            <TabsContent value="add-new">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Add Students from Entrance Results</CardTitle>
+                  <div className="flex items-center gap-4">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Search by name, merit number, application number..."
+                        value={entranceSearchTerm}
+                        onChange={(e) => setEntranceSearchTerm(e.target.value)}
+                        className="pl-10"
+                        data-testid="input-entrance-search"
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>App No</TableHead>
+                          <TableHead>Merit No</TableHead>
+                          <TableHead>Student Name</TableHead>
+                          <TableHead>Stream</TableHead>
+                          <TableHead>Gender</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Marks</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {entranceLoading ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-8">
+                              Loading entrance results...
+                            </TableCell>
+                          </TableRow>
+                        ) : filteredEntranceResults.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                              No entrance results found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredEntranceResults.map((student: StudentsEntranceResult) => (
+                            <TableRow key={student.id} data-testid={`entrance-student-row-${student.meritNo}`}>
+                              <TableCell className="font-medium">{student.applicationNo}</TableCell>
+                              <TableCell className="font-medium">{student.meritNo}</TableCell>
+                              <TableCell>{student.studentName}</TableCell>
+                              <TableCell>
+                                {student.stream ? (
+                                  <Badge variant="outline">{student.stream}</Badge>
+                                ) : (
+                                  <span className="text-gray-400">Not set</span>
+                                )}
+                              </TableCell>
+                              <TableCell>{student.gender}</TableCell>
+                              <TableCell>{student.category}</TableCell>
+                              <TableCell>{student.marks}</TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleSelectEntranceStudent(student)}
+                                  data-testid={`button-select-${student.meritNo}`}
+                                >
+                                  <Plus className="w-3 h-3 mr-1" />
+                                  Add & Set Preferences
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
+
+        {/* Add Student Dialog */}
+        <Dialog open={isAddStudentDialogOpen} onOpenChange={setIsAddStudentDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Set Preferences - {selectedEntranceStudent?.studentName} (Merit: {selectedEntranceStudent?.meritNo})
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-800">Student Information</h4>
+                <div className="grid grid-cols-2 gap-4 mt-2 text-sm">
+                  <div><span className="font-medium">Application No:</span> {selectedEntranceStudent?.applicationNo}</div>
+                  <div><span className="font-medium">Roll No:</span> {selectedEntranceStudent?.rollNo}</div>
+                  <div><span className="font-medium">Gender:</span> {selectedEntranceStudent?.gender}</div>
+                  <div><span className="font-medium">Category:</span> {selectedEntranceStudent?.category}</div>
+                  <div><span className="font-medium">Stream:</span> {selectedEntranceStudent?.stream || 'Not specified'}</div>
+                  <div><span className="font-medium">Marks:</span> {selectedEntranceStudent?.marks}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {Array.from({ length: 10 }, (_, i) => {
+                  const choiceKey = `choice${i + 1}`;
+                  return (
+                    <div key={choiceKey} className="space-y-2">
+                      <label className="text-sm font-medium">Choice {i + 1}</label>
+                      <Select
+                        value={newStudentChoices[choiceKey] || ""}
+                        onValueChange={(value) => handleNewStudentChoiceChange(choiceKey, value)}
+                      >
+                        <SelectTrigger data-testid={`select-new-${choiceKey}`}>
+                          <SelectValue placeholder="Select district" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No selection</SelectItem>
+                          {districts.map((district) => (
+                            <SelectItem key={district} value={district.toString()}>
+                              {district}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddStudentDialogOpen(false)}
+                data-testid="button-cancel-add"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveNewStudent}
+                disabled={addStudentMutation.isPending}
+                data-testid="button-save-new-student"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {addStudentMutation.isPending ? "Adding..." : "Add Student with Preferences"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Edit Preferences Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
