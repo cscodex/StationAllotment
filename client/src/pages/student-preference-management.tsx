@@ -225,7 +225,9 @@ export default function StudentPreferenceManagement() {
 
         <Card>
           <CardHeader>
-            <CardTitle>All Students with Preferences</CardTitle>
+            <CardTitle>
+              {user?.role === 'central_admin' ? 'All Students with Preferences' : 'District Students with Preferences'}
+            </CardTitle>
             <div className="flex items-center gap-4">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -314,16 +316,21 @@ export default function StudentPreferenceManagement() {
                               <Edit3 className="w-3 h-3 mr-1" />
                               Edit
                             </Button>
+                            {/* Release button: Central admin can release any student, District admin can only release unlocked students from their district */}
                             {student.counselingDistrict && (
+                              (user?.role === 'central_admin' || 
+                               (user?.role === 'district_admin' && student.counselingDistrict === user.district && !student.isLocked)) && (
                               <Button
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => handleReleaseStudent(student)}
+                                disabled={releaseStudentMutation.isPending}
                                 data-testid={`button-release-${student.meritNumber}`}
                               >
+                                <Unlock className="w-3 h-3 mr-1" />
                                 Release
                               </Button>
-                            )}
+                            ))}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -378,7 +385,7 @@ export default function StudentPreferenceManagement() {
                 })}
               </div>
 
-              {selectedStudent?.isLocked && (
+              {selectedStudent?.isLocked && user?.role === 'central_admin' && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
@@ -387,6 +394,19 @@ export default function StudentPreferenceManagement() {
                       <p className="text-sm text-amber-700 mt-1">
                         This student's preferences have been locked by the district admin. 
                         Saving changes will override the lock and notify the district admin.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {selectedStudent?.isLocked && user?.role === 'district_admin' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <Lock className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-blue-800">Student Preferences are Locked</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        You have locked this student's preferences. You can still modify them if needed.
                       </p>
                     </div>
                   </div>
