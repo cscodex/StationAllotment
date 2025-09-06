@@ -29,6 +29,7 @@ export default function StudentPreferenceManagement() {
   const [selectedEntranceStudent, setSelectedEntranceStudent] = useState<StudentsEntranceResult | null>(null);
   const [isAddStudentDialogOpen, setIsAddStudentDialogOpen] = useState(false);
   const [newStudentChoices, setNewStudentChoices] = useState<{[key: string]: string}>({});
+  const [selectedStream, setSelectedStream] = useState<string>("");
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -101,6 +102,7 @@ export default function StudentPreferenceManagement() {
       choice1: '', choice2: '', choice3: '', choice4: '', choice5: '',
       choice6: '', choice7: '', choice8: '', choice9: '', choice10: ''
     });
+    setSelectedStream(student.stream || "");
     setIsAddStudentDialogOpen(true);
   };
 
@@ -179,6 +181,17 @@ export default function StudentPreferenceManagement() {
         counselingDistrict: user?.district,
         districtAdmin: user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.message || 'Failed to add student');
+        } catch (parseError) {
+          throw new Error(`Server error: ${response.status}`);
+        }
+      }
+      
       return response.json();
     },
     onSuccess: () => {
@@ -193,6 +206,7 @@ export default function StudentPreferenceManagement() {
       setIsAddStudentDialogOpen(false);
       setSelectedEntranceStudent(null);
       setNewStudentChoices({});
+      setSelectedStream("");
     },
     onError: (error: any) => {
       toast({
@@ -239,7 +253,7 @@ export default function StudentPreferenceManagement() {
     addStudentMutation.mutate({
       entranceStudentId: selectedEntranceStudent.id,
       preferences: newStudentChoices,
-      stream: selectedEntranceStudent.stream || undefined
+      stream: selectedStream || selectedEntranceStudent.stream || undefined
     });
   };
 
@@ -544,8 +558,24 @@ export default function StudentPreferenceManagement() {
                   <div><span className="font-medium">Roll No:</span> {selectedEntranceStudent?.rollNo}</div>
                   <div><span className="font-medium">Gender:</span> {selectedEntranceStudent?.gender}</div>
                   <div><span className="font-medium">Category:</span> {selectedEntranceStudent?.category}</div>
-                  <div><span className="font-medium">Stream:</span> {selectedEntranceStudent?.stream || 'Not specified'}</div>
                   <div><span className="font-medium">Marks:</span> {selectedEntranceStudent?.marks}</div>
+                  <div className="col-span-2">
+                    <label className="text-sm font-medium text-blue-800">Stream (Editable):</label>
+                    <Select
+                      value={selectedStream}
+                      onValueChange={setSelectedStream}
+                    >
+                      <SelectTrigger className="mt-1" data-testid="select-stream">
+                        <SelectValue placeholder="Select stream" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Medical">Medical</SelectItem>
+                        <SelectItem value="Non-Medical">Non-Medical</SelectItem>
+                        <SelectItem value="Commerce">Commerce</SelectItem>
+                        <SelectItem value="Arts">Arts</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -579,7 +609,12 @@ export default function StudentPreferenceManagement() {
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setIsAddStudentDialogOpen(false)}
+                onClick={() => {
+                  setIsAddStudentDialogOpen(false);
+                  setSelectedEntranceStudent(null);
+                  setNewStudentChoices({});
+                  setSelectedStream("");
+                }}
                 data-testid="button-cancel-add"
               >
                 <X className="w-4 h-4 mr-2" />
