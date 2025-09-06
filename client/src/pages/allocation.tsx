@@ -15,8 +15,10 @@ import {
   AlertTriangle, 
   Users, 
   MapPin,
-  BarChart3 
+  BarChart3,
+  Shield
 } from "lucide-react";
+import type { DistrictStatus } from "@shared/schema";
 
 export default function Allocation() {
   const [showAllocationModal, setShowAllocationModal] = useState(false);
@@ -47,6 +49,11 @@ export default function Allocation() {
     queryKey: ["/api/students-entrance-results"],
   });
 
+  // Fetch district statuses for finalization check
+  const { data: districtStatuses } = useQuery<DistrictStatus[]>({
+    queryKey: ["/api/district-status"],
+  });
+
   const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
   const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
   const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
@@ -74,11 +81,18 @@ export default function Allocation() {
     entranceResults?.some((er: any) => er.applicationNo === s.appNo && er.meritNo)
   )?.length || 0;
 
+  // District finalization checks
+  const totalDistricts = districtStatuses?.length || 0;
+  const finalizedDistricts = districtStatuses?.filter(ds => ds.isFinalized).length || 0;
+  const allDistrictsFinalized = totalDistricts > 0 && finalizedDistricts === totalDistricts;
+  const pendingDistricts = districtStatuses?.filter(ds => !ds.isFinalized) || [];
+
   // Minimum requirements for allocation
   const canRunAllocation = hasEntranceResults && // At least one entrance result
                           hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
                           studentsWithCompleteData > 0 && // At least one student with complete data
                           studentsWithMeritData > 0 && // Students must have merit data
+                          allDistrictsFinalized && // All districts must be finalized
                           !allocationStatus?.completed; // Not already completed
 
   const preflightChecks = [
@@ -121,8 +135,19 @@ export default function Allocation() {
       color: studentsWithMeritData > 0 ? "text-green-500" : studentsWithCompleteData > 0 && hasEntranceResults ? "text-red-500" : "text-amber-500",
     },
     {
+      title: "District Data Finalization",
+      status: allDistrictsFinalized ? "complete" : totalDistricts > 0 ? "error" : "pending",
+      description: allDistrictsFinalized 
+        ? `All ${totalDistricts} districts have finalized their student data`
+        : totalDistricts > 0
+        ? `${pendingDistricts.length} out of ${totalDistricts} districts need to finalize their data: ${pendingDistricts.map(d => d.district).join(', ')}`
+        : "No district data found - districts must finalize their student preferences first",
+      icon: allDistrictsFinalized ? Check : totalDistricts > 0 ? AlertTriangle : Clock,
+      color: allDistrictsFinalized ? "text-green-500" : totalDistricts > 0 ? "text-red-500" : "text-amber-500",
+    },
+    {
       title: "Minimum Allocation Data",
-      status: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 ? "complete" : "pending",
+      status: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 && allDistrictsFinalized ? "complete" : "pending",
       description: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0
         ? "Minimum data requirements met for allocation process"
         : "Need: entrance results + vacancy data + students with choices",

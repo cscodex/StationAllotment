@@ -25,7 +25,7 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
     enabled: user?.role === 'central_admin',
   });
 
-  const deadline = settings?.find((s: any) => s.key === 'allocation_deadline')?.value;
+  const deadline = Array.isArray(settings) ? settings.find((s: any) => s.key === 'allocation_deadline')?.value : null;
   const deadlineDate = deadline ? new Date(deadline) : null;
   const daysLeft = deadlineDate ? Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
 
