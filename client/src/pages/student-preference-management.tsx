@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { Student, DistrictStatus } from "@shared/schema";
+import { SCHOOL_DISTRICTS } from "@shared/schema";
 
 export default function StudentPreferenceManagement() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -25,27 +26,19 @@ export default function StudentPreferenceManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Available districts for dropdown
-  const districts = [
-    "Attock", "Bahawalnagar", "Bahawalpur", "Bhakkar", "Chakwal", "Chiniot",
-    "Dera Ghazi Khan", "Faisalabad", "Gujranwala", "Gujrat", "Hafizabad",
-    "Jhang", "Jhelum", "Kasur", "Khanewal", "Khushab", "Lahore", "Layyah",
-    "Lodhran", "Mandi Bahauddin", "Mianwali", "Multan", "Muzaffargarh",
-    "Nankana Sahib", "Narowal", "Okara", "Pakpattan", "Rahim Yar Khan",
-    "Rajanpur", "Rawalpindi", "Sahiwal", "Sargodha", "Sheikhupura",
-    "Sialkot", "Toba Tek Singh", "Vehari"
-  ];
+  // Available school districts for dropdown (only these 10 districts have schools)
+  const districts = SCHOOL_DISTRICTS;
 
-  // Fetch all students
+  // Fetch students based on user role
   const { data: studentsData, isLoading } = useQuery<{students: Student[], total: number}>({
-    queryKey: ["/api/students", { limit: 1000, offset: 0 }],
-    enabled: user?.role === 'central_admin',
+    queryKey: user?.role === 'district_admin' 
+      ? ["/api/students", { district: user.district, limit: 1000, offset: 0 }]
+      : ["/api/students", { limit: 1000, offset: 0 }],
   });
 
   // Fetch district statuses
   const { data: districtStatuses } = useQuery<DistrictStatus[]>({
     queryKey: ["/api/district-status"],
-    enabled: user?.role === 'central_admin',
   });
 
   const filteredStudents = studentsData?.students?.filter((student: Student) => {
@@ -80,17 +73,25 @@ export default function StudentPreferenceManagement() {
     }));
   };
 
-  // Override preferences mutation
-  const overridePreferencesMutation = useMutation({
-    mutationFn: async (data: { studentId: string, preferences: any, overrideReason: string }) => {
-      const response = await apiRequest('PUT', `/api/students/${data.studentId}/preferences/override`, {
-        preferences: data.preferences,
-        reason: data.overrideReason
-      });
+  // Update preferences mutation (works for both central and district admins)
+  const updatePreferencesMutation = useMutation({
+    mutationFn: async (data: { studentId: string, preferences: any, isOverride?: boolean }) => {
+      const endpoint = user?.role === 'central_admin' && data.isOverride 
+        ? `/api/students/${data.studentId}/preferences/override`
+        : `/api/students/${data.studentId}/preferences`;
+      
+      const payload = user?.role === 'central_admin' && data.isOverride
+        ? { preferences: data.preferences, reason: "Central admin override of locked preferences" }
+        : { preferences: data.preferences };
+        
+      const response = await apiRequest('PUT', endpoint, payload);
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      const queryKey = user?.role === 'district_admin' 
+        ? ["/api/students", { district: user.district, limit: 1000, offset: 0 }]
+        : ["/api/students", { limit: 1000, offset: 0 }];
+      queryClient.invalidateQueries({ queryKey });
       toast({
         title: "Success",
         description: "Student preferences updated successfully",
@@ -133,15 +134,15 @@ export default function StudentPreferenceManagement() {
   const handleSavePreferences = () => {
     if (!selectedStudent) return;
     
-    // Check if student is locked by district admin
-    if (selectedStudent.isLocked) {
+    // For central admin: Check if student is locked and needs override
+    if (user?.role === 'central_admin' && selectedStudent.isLocked) {
       setIsOverrideConfirmOpen(true);
     } else {
-      // Direct update if not locked
-      overridePreferencesMutation.mutate({
+      // Direct update if not locked or district admin
+      updatePreferencesMutation.mutate({
         studentId: selectedStudent.id,
         preferences: editChoices,
-        overrideReason: "Central admin update"
+        isOverride: false
       });
     }
   };
@@ -149,10 +150,10 @@ export default function StudentPreferenceManagement() {
   const handleConfirmOverride = () => {
     if (!selectedStudent) return;
     
-    overridePreferencesMutation.mutate({
+    updatePreferencesMutation.mutate({
       studentId: selectedStudent.id,
       preferences: editChoices,
-      overrideReason: "Central admin override of locked preferences"
+      isOverride: true
     });
   };
 
@@ -183,7 +184,7 @@ export default function StudentPreferenceManagement() {
     return <Badge variant="default">📝 In Progress</Badge>;
   };
 
-  if (user?.role !== 'central_admin') {
+  if (!user || (user.role !== 'central_admin' && user.role !== 'district_admin')) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <Header />
@@ -191,7 +192,7 @@ export default function StudentPreferenceManagement() {
           <Card>
             <CardContent className="p-8 text-center">
               <h1 className="text-xl font-semibold text-red-600">Access Denied</h1>
-              <p className="text-gray-600 mt-2">Only Central Admins can access student preference management.</p>
+              <p className="text-gray-600 mt-2">Only Central Admins and District Admins can access student preference management.</p>
             </CardContent>
           </Card>
         </div>
@@ -209,7 +210,9 @@ export default function StudentPreferenceManagement() {
               Student Preference Management
             </h1>
             <p className="text-gray-600 mt-2">
-              Comprehensive view and management of all student preferences across districts
+              {user?.role === 'central_admin' 
+                ? "Comprehensive view and management of all student preferences across districts"
+                : `Manage student preferences for ${user?.district} district`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -402,11 +405,11 @@ export default function StudentPreferenceManagement() {
               </Button>
               <Button
                 onClick={handleSavePreferences}
-                disabled={overridePreferencesMutation.isPending}
+                disabled={updatePreferencesMutation.isPending}
                 data-testid="button-save-preferences"
               >
                 <Save className="w-4 h-4 mr-2" />
-                {overridePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
+                {updatePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>
           </DialogContent>
