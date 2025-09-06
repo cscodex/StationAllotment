@@ -488,6 +488,24 @@ export class FileService {
         errors: validationResults.errors,
         warnings: [],
         recordCount: students.length,
+        allRecords: students.map(student => ({
+          appNo: student.appNo,
+          meritNumber: student.meritNumber,
+          name: student.name,
+          stream: student.stream,
+          gender: student.gender,
+          category: student.category,
+          choice1: student.choice1,
+          choice2: student.choice2,
+          choice3: student.choice3,
+          choice4: student.choice4,
+          choice5: student.choice5,
+          choice6: student.choice6,
+          choice7: student.choice7,
+          choice8: student.choice8,
+          choice9: student.choice9,
+          choice10: student.choice10
+        })),
         preview: students.slice(0, 10).map(student => ({
           appNo: student.appNo,
           meritNumber: student.meritNumber,
@@ -505,6 +523,7 @@ export class FileService {
         errors: [error instanceof Error ? error.message : 'Unknown error'],
         warnings: [],
         recordCount: 0,
+        allRecords: [],
         preview: []
       };
     } finally {
@@ -526,6 +545,14 @@ export class FileService {
         errors: validationResults.errors,
         warnings: [],
         recordCount: vacancies.length,
+        allRecords: vacancies.map(vacancy => ({
+          district: vacancy.district,
+          stream: vacancy.stream,
+          gender: vacancy.gender,
+          category: vacancy.category,
+          totalSeats: vacancy.totalSeats,
+          availableSeats: vacancy.availableSeats
+        })),
         preview: vacancies.slice(0, 10).map(vacancy => ({
           district: vacancy.district,
           stream: vacancy.stream,
@@ -542,6 +569,7 @@ export class FileService {
         errors: [error instanceof Error ? error.message : 'Unknown error'],
         warnings: [],
         recordCount: 0,
+        allRecords: [],
         preview: []
       };
     } finally {
@@ -563,6 +591,16 @@ export class FileService {
         errors: validationResults.errors,
         warnings: [],
         recordCount: entranceResults.length,
+        allRecords: entranceResults.map(result => ({
+          meritNo: result.meritNo,
+          applicationNo: result.applicationNo,
+          rollNo: result.rollNo,
+          studentName: result.studentName,
+          marks: result.marks,
+          gender: result.gender,
+          category: result.category,
+          stream: result.stream
+        })),
         preview: entranceResults.slice(0, 10).map(result => ({
           meritNo: result.meritNo,
           applicationNo: result.applicationNo,
@@ -580,6 +618,7 @@ export class FileService {
         errors: [error instanceof Error ? error.message : 'Unknown error'],
         warnings: [],
         recordCount: 0,
+        allRecords: [],
         preview: []
       };
     } finally {
