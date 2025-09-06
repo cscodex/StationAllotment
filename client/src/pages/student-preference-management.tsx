@@ -202,7 +202,7 @@ export default function StudentPreferenceManagement() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <Header />
+      <Header title="Student Preference Management" />
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -366,7 +366,7 @@ export default function StudentPreferenceManagement() {
                       <label className="text-sm font-medium">Choice {i + 1}</label>
                       <Select
                         value={editChoices[choiceKey] || ""}
-                        onValueChange={(value) => handleChoiceChange(choiceKey, value)}
+                        onValueChange={(value) => handleChoiceChange(choiceKey.toString(), value)}
                       >
                         <SelectTrigger data-testid={`select-${choiceKey}`}>
                           <SelectValue placeholder="Select district" />
