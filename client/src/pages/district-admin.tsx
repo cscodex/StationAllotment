@@ -104,6 +104,46 @@ export default function DistrictAdmin() {
     },
   });
 
+  const lockStudentMutation = useMutation({
+    mutationFn: async ({ studentId, isLocked }: { studentId: string, isLocked: boolean }) => {
+      await apiRequest("PUT", `/api/students/${studentId}/lock`, { isLocked });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "Student Lock Status Updated",
+        description: "Student lock status has been updated successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Lock Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const releaseStudentMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      await apiRequest("PUT", `/api/students/${studentId}/release`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "Student Released",
+        description: "Student has been released from district successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Release Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
@@ -148,6 +188,35 @@ export default function DistrictAdmin() {
         preferences: values,
       });
     }
+  };
+
+  const handleLockToggle = (student: Student) => {
+    if (isDeadlinePassed) {
+      toast({
+        title: "Deadline Passed",
+        description: "Cannot modify lock status after the deadline",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    lockStudentMutation.mutate({
+      studentId: student.id,
+      isLocked: !student.isLocked,
+    });
+  };
+
+  const handleReleaseStudent = (student: Student) => {
+    if (isDeadlinePassed) {
+      toast({
+        title: "Deadline Passed",
+        description: "Cannot release students after the deadline",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    releaseStudentMutation.mutate(student.id);
   };
 
   const getStatusBadge = (status: string) => {
@@ -243,37 +312,79 @@ export default function DistrictAdmin() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead>App No.</TableHead>
                           <TableHead>Merit No.</TableHead>
                           <TableHead>Name</TableHead>
                           <TableHead>Stream</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Top Choices</TableHead>
+                          <TableHead>Locked</TableHead>
+                          <TableHead>Choices (1-10)</TableHead>
                           <TableHead>Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredStudents.map((student: Student) => (
                           <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                            <TableCell className="font-medium">{student.appNo}</TableCell>
                             <TableCell className="font-medium">{student.meritNumber}</TableCell>
                             <TableCell>{student.name}</TableCell>
                             <TableCell>{student.stream}</TableCell>
-                            <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {[student.choice1, student.choice2, student.choice3]
-                                .filter(Boolean)
-                                .join(', ') || '-'}
+                            <TableCell>
+                              {student.isLocked === true ? (
+                                <Badge variant="destructive" className="bg-red-100 text-red-800">
+                                  🔒 Locked
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-green-100 text-green-800">
+                                  🔓 Unlocked
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground max-w-xs">
+                              <div className="flex flex-wrap gap-1">
+                                {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+                                  student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                                  .map((choice, index) => choice ? (
+                                    <span key={index} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
+                                      {index + 1}: {choice}
+                                    </span>
+                                  ) : null)
+                                  .filter(Boolean)}
+                                {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+                                  student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                                  .filter(Boolean).length === 0 && <span className="text-gray-400">No choices set</span>}
+                              </div>
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => startEditing(student)}
-                                disabled={isDeadlinePassed || editingStudent === student.id}
-                                data-testid={`button-edit-${student.meritNumber}`}
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                Edit
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => startEditing(student)}
+                                  disabled={isDeadlinePassed || editingStudent === student.id || student.isLocked === true}
+                                  data-testid={`button-edit-${student.meritNumber}`}
+                                >
+                                  <Edit className="w-3 h-3 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant={student.isLocked === true ? "destructive" : "secondary"}
+                                  size="sm"
+                                  onClick={() => handleLockToggle(student)}
+                                  disabled={isDeadlinePassed}
+                                  data-testid={`button-lock-${student.meritNumber}`}
+                                >
+                                  {student.isLocked === true ? "🔓" : "🔒"}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleReleaseStudent(student)}
+                                  disabled={isDeadlinePassed}
+                                  data-testid={`button-release-${student.meritNumber}`}
+                                >
+                                  Release
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
