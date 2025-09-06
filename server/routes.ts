@@ -889,6 +889,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // District status routes
+  app.get('/api/district-status', isCentralAdmin, async (req, res) => {
+    try {
+      const statuses = await storage.getAllDistrictStatuses();
+      res.json(statuses);
+    } catch (error) {
+      console.error("Get district statuses error:", error);
+      res.status(500).json({ message: "Failed to fetch district statuses" });
+    }
+  });
+
+  app.get('/api/district-status/:district', isAuthenticated, async (req, res) => {
+    try {
+      const { district } = req.params;
+      const status = await storage.getDistrictStatus(district);
+      res.json(status || { district, isFinalized: false, totalStudents: 0, lockedStudents: 0, studentsWithChoices: 0 });
+    } catch (error) {
+      console.error("Get district status error:", error);
+      res.status(500).json({ message: "Failed to fetch district status" });
+    }
+  });
+
+  app.post('/api/district-status/:district/finalize', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { district } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      
+      if (user?.role === 'district_admin' && user.district !== district) {
+        return res.status(403).json({ message: "Can only finalize your own district" });
+      }
+
+      // Check if all students in district are locked
+      const districtStudents = await storage.getStudentsByDistrict(district);
+      const unlockedStudents = districtStudents.students.filter(s => !s.isLocked);
+      
+      if (unlockedStudents.length > 0) {
+        return res.status(400).json({ 
+          message: `Cannot finalize district: ${unlockedStudents.length} students are not locked. All students must be locked before finalization.`,
+          unlockedCount: unlockedStudents.length
+        });
+      }
+
+      const status = await storage.finalizeDistrict(district, req.session.userId);
+      
+      await auditService.log(req.session.userId, 'district_finalized', 'district', district, {
+        totalStudents: districtStudents.total,
+        lockedStudents: districtStudents.students.length
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(status);
+    } catch (error) {
+      console.error("Finalize district error:", error);
+      res.status(500).json({ message: "Failed to finalize district" });
+    }
+  });
+
+  // Student locking routes
+  app.put('/api/students/:id/lock', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { isLocked } = req.body;
+      const user = await storage.getUser(req.session.userId);
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // District admin can only lock/unlock students in their district
+      if (user?.role === 'district_admin' && student.counselingDistrict !== user.district) {
+        return res.status(403).json({ message: "Can only lock/unlock students in your district" });
+      }
+
+      const updatedStudent = isLocked 
+        ? await storage.lockStudent(id)
+        : await storage.unlockStudent(id);
+      
+      await auditService.log(req.session.userId, 
+        isLocked ? 'student_locked' : 'student_unlocked', 
+        'student', id, {
+          studentName: student.name,
+          meritNumber: student.meritNumber,
+          district: student.counselingDistrict
+        }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Lock/unlock student error:", error);
+      res.status(500).json({ message: "Failed to update student lock status" });
+    }
+  });
+
+  app.put('/api/students/:id/release', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // District admin can only release students from their district
+      if (user?.role === 'district_admin' && student.counselingDistrict !== user.district) {
+        return res.status(403).json({ message: "Can only release students from your district" });
+      }
+
+      const updatedStudent = await storage.releaseStudentFromDistrict(id);
+      
+      await auditService.log(req.session.userId, 'student_released', 'student', id, {
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        fromDistrict: student.counselingDistrict
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Release student error:", error);
+      res.status(500).json({ message: "Failed to release student" });
+    }
+  });
+
+  // Get students by district for district admins
+  app.get('/api/district/:district/students', isAuthenticated, async (req: any, res) => {
+    try {
+      const { district } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      // District admin can only view students in their district
+      if (user?.role === 'district_admin' && user.district !== district) {
+        return res.status(403).json({ message: "Can only view students in your district" });
+      }
+
+      const result = await storage.getStudentsByDistrict(district, limit, offset);
+      res.json(result);
+    } catch (error) {
+      console.error("Get district students error:", error);
+      res.status(500).json({ message: "Failed to fetch district students" });
+    }
+  });
+
   // Audit logs routes
   app.get('/api/audit-logs', isCentralAdmin, async (req, res) => {
     try {
