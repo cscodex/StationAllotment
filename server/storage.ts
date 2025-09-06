@@ -60,6 +60,7 @@ export interface IStorage {
     choice6?: string; choice7?: string; choice8?: string; choice9?: string; choice10?: string;
     counselingDistrict?: string; districtAdmin?: string;
   }): Promise<Student>;
+  checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{hasConflict: boolean, currentDistrict?: string}>;
 
   // Vacancy operations
   getVacancies(): Promise<Vacancy[]>;
@@ -539,6 +540,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(students.id, studentId))
       .returning();
     return updated;
+  }
+
+  async checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{hasConflict: boolean, currentDistrict?: string}> {
+    const student = await this.getStudent(studentId);
+    
+    if (!student) {
+      return { hasConflict: false };
+    }
+
+    if (student.counselingDistrict && student.counselingDistrict !== newDistrict) {
+      return { 
+        hasConflict: true, 
+        currentDistrict: student.counselingDistrict 
+      };
+    }
+
+    return { hasConflict: false };
   }
 }
 

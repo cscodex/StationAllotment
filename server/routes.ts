@@ -569,6 +569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const preferences = req.body;
+      const user = await storage.getUser(req.session.userId);
       
       // Validate deadline hasn't passed
       const deadline = await storage.getSetting('allocation_deadline');
@@ -576,11 +577,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Deadline has passed. Cannot modify preferences." });
       }
 
+      // Check for district conflicts if setting counseling district
+      if (preferences.counselingDistrict) {
+        const conflict = await storage.checkStudentDistrictConflict(id, preferences.counselingDistrict);
+        if (conflict.hasConflict) {
+          return res.status(409).json({ 
+            message: `Student is already selected by ${conflict.currentDistrict} district. Cannot select the same student in multiple districts.`,
+            currentDistrict: conflict.currentDistrict
+          });
+        }
+      }
+
+      // Set district admin info if not already set
+      if (user?.role === 'district_admin' && user.district) {
+        preferences.counselingDistrict = user.district;
+        preferences.districtAdmin = user.username;
+      }
+
       const student = await storage.updateStudent(id, preferences);
       
-      await auditService.log(req.user.id, 'student_preferences_update', 'students', id, {
+      await auditService.log(req.session.userId, 'student_preferences_update', 'students', id, {
         preferences,
-        userDistrict: req.user.district,
+        userDistrict: user?.district,
       }, req.ip, req.get('User-Agent'));
 
       res.json(student);
