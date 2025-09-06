@@ -635,6 +635,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Central admin override preferences route
+  app.put('/api/students/:id/preferences/override', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { preferences, reason } = req.body;
+      
+      const student = await storage.updateStudent(id, preferences);
+      
+      await auditService.log(req.session.userId, 'central_admin_override', 'students', id, {
+        preferences,
+        reason,
+        overriddenBy: req.session.userId,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(student);
+    } catch (error) {
+      console.error("Central admin override error:", error);
+      res.status(500).json({ message: "Failed to override preferences" });
+    }
+  });
+
+  // Student release route for central admin
+  app.put('/api/students/:id/release', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const student = await storage.releaseStudentFromDistrict(id);
+      
+      await auditService.log(req.session.userId, 'student_release', 'students', id, {
+        releasedBy: req.session.userId,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(student);
+    } catch (error) {
+      console.error("Student release error:", error);
+      res.status(500).json({ message: "Failed to release student" });
+    }
+  });
+
   // Students entrance results routes
   app.get('/api/students-entrance-results', isDistrictAdmin, async (req, res) => {
     try {

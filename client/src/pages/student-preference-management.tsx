@@ -1,95 +1,103 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Search, Save, CheckCircle, Lock, Unlock, Edit3 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/queryClient';
-import { DISTRICTS } from '@shared/schema';
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Header from "@/components/layout/header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Search, Users, Edit3, Save, X, AlertTriangle, Lock, Unlock } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import type { Student, DistrictStatus } from "@shared/schema";
 
-interface StudentsEntranceResult {
-  id: string;
-  meritNo: number;
-  applicationNo: string;
-  rollNo: string;
-  studentName: string;
-  marks: number;
-  gender: string;
-  stream: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface StudentPreferences {
-  choice1?: string;
-  choice2?: string;
-  choice3?: string;
-  choice4?: string;
-  choice5?: string;
-  choice6?: string;
-  choice7?: string;
-  choice8?: string;
-  choice9?: string;
-  choice10?: string;
-}
-
-function StudentPreferenceManagement() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<StudentsEntranceResult | null>(null);
-  const [preferences, setPreferences] = useState<StudentPreferences>({});
-  const [studentId, setStudentId] = useState('');
-  const [isLocked, setIsLocked] = useState(false);
-  const [editableStream, setEditableStream] = useState('');
-  const [isEditingStream, setIsEditingStream] = useState(false);
+export default function StudentPreferenceManagement() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isOverrideConfirmOpen, setIsOverrideConfirmOpen] = useState(false);
+  const [editChoices, setEditChoices] = useState<{[key: string]: string}>({});
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Search students entrance results
-  const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: [`/api/students-entrance-results/search?q=${encodeURIComponent(searchQuery)}`],
-    enabled: searchQuery.length >= 2,
-    staleTime: 30000,
+  // Available districts for dropdown
+  const districts = [
+    "Attock", "Bahawalnagar", "Bahawalpur", "Bhakkar", "Chakwal", "Chiniot",
+    "Dera Ghazi Khan", "Faisalabad", "Gujranwala", "Gujrat", "Hafizabad",
+    "Jhang", "Jhelum", "Kasur", "Khanewal", "Khushab", "Lahore", "Layyah",
+    "Lodhran", "Mandi Bahauddin", "Mianwali", "Multan", "Muzaffargarh",
+    "Nankana Sahib", "Narowal", "Okara", "Pakpattan", "Rahim Yar Khan",
+    "Rajanpur", "Rawalpindi", "Sahiwal", "Sargodha", "Sheikhupura",
+    "Sialkot", "Toba Tek Singh", "Vehari"
+  ];
+
+  // Fetch all students
+  const { data: studentsData, isLoading } = useQuery<{students: Student[], total: number}>({
+    queryKey: ["/api/students", { limit: 1000, offset: 0 }],
+    enabled: user?.role === 'central_admin',
   });
 
-  // Get vacancies for district options
-  const { data: vacancies = [] } = useQuery({
-    queryKey: ['/api/vacancies'],
-    staleTime: 300000, // 5 minutes
+  // Fetch district statuses
+  const { data: districtStatuses } = useQuery<DistrictStatus[]>({
+    queryKey: ["/api/district-status"],
+    enabled: user?.role === 'central_admin',
   });
 
-  // Create or update student record mutation
-  const createStudentMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await apiRequest('POST', '/api/students', data);
+  const filteredStudents = studentsData?.students?.filter((student: Student) => {
+    return student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           student.meritNumber.toString().includes(searchTerm) ||
+           student.appNo?.includes(searchTerm) ||
+           student.counselingDistrict?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           student.districtAdmin?.toLowerCase().includes(searchTerm.toLowerCase());
+  }) || [];
+
+  const handleEditStudent = (student: Student) => {
+    setSelectedStudent(student);
+    setEditChoices({
+      choice1: student.choice1 || '',
+      choice2: student.choice2 || '',
+      choice3: student.choice3 || '',
+      choice4: student.choice4 || '',
+      choice5: student.choice5 || '',
+      choice6: student.choice6 || '',
+      choice7: student.choice7 || '',
+      choice8: student.choice8 || '',
+      choice9: student.choice9 || '',
+      choice10: student.choice10 || '',
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleChoiceChange = (choiceKey: string, value: string) => {
+    setEditChoices(prev => ({
+      ...prev,
+      [choiceKey]: value
+    }));
+  };
+
+  // Override preferences mutation
+  const overridePreferencesMutation = useMutation({
+    mutationFn: async (data: { studentId: string, preferences: any, overrideReason: string }) => {
+      const response = await apiRequest('PUT', `/api/students/${data.studentId}/preferences/override`, {
+        preferences: data.preferences,
+        reason: data.overrideReason
+      });
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/students'] });
-    },
-  });
-
-  // Update student preferences mutation
-  const updatePreferencesMutation = useMutation({
-    mutationFn: async ({ entranceResultId, studentId, preferences }: {
-      entranceResultId: string;
-      studentId: string;
-      preferences: StudentPreferences;
-    }) => {
-      const response = await apiRequest('PUT', `/api/students-entrance-results/${entranceResultId}/preferences`, { studentId, preferences });
-      return response.json();
-    },
-    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       toast({
         title: "Success",
         description: "Student preferences updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/students'] });
-      // Don't reset form - keep student selected for further edits
-      // The form will remain in the same state for continued editing
+      setIsEditDialogOpen(false);
+      setIsOverrideConfirmOpen(false);
+      setSelectedStudent(null);
     },
     onError: (error: any) => {
       toast({
@@ -97,396 +105,339 @@ function StudentPreferenceManagement() {
         description: error.message || "Failed to update preferences",
         variant: "destructive",
       });
-    },
+    }
   });
 
-  const handleStudentSelect = async (student: StudentsEntranceResult) => {
-    setSelectedStudent(student);
-    
-    // Check if student already exists in students table
-    let existingStudent = null;
-    
-    try {
-      const response = await apiRequest('GET', '/api/students?limit=10000');
-      
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const existingStudents = await response.json();
-        existingStudent = (existingStudents as any).students?.find(
-          (s: any) => s.appNo === student.applicationNo || s.meritNumber === student.meritNo
-        );
-      }
-    } catch (error) {
-      console.warn('Could not fetch existing students, will create new:', error);
-      // Continue to create new student
-    }
-
-    try {
-      if (existingStudent) {
-        console.log('Found existing student:', existingStudent);
-        // Load existing preferences
-        setStudentId(existingStudent.id);
-        setPreferences({
-          choice1: existingStudent.choice1,
-          choice2: existingStudent.choice2,
-          choice3: existingStudent.choice3,
-          choice4: existingStudent.choice4,
-          choice5: existingStudent.choice5,
-          choice6: existingStudent.choice6,
-          choice7: existingStudent.choice7,
-          choice8: existingStudent.choice8,
-          choice9: existingStudent.choice9,
-          choice10: existingStudent.choice10,
-        });
-        // Load lock status and stream
-        setIsLocked(existingStudent.isLocked || false);
-        setEditableStream(existingStudent.stream || student.stream);
-      } else {
-        console.log('Creating new student for:', student);
-        // Create new student record
-        const newStudentData = {
-          appNo: student.applicationNo,
-          meritNumber: student.meritNo,
-          name: student.studentName,
-          stream: student.stream,
-        };
-
-        const newStudent = await createStudentMutation.mutateAsync(newStudentData);
-        console.log('Created new student:', newStudent);
-        
-        if (newStudent && newStudent.id) {
-          setStudentId(newStudent.id);
-          setPreferences({});
-          setIsLocked(false);
-          setEditableStream(student.stream);
-          toast({
-            title: "Student Record Created",
-            description: `Created new record for ${student.studentName}`,
-          });
-        } else {
-          throw new Error('Student creation failed - no ID returned');
-        }
-      }
-    } catch (error) {
-      console.error('Error in student selection/creation:', error);
+  // Release student mutation
+  const releaseStudentMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const response = await apiRequest('PUT', `/api/students/${studentId}/release`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "Success",
+        description: "Student released from district successfully",
+      });
+    },
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to load or create student record",
+        description: error.message || "Failed to release student",
         variant: "destructive",
       });
-      // Reset state on error
-      setSelectedStudent(null);
-      setStudentId('');
-      setPreferences({});
+    }
+  });
+
+  const handleSavePreferences = () => {
+    if (!selectedStudent) return;
+    
+    // Check if student is locked by district admin
+    if (selectedStudent.isLocked) {
+      setIsOverrideConfirmOpen(true);
+    } else {
+      // Direct update if not locked
+      overridePreferencesMutation.mutate({
+        studentId: selectedStudent.id,
+        preferences: editChoices,
+        overrideReason: "Central admin update"
+      });
     }
   };
 
-  const handlePreferenceChange = (choiceNumber: number, district: string) => {
-    setPreferences(prev => ({
-      ...prev,
-      [`choice${choiceNumber}`]: district,
-    }));
-  };
-
-  const handleSubmit = () => {
-    if (!selectedStudent || !studentId) {
-      toast({
-        title: "Error",
-        description: "Please select a student first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (isLocked) {
-      toast({
-        title: "Error",
-        description: "Preferences are locked and cannot be modified",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Include stream in preferences if it was edited
-    const finalPreferences = {
-      ...preferences,
-      ...(isEditingStream && editableStream !== selectedStudent.stream ? { stream: editableStream } : {}),
-    };
-
-    updatePreferencesMutation.mutate({
-      entranceResultId: selectedStudent.id,
-      studentId,
-      preferences: finalPreferences,
+  const handleConfirmOverride = () => {
+    if (!selectedStudent) return;
+    
+    overridePreferencesMutation.mutate({
+      studentId: selectedStudent.id,
+      preferences: editChoices,
+      overrideReason: "Central admin override of locked preferences"
     });
   };
 
-  const handleToggleLock = async () => {
-    if (!selectedStudent || !studentId) {
-      toast({
-        title: "Error",
-        description: "Please select a student first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const newLockStatus = !isLocked;
-      const response = await apiRequest('PUT', `/api/students/${studentId}/lock`, { isLocked: newLockStatus });
-      await response.json();
-      
-      setIsLocked(newLockStatus);
-      toast({
-        title: "Success",
-        description: `Preferences ${newLockStatus ? 'locked' : 'unlocked'} successfully`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update lock status",
-        variant: "destructive",
-      });
-    }
+  const handleReleaseStudent = (student: Student) => {
+    releaseStudentMutation.mutate(student.id);
   };
 
-  // Get unique districts from vacancies
-  const availableDistricts = Array.isArray(vacancies) 
-    ? vacancies
-        .map((v: any) => v.district)
-        .filter((district: string) => district && district.trim() !== '') // Filter out empty/null values
-        .filter((district: string, index: number, array: string[]) => array.indexOf(district) === index)
-        .sort()
-    : [];
+  const getDistrictStatusBadge = (district: string) => {
+    const status = districtStatuses?.find(ds => ds.district === district);
+    if (!status) return null;
+    
+    return (
+      <Badge variant={status.isFinalized ? "default" : "secondary"} className="ml-2">
+        {status.isFinalized ? "Finalized" : "In Progress"}
+      </Badge>
+    );
+  };
 
-  return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Student Preference Management
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Search and set district preferences for students
-          </p>
+  const getStudentStatusBadge = (student: Student) => {
+    if (!student.counselingDistrict) {
+      return <Badge variant="outline">Not Assigned</Badge>;
+    }
+    
+    if (student.isLocked) {
+      return <Badge variant="destructive">🔒 Locked</Badge>;
+    }
+    
+    return <Badge variant="default">📝 In Progress</Badge>;
+  };
+
+  if (user?.role !== 'central_admin') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="p-8 text-center">
+              <h1 className="text-xl font-semibold text-red-600">Access Denied</h1>
+              <p className="text-gray-600 mt-2">Only Central Admins can access student preference management.</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
+    );
+  }
 
-      {/* Search Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5" />
-            Search Student
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <Label htmlFor="search">Search by Name, Merit No, Application No, or Roll No</Label>
-              <Input
-                id="search"
-                data-testid="input-search-student"
-                placeholder="Enter student name, merit number, application number, or roll number..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="mt-1"
-              />
-            </div>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <Header />
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900" data-testid="page-title">
+              Student Preference Management
+            </h1>
+            <p className="text-gray-600 mt-2">
+              Comprehensive view and management of all student preferences across districts
+            </p>
           </div>
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-600" />
+            <span className="text-sm font-medium text-gray-700">
+              {filteredStudents.length} students
+            </span>
+          </div>
+        </div>
 
-          {/* Search Results */}
-          {searchQuery.length >= 2 && (
-            <div className="mt-4">
-              {isSearching ? (
-                <p className="text-gray-600 dark:text-gray-400">Searching...</p>
-              ) : Array.isArray(searchResults) && searchResults.length > 0 ? (
-                <div className="space-y-2">
-                  <h3 className="font-semibold">Search Results:</h3>
-                  <div className="grid gap-2 max-h-60 overflow-y-auto">
-                    {(searchResults as StudentsEntranceResult[]).map((student: StudentsEntranceResult) => (
-                      <div
-                        key={student.id}
-                        className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
-                        onClick={() => handleStudentSelect(student)}
-                        data-testid={`card-student-${student.meritNo}`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="font-semibold">{student.studentName}</p>
-                            <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                              <span>Merit: {student.meritNo}</span>
-                              <span>App: {student.applicationNo}</span>
-                              <span>Roll: {student.rollNo}</span>
-                              <span>Marks: {student.marks}</span>
-                            </div>
-                          </div>
-                          <Badge variant="outline">{student.stream}</Badge>
-                          <Badge variant="secondary">{student.gender}</Badge>
-                        </div>
-                        <Button variant="outline" size="sm" data-testid={`button-select-${student.meritNo}`}>
-                          Select
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-600 dark:text-gray-400">No students found</p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Selected Student & Preferences Section */}
-      {selectedStudent && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              Set District Preferences
-            </CardTitle>
+            <CardTitle>All Students with Preferences</CardTitle>
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search by name, merit number, app number, district, or admin..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-search"
+                />
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Selected Student Info */}
-            <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-              <div className="flex justify-between items-start">
-                <h3 className="font-semibold text-blue-900 dark:text-blue-100">Selected Student:</h3>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={isLocked ? "destructive" : "outline"}
-                    size="sm"
-                    onClick={handleToggleLock}
-                    disabled={updatePreferencesMutation.isPending}
-                    data-testid="button-toggle-lock"
-                  >
-                    {isLocked ? <Lock className="h-4 w-4 mr-2" /> : <Unlock className="h-4 w-4 mr-2" />}
-                    {isLocked ? 'Locked' : 'Unlocked'}
-                  </Button>
-                  {isLocked && (
-                    <Badge variant="destructive">Preferences Locked</Badge>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>App No</TableHead>
+                    <TableHead>Merit No</TableHead>
+                    <TableHead>Student Name</TableHead>
+                    <TableHead>Stream</TableHead>
+                    <TableHead>District</TableHead>
+                    <TableHead>District Admin</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Choices</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8">
+                        Loading students...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredStudents.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                        No students found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredStudents.map((student: Student) => (
+                      <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                        <TableCell className="font-medium">{student.appNo}</TableCell>
+                        <TableCell className="font-medium">{student.meritNumber}</TableCell>
+                        <TableCell>{student.name}</TableCell>
+                        <TableCell>{student.stream}</TableCell>
+                        <TableCell>
+                          {student.counselingDistrict ? (
+                            <div className="flex items-center">
+                              {student.counselingDistrict}
+                              {getDistrictStatusBadge(student.counselingDistrict)}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Not assigned</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{student.districtAdmin || <span className="text-gray-400">None</span>}</TableCell>
+                        <TableCell>{getStudentStatusBadge(student)}</TableCell>
+                        <TableCell className="text-sm max-w-xs">
+                          <div className="flex flex-wrap gap-1">
+                            {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+                              student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                              .map((choice, index) => choice ? (
+                                <span key={index} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
+                                  {index + 1}: {choice}
+                                </span>
+                              ) : null)
+                              .filter(Boolean)}
+                            {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+                              student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                              .filter(Boolean).length === 0 && <span className="text-gray-400">No choices set</span>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditStudent(student)}
+                              data-testid={`button-edit-${student.meritNumber}`}
+                            >
+                              <Edit3 className="w-3 h-3 mr-1" />
+                              Edit
+                            </Button>
+                            {student.counselingDistrict && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleReleaseStudent(student)}
+                                data-testid={`button-release-${student.meritNumber}`}
+                              >
+                                Release
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
-                </div>
-              </div>
-              <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Name:</span>
-                  <p className="font-medium" data-testid="text-selected-student-name">{selectedStudent.studentName}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Merit No:</span>
-                  <p className="font-medium" data-testid="text-selected-student-merit">{selectedStudent.meritNo}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Application No:</span>
-                  <p className="font-medium">{selectedStudent.applicationNo}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">Stream:</span>
-                  <div className="flex items-center gap-2">
-                    {isEditingStream && !isLocked ? (
-                      <Select
-                        value={editableStream}
-                        onValueChange={setEditableStream}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Medical">Medical</SelectItem>
-                          <SelectItem value="Commerce">Commerce</SelectItem>
-                          <SelectItem value="NonMedical">NonMedical</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="font-medium">{editableStream}</p>
-                    )}
-                    {!isLocked && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setIsEditingStream(!isEditingStream)}
-                        data-testid="button-edit-stream"
-                      >
-                        <Edit3 className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* District Preferences Form */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((choiceNum) => (
-                <div key={choiceNum}>
-                  <Label htmlFor={`choice${choiceNum}`}>Choice {choiceNum}</Label>
-                  <Select
-                    value={preferences[`choice${choiceNum}` as keyof StudentPreferences] || ''}
-                    onValueChange={(value) => handlePreferenceChange(choiceNum, value)}
-                    disabled={isLocked}
-                  >
-                    <SelectTrigger data-testid={`select-choice-${choiceNum}`} className={isLocked ? 'opacity-50' : ''}>
-                      <SelectValue placeholder={isLocked ? "Locked" : "Select district"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableDistricts.map((district: string) => (
-                        <SelectItem key={district} value={district}>
-                          {district}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex justify-end gap-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedStudent(null);
-                  setPreferences({});
-                  setStudentId('');
-                  setSearchQuery('');
-                }}
-                data-testid="button-cancel"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                disabled={updatePreferencesMutation.isPending || isLocked}
-                data-testid="button-save-preferences"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {updatePreferencesMutation.isPending ? 'Saving...' : isLocked ? 'Locked' : 'Save Preferences'}
-              </Button>
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-blue-600" />
-            Instructions
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <p>• Search for students using their name, merit number, application number, or roll number</p>
-          <p>• Select a student from the search results to set their district preferences</p>
-          <p>• You can set up to 10 district preferences in order of priority</p>
-          <p>• Duplicate districts are allowed across different choices</p>
-          <p>• All preferences will be saved with your district and admin details automatically</p>
-        </CardContent>
-      </Card>
+        {/* Edit Preferences Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Edit Preferences - {selectedStudent?.name} (Merit: {selectedStudent?.meritNumber})
+                {selectedStudent?.isLocked && (
+                  <Badge variant="destructive" className="ml-2">
+                    <Lock className="w-3 h-3 mr-1" />
+                    Locked by District Admin
+                  </Badge>
+                )}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {Array.from({ length: 10 }, (_, i) => {
+                  const choiceKey = `choice${i + 1}` as keyof typeof editChoices;
+                  return (
+                    <div key={choiceKey} className="space-y-2">
+                      <label className="text-sm font-medium">Choice {i + 1}</label>
+                      <Select
+                        value={editChoices[choiceKey] || ""}
+                        onValueChange={(value) => handleChoiceChange(choiceKey, value)}
+                      >
+                        <SelectTrigger data-testid={`select-${choiceKey}`}>
+                          <SelectValue placeholder="Select district" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No selection</SelectItem>
+                          {districts.map((district) => (
+                            <SelectItem key={district} value={district}>
+                              {district}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {selectedStudent?.isLocked && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-amber-800">Warning: Student is Locked</h4>
+                      <p className="text-sm text-amber-700 mt-1">
+                        This student's preferences have been locked by the district admin. 
+                        Saving changes will override the lock and notify the district admin.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+                data-testid="button-cancel-edit"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSavePreferences}
+                disabled={overridePreferencesMutation.isPending}
+                data-testid="button-save-preferences"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {overridePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Override Confirmation Dialog */}
+        <AlertDialog open={isOverrideConfirmOpen} onOpenChange={setIsOverrideConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                Override Locked Preferences?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This student's preferences are currently locked by the district admin. 
+                Are you sure you want to override these settings? The district admin will be notified of this change.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-override">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmOverride}
+                className="bg-red-600 hover:bg-red-700"
+                data-testid="button-confirm-override"
+              >
+                Yes, Override
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </div>
   );
 }
-
-export default StudentPreferenceManagement;
