@@ -674,6 +674,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // File validation routes (validate without saving to database)
+  app.post('/api/files/validate/students', isCentralAdmin, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const result = await fileService.validateStudentFile(req.file);
+      res.json(result);
+    } catch (error) {
+      console.error("Validate students file error:", error);
+      res.status(500).json({ message: "Failed to validate file" });
+    }
+  });
+
+  app.post('/api/files/validate/vacancies', isCentralAdmin, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const result = await fileService.validateVacancyFile(req.file);
+      res.json(result);
+    } catch (error) {
+      console.error("Validate vacancies file error:", error);
+      res.status(500).json({ message: "Failed to validate file" });
+    }
+  });
+
+  app.post('/api/files/validate/entrance-results', isCentralAdmin, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const result = await fileService.validateEntranceResultsFile(req.file);
+      res.json(result);
+    } catch (error) {
+      console.error("Validate entrance results file error:", error);
+      res.status(500).json({ message: "Failed to validate file" });
+    }
+  });
+
   // Students entrance results routes
   app.get('/api/students-entrance-results', isDistrictAdmin, async (req, res) => {
     try {

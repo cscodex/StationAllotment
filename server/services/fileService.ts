@@ -473,4 +473,118 @@ export class FileService {
 
     return { errors, processed: entranceResults.length };
   }
+
+  // Validation-only methods (don't save to database)
+  async validateStudentFile(file: Express.Multer.File) {
+    try {
+      const students = await this.parseStudentFile(file);
+      const validationResults = this.validateStudents(students);
+      
+      return {
+        isValid: validationResults.errors.length === 0,
+        message: validationResults.errors.length === 0 
+          ? `File is valid. Found ${students.length} student records.`
+          : `Found ${validationResults.errors.length} validation errors.`,
+        errors: validationResults.errors,
+        warnings: [],
+        recordCount: students.length,
+        preview: students.slice(0, 10).map(student => ({
+          appNo: student.appNo,
+          meritNumber: student.meritNumber,
+          name: student.name,
+          stream: student.stream,
+          choice1: student.choice1,
+          choice2: student.choice2,
+          choice3: student.choice3
+        }))
+      };
+    } catch (error) {
+      return {
+        isValid: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        warnings: [],
+        recordCount: 0,
+        preview: []
+      };
+    } finally {
+      // Clean up uploaded file
+      fs.unlinkSync(file.path);
+    }
+  }
+
+  async validateVacancyFile(file: Express.Multer.File) {
+    try {
+      const vacancies = await this.parseVacancyFile(file);
+      const validationResults = this.validateVacancies(vacancies);
+      
+      return {
+        isValid: validationResults.errors.length === 0,
+        message: validationResults.errors.length === 0 
+          ? `File is valid. Found ${vacancies.length} vacancy records.`
+          : `Found ${validationResults.errors.length} validation errors.`,
+        errors: validationResults.errors,
+        warnings: [],
+        recordCount: vacancies.length,
+        preview: vacancies.slice(0, 10).map(vacancy => ({
+          district: vacancy.district,
+          stream: vacancy.stream,
+          totalSeats: vacancy.totalSeats,
+          availableSeats: vacancy.availableSeats,
+          category: vacancy.category,
+          gender: vacancy.gender
+        }))
+      };
+    } catch (error) {
+      return {
+        isValid: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        warnings: [],
+        recordCount: 0,
+        preview: []
+      };
+    } finally {
+      // Clean up uploaded file
+      fs.unlinkSync(file.path);
+    }
+  }
+
+  async validateEntranceResultsFile(file: Express.Multer.File) {
+    try {
+      const entranceResults = await this.parseEntranceResultsFile(file);
+      const validationResults = this.validateEntranceResults(entranceResults);
+      
+      return {
+        isValid: validationResults.errors.length === 0,
+        message: validationResults.errors.length === 0 
+          ? `File is valid. Found ${entranceResults.length} entrance result records.`
+          : `Found ${validationResults.errors.length} validation errors.`,
+        errors: validationResults.errors,
+        warnings: [],
+        recordCount: entranceResults.length,
+        preview: entranceResults.slice(0, 10).map(result => ({
+          meritNo: result.meritNo,
+          applicationNo: result.applicationNo,
+          rollNo: result.rollNo,
+          studentName: result.studentName,
+          marks: result.marks,
+          gender: result.gender,
+          stream: result.stream
+        }))
+      };
+    } catch (error) {
+      return {
+        isValid: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+        warnings: [],
+        recordCount: 0,
+        preview: []
+      };
+    } finally {
+      // Clean up uploaded file
+      fs.unlinkSync(file.path);
+    }
+  }
 }

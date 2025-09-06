@@ -11,6 +11,8 @@ import type { Student, Vacancy } from "@shared/schema";
 export default function FileUploadSection() {
   const [isDragging, setIsDragging] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showValidationPreview, setShowValidationPreview] = useState(false);
+  const [pendingFile, setPendingFile] = useState<{file: File, type: string, validationResults: any} | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const studentFileRef = useRef<HTMLInputElement>(null);
@@ -27,6 +29,39 @@ export default function FileUploadSection() {
   const { data: vacanciesData } = useQuery<Vacancy[]>({
     queryKey: ["/api/vacancies"],
     enabled: showPreview,
+  });
+
+  // File validation mutations (don't save to database)
+  const validateFileMutation = useMutation({
+    mutationFn: async ({file, type}: {file: File, type: string}) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`/api/files/validate/${type}`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+      }
+      return response.json();
+    },
+    onSuccess: (data, variables) => {
+      setPendingFile({
+        file: variables.file,
+        type: variables.type,
+        validationResults: data
+      });
+      setShowValidationPreview(true);
+    },
+    onError: (error) => {
+      toast({
+        title: "Validation failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const uploadStudentsMutation = useMutation({
@@ -52,6 +87,8 @@ export default function FileUploadSection() {
         title: "File uploaded successfully",
         description: data.validationResults?.message || "Student choices file processed",
       });
+      setPendingFile(null);
+      setShowValidationPreview(false);
     },
     onError: (error) => {
       toast({
@@ -244,12 +281,20 @@ export default function FileUploadSection() {
   };
 
   const handleFileUpload = (file: File, type: 'students' | 'vacancies' | 'entrance-results') => {
-    if (type === 'students') {
-      uploadStudentsMutation.mutate(file);
-    } else if (type === 'vacancies') {
-      uploadVacanciesMutation.mutate(file);
+    // First validate the file without saving to database
+    validateFileMutation.mutate({file, type});
+  };
+
+  const handleConfirmUpload = () => {
+    if (!pendingFile) return;
+    
+    // Now actually upload and save to database
+    if (pendingFile.type === 'students') {
+      uploadStudentsMutation.mutate(pendingFile.file);
+    } else if (pendingFile.type === 'vacancies') {
+      uploadVacanciesMutation.mutate(pendingFile.file);
     } else {
-      uploadEntranceResultsMutation.mutate(file);
+      uploadEntranceResultsMutation.mutate(pendingFile.file);
     }
   };
 
@@ -530,11 +575,11 @@ export default function FileUploadSection() {
                       {vacanciesData.map((vacancy) => (
                         <tr key={vacancy.id} className="border-t">
                           <td className="p-2 font-medium">{vacancy.district}</td>
-                          <td className="p-2 text-center">{vacancy.medicalVacancies}</td>
-                          <td className="p-2 text-center">{vacancy.commerceVacancies}</td>
-                          <td className="p-2 text-center">{vacancy.nonMedicalVacancies}</td>
+                          <td className="p-2 text-center">{vacancy.stream === 'Medical' ? vacancy.totalSeats : 0}</td>
+                          <td className="p-2 text-center">{vacancy.stream === 'Commerce' ? vacancy.totalSeats : 0}</td>
+                          <td className="p-2 text-center">{vacancy.stream === 'NonMedical' ? vacancy.totalSeats : 0}</td>
                           <td className="p-2 text-center font-medium">
-                            {(vacancy.medicalVacancies || 0) + (vacancy.commerceVacancies || 0) + (vacancy.nonMedicalVacancies || 0)}
+                            {vacancy.totalSeats || 0}
                           </td>
                         </tr>
                       ))}
@@ -548,6 +593,146 @@ export default function FileUploadSection() {
                 <p>No vacancy data found</p>
                 <p className="text-sm">Upload a vacancy data file to see data here</p>
               </div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Validation Preview Dialog */}
+    <Dialog open={showValidationPreview} onOpenChange={setShowValidationPreview}>
+      <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            File Validation Results - {pendingFile?.file.name}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowValidationPreview(false);
+                setPendingFile(null);
+              }}
+              data-testid="button-close-validation"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Validation Status */}
+          <div className="p-4 rounded-lg border">
+            <div className="flex items-center gap-3">
+              {pendingFile?.validationResults?.isValid ? (
+                <Check className="w-5 h-5 text-green-600" />
+              ) : (
+                <X className="w-5 h-5 text-red-600" />
+              )}
+              <div>
+                <h3 className="font-semibold">
+                  {pendingFile?.validationResults?.isValid ? "Validation Passed" : "Validation Failed"}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {pendingFile?.validationResults?.message || "File validation completed"}
+                </p>
+              </div>
+            </div>
+            
+            {pendingFile && pendingFile.validationResults?.errors?.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="font-medium text-red-600">Errors Found:</h4>
+                <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
+                  {pendingFile.validationResults.errors.map((error: string, index: number) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {pendingFile && pendingFile.validationResults?.warnings?.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="font-medium text-amber-600">Warnings:</h4>
+                <ul className="list-disc list-inside text-sm text-amber-600 space-y-1">
+                  {pendingFile.validationResults.warnings.map((warning: string, index: number) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* Preview Data */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">
+              Data Preview ({pendingFile?.validationResults?.recordCount || 0} records)
+            </h3>
+            {pendingFile?.validationResults?.preview && pendingFile.validationResults.preview.length > 0 ? (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-x-auto max-h-96">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted">
+                      <tr>
+                        {Object.keys(pendingFile.validationResults.preview[0]).map((key) => (
+                          <th key={key} className="p-2 text-left font-medium">
+                            {key}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingFile.validationResults.preview.map((row: any, index: number) => (
+                        <tr key={index} className="border-t">
+                          {Object.values(row).map((value: any, cellIndex: number) => (
+                            <td key={cellIndex} className="p-2">
+                              {typeof value === 'string' || typeof value === 'number' ? 
+                                String(value) : 
+                                JSON.stringify(value)
+                              }
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {pendingFile.validationResults.recordCount > pendingFile.validationResults.preview.length && (
+                  <div className="p-2 text-center text-sm text-muted-foreground bg-muted">
+                    Showing first {pendingFile.validationResults.preview.length} of {pendingFile.validationResults.recordCount} records
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileSpreadsheet className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No preview data available</p>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowValidationPreview(false);
+                setPendingFile(null);
+              }}
+              data-testid="button-cancel-upload"
+            >
+              Cancel
+            </Button>
+            {pendingFile?.validationResults?.isValid && (
+              <Button
+                onClick={handleConfirmUpload}
+                disabled={uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending || uploadEntranceResultsMutation.isPending}
+                data-testid="button-confirm-upload"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {(uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending || uploadEntranceResultsMutation.isPending) 
+                  ? "Uploading..." 
+                  : "Confirm & Upload"
+                }
+              </Button>
             )}
           </div>
         </div>
