@@ -1114,6 +1114,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only lock/unlock students in your district" });
       }
 
+      // Only central admin can unlock students - district admin can only lock
+      if (!isLocked && user?.role === 'district_admin') {
+        return res.status(403).json({ message: "Only central admin can unlock students" });
+      }
+
       const updatedStudent = isLocked 
         ? await storage.lockStudent(id)
         : await storage.unlockStudent(id);
