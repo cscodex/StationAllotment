@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQuery } from "@tanstack/react-query";
-import { Menu, Bell, Clock } from "lucide-react";
+import { Menu, Bell, Clock, Users, CheckCircle, XCircle, Eye } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import type { DistrictStatus } from "@shared/schema";
 
 interface HeaderProps {
   title: string;
@@ -11,13 +14,24 @@ interface HeaderProps {
 }
 
 export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: HeaderProps) {
+  const { user } = useAuth();
   const { data: settings } = useQuery({
     queryKey: ["/api/settings"],
+  });
+
+  // Fetch district statuses for central admin
+  const { data: districtStatuses } = useQuery<DistrictStatus[]>({
+    queryKey: ["/api/district-status"],
+    enabled: user?.role === 'central_admin',
   });
 
   const deadline = settings?.find((s: any) => s.key === 'allocation_deadline')?.value;
   const deadlineDate = deadline ? new Date(deadline) : null;
   const daysLeft = deadlineDate ? Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+
+  const finalizedDistricts = districtStatuses?.filter(ds => ds.isFinalized).length || 0;
+  const totalDistricts = districtStatuses?.length || 0;
+  const pendingDistricts = totalDistricts - finalizedDistricts;
 
   return (
     <header className="bg-card border-b border-border p-6">
@@ -57,6 +71,58 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
                 {daysLeft > 0 ? `${daysLeft} days left` : "Deadline passed"}
               </span>
             </Badge>
+          )}
+          
+          {user?.role === 'central_admin' && districtStatuses && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="flex items-center space-x-2" data-testid="button-district-status">
+                  <Users className="w-4 h-4" />
+                  <span>{finalizedDistricts}/{totalDistricts}</span>
+                  <Badge variant={pendingDistricts > 0 ? "destructive" : "default"} className="ml-1">
+                    {pendingDistricts > 0 ? "Pending" : "All Done"}
+                  </Badge>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80" align="end">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold">District Status</h4>
+                    <Badge variant={pendingDistricts === 0 ? "default" : "secondary"}>
+                      {finalizedDistricts}/{totalDistricts} Finalized
+                    </Badge>
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {districtStatuses.map((district) => (
+                      <div key={district.id} className="flex items-center justify-between p-2 rounded border">
+                        <div className="flex items-center space-x-2">
+                          {district.isFinalized ? (
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <XCircle className="w-4 h-4 text-red-600" />
+                          )}
+                          <span className="font-medium">{district.district}</span>
+                        </div>
+                        <div className="text-right text-sm text-gray-600">
+                          <div>{district.lockedStudents}/{district.totalStudents} locked</div>
+                          <div className="text-xs">{district.studentsWithChoices} with choices</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {pendingDistricts > 0 && (
+                    <div className="pt-2 border-t">
+                      <p className="text-sm text-amber-600 flex items-center space-x-1">
+                        <XCircle className="w-4 h-4" />
+                        <span>{pendingDistricts} districts need to finalize their data</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           )}
           
           <Button variant="ghost" size="sm" className="relative" data-testid="button-notifications">
