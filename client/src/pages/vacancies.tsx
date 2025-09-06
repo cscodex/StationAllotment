@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Building2, Users, TrendingUp, Clock, Filter, Eye, TableIcon } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DISTRICTS, STREAMS, getCategoriesForGender } from "@shared/schema";
+import { DISTRICTS, SCHOOL_DISTRICTS, COUNSELING_DISTRICTS, STREAMS, getCategoriesForGender } from "@shared/schema";
 import type { Vacancy } from "@shared/schema";
 
 export default function Vacancies() {
@@ -20,6 +20,16 @@ export default function Vacancies() {
   const { data: vacancies } = useQuery<Vacancy[]>({
     queryKey: ["/api/vacancies"],
   });
+
+  // Get unique districts that actually have vacancy data
+  const availableDistricts = Array.from(
+    new Set(vacancies?.map(v => v.district))
+  ).sort();
+
+  // Determine which districts to show in filter (only those with schools/vacancies)
+  const districtFilterOptions = availableDistricts.filter(district => 
+    SCHOOL_DISTRICTS.includes(district as any)
+  );
 
   // Filter vacancies based on selected filters
   const filteredVacancies = vacancies?.filter(vacancy => {
@@ -100,6 +110,12 @@ export default function Vacancies() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-800 dark:text-blue-300">
+                  <strong>Note:</strong> District filter shows only the 10 school districts where seats are available. 
+                  All 23 Punjab districts have counseling services, but schools are located only in these select districts.
+                </p>
+              </div>
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center space-x-2">
                   <label className="text-sm font-medium">District:</label>
@@ -108,8 +124,8 @@ export default function Vacancies() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Districts</SelectItem>
-                      {DISTRICTS.map(district => (
+                      <SelectItem value="all">All School Districts</SelectItem>
+                      {districtFilterOptions.map(district => (
                         <SelectItem key={district} value={district}>{district}</SelectItem>
                       ))}
                     </SelectContent>

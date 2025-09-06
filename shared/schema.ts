@@ -243,7 +243,7 @@ export type InsertFileUpload = z.infer<typeof insertFileUploadSchema>;
 export type DistrictStatus = typeof districtStatus.$inferSelect;
 export type InsertDistrictStatus = z.infer<typeof insertDistrictStatusSchema>;
 
-// Constants - All 23 districts of Punjab
+// Constants - All 23 districts of Punjab (Counseling Districts)
 export const DISTRICTS = [
   'Amritsar',
   'Barnala', 
@@ -269,6 +269,23 @@ export const DISTRICTS = [
   'Tarn Taran',
   'Talwara'
 ] as const;
+
+// School Districts - Only 10 districts have schools
+export const SCHOOL_DISTRICTS = [
+  'Amritsar',
+  'Bathinda', 
+  'Ferozepur',
+  'Gurdaspur',
+  'Jalandhar',
+  'Ludhiana',
+  'Patiala',
+  'Pathankot',
+  'SAS Nagar',
+  'Sangrur'
+] as const;
+
+// Counseling Districts - All 23 districts with district admins
+export const COUNSELING_DISTRICTS = DISTRICTS;
 
 export const STREAMS = ['Medical', 'Commerce', 'NonMedical'] as const;
 export const GENDERS = ['Male', 'Female', 'Other'] as const;
