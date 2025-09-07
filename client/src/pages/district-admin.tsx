@@ -701,7 +701,7 @@ export default function DistrictAdmin() {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-5 gap-3 mb-4">
                       {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
                         <FormField
                           key={choiceNum}
@@ -717,7 +717,7 @@ export default function DistrictAdmin() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="">None</SelectItem>
+                                  <SelectItem value="none">None</SelectItem>
                                   {DISTRICTS.map((district) => (
                                     <SelectItem key={district} value={district}>
                                       {district}

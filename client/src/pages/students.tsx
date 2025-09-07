@@ -174,7 +174,7 @@ export default function Students() {
                           <SelectValue placeholder="Select stream" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           <SelectItem value="Medical">Medical</SelectItem>
                           <SelectItem value="Commerce">Commerce</SelectItem>
                           <SelectItem value="NonMedical">NonMedical</SelectItem>
