@@ -34,13 +34,13 @@ const navigation = [
   {
     name: "Operations",
     items: [
-      { name: "Student Preferences", href: "/student-preference-management", icon: UserCog, roles: ["central_admin", "district_admin"] },
+      { name: "Student Preferences", href: "/district-admin", icon: UserCog, roles: ["district_admin"] },
+      { name: "Student Preference Management", href: "/student-preference-management", icon: UserCog, roles: ["central_admin"] },
       { name: "Run Allocation", href: "/allocation", icon: Settings, roles: ["central_admin"] },
       { name: "Reports", href: "/reports", icon: BarChart3, roles: ["central_admin", "district_admin"] },
       { name: "Export Results", href: "/export-results", icon: Download, roles: ["central_admin"] },
       { name: "Audit Log", href: "/audit-log", icon: History, roles: ["central_admin"] },
       { name: "Manage Admins", href: "/manage-district-admins", icon: Users, roles: ["central_admin"] },
-      { name: "District Admin", href: "/district-admin", icon: ShieldQuestion, roles: ["district_admin"] },
     ],
   },
 ];
