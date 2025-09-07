@@ -268,6 +268,33 @@ export default function DistrictAdmin() {
   // Batch operations
   const handleBatchLock = () => {
     if (selectedStudents.size === 0) return;
+    
+    // Validate that all selected students have complete preferences
+    const selectedStudentObjects = filteredStudents.filter((s: Student) => selectedStudents.has(s.id));
+    const studentsWithoutStream = selectedStudentObjects.filter((s: Student) => !s.stream);
+    const studentsWithIncompleteChoices = selectedStudentObjects.filter((s: Student) => 
+      !s.choice1 || !s.choice2 || !s.choice3 || !s.choice4 || !s.choice5 || 
+      !s.choice6 || !s.choice7 || !s.choice8 || !s.choice9 || !s.choice10
+    );
+    
+    if (studentsWithoutStream.length > 0) {
+      toast({
+        title: "Cannot Lock Students",
+        description: `${studentsWithoutStream.length} students don't have stream set. Please set streams before locking.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (studentsWithIncompleteChoices.length > 0) {
+      toast({
+        title: "Cannot Lock Students",
+        description: `${studentsWithIncompleteChoices.length} students have incomplete district preferences. Please complete all 10 choices.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     batchLockMutation.mutate(Array.from(selectedStudents));
   };
 
@@ -347,6 +374,29 @@ export default function DistrictAdmin() {
       toast({
         title: "Cannot Unlock",
         description: "Only central admin can unlock students. You can request unlock from central admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that all preferences including stream are set before locking
+    if (!student.stream) {
+      toast({
+        title: "Cannot Lock Student",
+        description: "Student stream must be set before locking. Please update the student's stream preference.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const hasAllChoices = student.choice1 && student.choice2 && student.choice3 && 
+                         student.choice4 && student.choice5 && student.choice6 &&
+                         student.choice7 && student.choice8 && student.choice9 && student.choice10;
+    
+    if (!hasAllChoices) {
+      toast({
+        title: "Cannot Lock Student",
+        description: "All 10 district preferences must be set before locking. Please complete all choices.",
         variant: "destructive",
       });
       return;

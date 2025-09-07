@@ -730,6 +730,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Student not found" });
       }
 
+      // Validate that all preferences including stream are set before locking
+      if (isLocked) {
+        if (!student.stream) {
+          return res.status(400).json({ 
+            message: "Cannot lock student: Student stream must be set before locking" 
+          });
+        }
+
+        const hasAllChoices = student.choice1 && student.choice2 && student.choice3 && 
+                             student.choice4 && student.choice5 && student.choice6 &&
+                             student.choice7 && student.choice8 && student.choice9 && student.choice10;
+        
+        if (!hasAllChoices) {
+          return res.status(400).json({ 
+            message: "Cannot lock student: All 10 district preferences must be set before locking" 
+          });
+        }
+      }
+
       const updatedStudent = await storage.updateStudent(id, { isLocked });
       
       await auditService.log(req.user.id, 'student_lock_status_change', 'students', id, {
