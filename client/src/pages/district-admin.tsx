@@ -319,9 +319,65 @@ export default function DistrictAdmin() {
       return;
     }
 
+    // District admin can only lock students, not unlock them
+    if (student.isLocked) {
+      toast({
+        title: "Cannot Unlock",
+        description: "Only central admin can unlock students. You can request unlock from central admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     lockStudentMutation.mutate({
       studentId: student.id,
-      isLocked: !student.isLocked,
+      isLocked: true,
+    });
+  };
+
+  const handleRequestUnlock = (student: Student) => {
+    const reason = prompt("Please provide a reason for unlock request:");
+    if (!reason || reason.trim() === "") {
+      toast({
+        title: "Reason Required",
+        description: "Please provide a reason for the unlock request",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // This will be implemented with the unlock request API
+    fetch('/api/unlock-requests', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studentId: student.id,
+        reason: reason.trim(),
+      }),
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.message) {
+        toast({
+          title: "Error",
+          description: data.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Unlock Request Sent",
+          description: "Your unlock request has been sent to central admin for review",
+        });
+      }
+    })
+    .catch(error => {
+      toast({
+        title: "Error",
+        description: "Failed to send unlock request",
+        variant: "destructive",
+      });
     });
   };
 
@@ -617,15 +673,27 @@ export default function DistrictAdmin() {
                                   <Edit className="w-3 h-3 mr-1" />
                                   Edit
                                 </Button>
-                                <Button
-                                  variant={student.isLocked === true ? "destructive" : "secondary"}
-                                  size="sm"
-                                  onClick={() => handleLockToggle(student)}
-                                  disabled={isDeadlinePassed}
-                                  data-testid={`button-lock-${student.meritNumber}`}
-                                >
-                                  {student.isLocked === true ? "🔓" : "🔒"}
-                                </Button>
+                                {student.isLocked === true ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRequestUnlock(student)}
+                                    disabled={isDeadlinePassed}
+                                    data-testid={`button-request-unlock-${student.meritNumber}`}
+                                  >
+                                    📝 Request Unlock
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleLockToggle(student)}
+                                    disabled={isDeadlinePassed}
+                                    data-testid={`button-lock-${student.meritNumber}`}
+                                  >
+                                    🔒 Lock
+                                  </Button>
+                                )}
                                 <Button
                                   variant="outline"
                                   size="sm"
