@@ -184,6 +184,33 @@ export default function StudentPreferenceManagement() {
     }
   });
 
+  // Lock/unlock student mutation
+  const lockStudentMutation = useMutation({
+    mutationFn: async (data: { studentId: string, isLocked: boolean }) => {
+      const response = await apiRequest('PUT', `/api/students/${data.studentId}/lock`, {
+        isLocked: data.isLocked
+      });
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      const queryKey = user?.role === 'district_admin' 
+        ? ["/api/students", { district: user.district, limit: 1000, offset: 0 }]
+        : ["/api/students", { limit: 1000, offset: 0 }];
+      queryClient.invalidateQueries({ queryKey });
+      toast({
+        title: "Success",
+        description: `Student ${variables.isLocked ? 'locked' : 'unlocked'} successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update lock status",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Add student with preferences mutation
   const addStudentMutation = useMutation({
     mutationFn: async (data: { entranceStudentId: string, preferences: any, stream?: string }) => {
@@ -258,6 +285,13 @@ export default function StudentPreferenceManagement() {
 
   const handleReleaseStudent = (student: Student) => {
     releaseStudentMutation.mutate(student.id);
+  };
+
+  const handleToggleLock = (student: Student) => {
+    lockStudentMutation.mutate({
+      studentId: student.id,
+      isLocked: !student.isLocked
+    });
   };
 
   const handleSaveNewStudent = () => {
@@ -473,7 +507,7 @@ export default function StudentPreferenceManagement() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             <Button
                               variant="outline"
                               size="sm"
@@ -483,6 +517,22 @@ export default function StudentPreferenceManagement() {
                               <Edit3 className="w-3 h-3 mr-1" />
                               Edit
                             </Button>
+                            
+                            {/* Lock/Unlock button: District admin can lock/unlock students in their district */}
+                            {user?.role === 'district_admin' && student.counselingDistrict === user.district && (
+                              <Button
+                                variant={student.isLocked ? "destructive" : "outline"}
+                                size="sm"
+                                onClick={() => handleToggleLock(student)}
+                                disabled={lockStudentMutation.isPending}
+                                data-testid={`button-lock-${student.meritNumber}`}
+                                title={student.isLocked ? "Unlock student preferences" : "Lock student preferences"}
+                              >
+                                {student.isLocked ? <Unlock className="w-3 h-3 mr-1" /> : <Lock className="w-3 h-3 mr-1" />}
+                                {student.isLocked ? "Unlock" : "Lock"}
+                              </Button>
+                            )}
+                            
                             {/* Release button: Central admin can release any student, District admin can only release unlocked students from their district */}
                             {student.counselingDistrict && (
                               (user?.role === 'central_admin' || 
