@@ -7,6 +7,7 @@ import {
   auditLogs,
   fileUploads,
   districtStatus,
+  unlockRequests,
   type User,
   type InsertUser,
   type Student,
@@ -23,6 +24,8 @@ import {
   type InsertFileUpload,
   type DistrictStatus,
   type InsertDistrictStatus,
+  type UnlockRequest,
+  type InsertUnlockRequest,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, asc, sql, or, ilike } from "drizzle-orm";
@@ -97,6 +100,13 @@ export interface IStorage {
   unlockStudent(studentId: string): Promise<Student>;
   getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{students: Student[], total: number}>;
   releaseStudentFromDistrict(studentId: string): Promise<Student>;
+
+  // Unlock request operations
+  createUnlockRequest(request: InsertUnlockRequest): Promise<UnlockRequest>;
+  getUnlockRequests(): Promise<UnlockRequest[]>;
+  getUnlockRequestsByDistrict(district: string): Promise<UnlockRequest[]>;
+  updateUnlockRequest(id: string, updates: Partial<UnlockRequest>): Promise<UnlockRequest>;
+  getPendingUnlockRequests(): Promise<UnlockRequest[]>;
 
   // Statistics
   getDashboardStats(): Promise<{
@@ -573,6 +583,49 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { hasConflict: false };
+  }
+
+  // Unlock request operations
+  async createUnlockRequest(request: InsertUnlockRequest): Promise<UnlockRequest> {
+    const [created] = await db.insert(unlockRequests).values(request).returning();
+    return created;
+  }
+
+  async getUnlockRequests(): Promise<UnlockRequest[]> {
+    return db.select().from(unlockRequests).orderBy(desc(unlockRequests.createdAt));
+  }
+
+  async getUnlockRequestsByDistrict(district: string): Promise<UnlockRequest[]> {
+    return db.select({
+      id: unlockRequests.id,
+      studentId: unlockRequests.studentId,
+      requestedBy: unlockRequests.requestedBy,
+      reason: unlockRequests.reason,
+      status: unlockRequests.status,
+      reviewedBy: unlockRequests.reviewedBy,
+      reviewedAt: unlockRequests.reviewedAt,
+      reviewComments: unlockRequests.reviewComments,
+      createdAt: unlockRequests.createdAt,
+      updatedAt: unlockRequests.updatedAt,
+    }).from(unlockRequests)
+      .innerJoin(students, eq(unlockRequests.studentId, students.id))
+      .where(eq(students.counselingDistrict, district))
+      .orderBy(desc(unlockRequests.createdAt));
+  }
+
+  async updateUnlockRequest(id: string, updates: Partial<UnlockRequest>): Promise<UnlockRequest> {
+    const [updated] = await db
+      .update(unlockRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(unlockRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getPendingUnlockRequests(): Promise<UnlockRequest[]> {
+    return db.select().from(unlockRequests)
+      .where(eq(unlockRequests.status, 'pending'))
+      .orderBy(desc(unlockRequests.createdAt));
   }
 }
 

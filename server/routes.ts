@@ -1168,6 +1168,107 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Unlock request routes
+  app.post('/api/unlock-requests', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { studentId, reason } = req.body;
+      const user = await storage.getUser(req.session.userId);
+      
+      if (!studentId || !reason) {
+        return res.status(400).json({ message: "Student ID and reason are required" });
+      }
+
+      const student = await storage.getStudent(studentId);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // District admin can only request unlock for students in their district
+      if (user?.role === 'district_admin' && student.counselingDistrict !== user.district) {
+        return res.status(403).json({ message: "Can only request unlock for students in your district" });
+      }
+
+      const unlockRequest = await storage.createUnlockRequest({
+        studentId,
+        requestedBy: req.session.userId,
+        reason,
+        status: 'pending'
+      });
+
+      await auditService.log(req.session.userId, 'unlock_request_created', 'unlock_request', unlockRequest.id, {
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        reason
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(unlockRequest);
+    } catch (error) {
+      console.error("Create unlock request error:", error);
+      res.status(500).json({ message: "Failed to create unlock request" });
+    }
+  });
+
+  app.get('/api/unlock-requests', isCentralAdmin, async (req, res) => {
+    try {
+      const requests = await storage.getPendingUnlockRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Get unlock requests error:", error);
+      res.status(500).json({ message: "Failed to fetch unlock requests" });
+    }
+  });
+
+  app.put('/api/unlock-requests/:id/approve', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reviewComments } = req.body;
+
+      const unlockRequest = await storage.updateUnlockRequest(id, {
+        status: 'approved',
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date(),
+        reviewComments
+      });
+
+      // If approved, unlock the student
+      if (unlockRequest.studentId) {
+        await storage.unlockStudent(unlockRequest.studentId);
+      }
+
+      await auditService.log(req.session.userId, 'unlock_request_approved', 'unlock_request', id, {
+        reviewComments
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(unlockRequest);
+    } catch (error) {
+      console.error("Approve unlock request error:", error);
+      res.status(500).json({ message: "Failed to approve unlock request" });
+    }
+  });
+
+  app.put('/api/unlock-requests/:id/reject', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reviewComments } = req.body;
+
+      const unlockRequest = await storage.updateUnlockRequest(id, {
+        status: 'rejected',
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date(),
+        reviewComments
+      });
+
+      await auditService.log(req.session.userId, 'unlock_request_rejected', 'unlock_request', id, {
+        reviewComments
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(unlockRequest);
+    } catch (error) {
+      console.error("Reject unlock request error:", error);
+      res.status(500).json({ message: "Failed to reject unlock request" });
+    }
+  });
+
   // Get students by district for district admins
   app.get('/api/district/:district/students', isAuthenticated, async (req: any, res) => {
     try {

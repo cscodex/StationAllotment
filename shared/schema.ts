@@ -152,6 +152,20 @@ export const fileUploads = pgTable("file_uploads", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Unlock requests table for district admin unlock requests
+export const unlockRequests = pgTable("unlock_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").references(() => students.id).notNull(),
+  requestedBy: varchar("requested_by").references(() => users.id).notNull(),
+  reason: text("reason").notNull(),
+  status: varchar("status").default('pending'), // 'pending' | 'approved' | 'rejected'
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewComments: text("review_comments"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   auditLogs: many(auditLogs),
@@ -220,6 +234,12 @@ export const insertFileUploadSchema = createInsertSchema(fileUploads).omit({
   createdAt: true,
 });
 
+export const insertUnlockRequestSchema = createInsertSchema(unlockRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertDistrictStatusSchema = createInsertSchema(districtStatus).omit({
   id: true,
   createdAt: true,
@@ -241,6 +261,8 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type FileUpload = typeof fileUploads.$inferSelect;
 export type InsertFileUpload = z.infer<typeof insertFileUploadSchema>;
+export type UnlockRequest = typeof unlockRequests.$inferSelect;
+export type InsertUnlockRequest = z.infer<typeof insertUnlockRequestSchema>;
 export type DistrictStatus = typeof districtStatus.$inferSelect;
 export type InsertDistrictStatus = z.infer<typeof insertDistrictStatusSchema>;
 
