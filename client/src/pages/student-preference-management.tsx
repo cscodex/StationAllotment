@@ -31,6 +31,12 @@ export default function StudentPreferenceManagement() {
   const [newStudentChoices, setNewStudentChoices] = useState<{[key: string]: string}>({});
   const [selectedStream, setSelectedStream] = useState<string>("");
   
+  // State for central admin student search
+  const [centralSearchTerm, setCentralSearchTerm] = useState("");
+  const [centralSelectedStudent, setCentralSelectedStudent] = useState<Student | null>(null);
+  const [isCentralEditDialogOpen, setIsCentralEditDialogOpen] = useState(false);
+  const [centralEditChoices, setCentralEditChoices] = useState<{[key: string]: string}>({});
+  
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -69,6 +75,13 @@ export default function StudentPreferenceManagement() {
            student.meritNo.toString().includes(entranceSearchTerm) ||
            student.applicationNo?.includes(entranceSearchTerm) ||
            student.rollNo?.includes(entranceSearchTerm);
+  }) || [];
+
+  // Central admin filtered students (different from main filter)
+  const centralFilteredStudents = studentsData?.students?.filter((student: Student) => {
+    return student.name.toLowerCase().includes(centralSearchTerm.toLowerCase()) ||
+           student.meritNumber.toString().includes(centralSearchTerm) ||
+           student.appNo?.includes(centralSearchTerm);
   }) || [];
 
   const handleEditStudent = (student: Student) => {
@@ -257,6 +270,43 @@ export default function StudentPreferenceManagement() {
     });
   };
 
+  // Central admin functions
+  const handleCentralEditStudent = (student: Student) => {
+    setCentralSelectedStudent(student);
+    setCentralEditChoices({
+      choice1: student.choice1 || '',
+      choice2: student.choice2 || '',
+      choice3: student.choice3 || '',
+      choice4: student.choice4 || '',
+      choice5: student.choice5 || '',
+      choice6: student.choice6 || '',
+      choice7: student.choice7 || '',
+      choice8: student.choice8 || '',
+      choice9: student.choice9 || '',
+      choice10: student.choice10 || '',
+    });
+    setIsCentralEditDialogOpen(true);
+  };
+
+  const handleCentralChoiceChange = (choiceKey: string, value: string) => {
+    setCentralEditChoices(prev => ({
+      ...prev,
+      [choiceKey]: value
+    }));
+  };
+
+  const handleCentralSavePreferences = () => {
+    if (!centralSelectedStudent) return;
+    
+    updatePreferencesMutation.mutate({
+      studentId: centralSelectedStudent.id,
+      preferences: centralEditChoices,
+      isOverride: true
+    });
+    setIsCentralEditDialogOpen(false);
+    setCentralSelectedStudent(null);
+  };
+
   const getDistrictStatusBadge = (district: string) => {
     const status = districtStatuses?.find(ds => ds.district === district);
     if (!status) return null;
@@ -329,6 +379,12 @@ export default function StudentPreferenceManagement() {
               <TabsTrigger value="add-new">
                 <UserPlus className="w-4 h-4 mr-2" />
                 Add from Entrance Results ({filteredEntranceResults.length})
+              </TabsTrigger>
+            )}
+            {user?.role === 'central_admin' && (
+              <TabsTrigger value="search-students">
+                <Search className="w-4 h-4 mr-2" />
+                Search & Update Students
               </TabsTrigger>
             )}
           </TabsList>
@@ -539,6 +595,105 @@ export default function StudentPreferenceManagement() {
               </Card>
             </TabsContent>
           )}
+          
+          {/* Tab for central admin search and update */}
+          {user?.role === 'central_admin' && (
+            <TabsContent value="search-students">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Search & Update Student Preferences</CardTitle>
+                  <div className="flex items-center gap-4">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Search by name, merit number, or app number..."
+                        value={centralSearchTerm}
+                        onChange={(e) => setCentralSearchTerm(e.target.value)}
+                        className="pl-10"
+                        data-testid="input-central-search"
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>App No</TableHead>
+                          <TableHead>Merit No</TableHead>
+                          <TableHead>Student Name</TableHead>
+                          <TableHead>Stream</TableHead>
+                          <TableHead>Current District</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Current Choices</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {centralFilteredStudents.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                              {centralSearchTerm ? "No students found matching your search" : "Enter search terms to find students"}
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          centralFilteredStudents.map((student: Student) => (
+                            <TableRow key={student.id} data-testid={`central-student-row-${student.meritNumber}`}>
+                              <TableCell className="font-medium">{student.appNo}</TableCell>
+                              <TableCell className="font-medium">{student.meritNumber}</TableCell>
+                              <TableCell>{student.name}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{student.stream}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {student.counselingDistrict ? (
+                                  <div className="flex items-center">
+                                    {student.counselingDistrict}
+                                    {getDistrictStatusBadge(student.counselingDistrict)}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">Not assigned</span>
+                                )}
+                              </TableCell>
+                              <TableCell>{getStudentStatusBadge(student)}</TableCell>
+                              <TableCell className="text-sm max-w-xs">
+                                <div className="flex flex-wrap gap-1">
+                                  {[student.choice1, student.choice2, student.choice3]
+                                    .map((choice, index) => choice ? (
+                                      <span key={index} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
+                                        {index + 1}: {choice}
+                                      </span>
+                                    ) : null)
+                                    .filter(Boolean)}
+                                  {[student.choice1, student.choice2, student.choice3].filter(Boolean).length === 0 && 
+                                    <span className="text-gray-400">No choices set</span>}
+                                  {[student.choice1, student.choice2, student.choice3].filter(Boolean).length > 0 && 
+                                    <span className="text-gray-500 text-xs">+{[student.choice4, student.choice5, student.choice6, student.choice7, student.choice8, student.choice9, student.choice10].filter(Boolean).length} more</span>}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleCentralEditStudent(student)}
+                                  data-testid={`button-central-edit-${student.meritNumber}`}
+                                >
+                                  <Edit3 className="w-3 h-3 mr-1" />
+                                  Update Preferences
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
 
         {/* Add Student Dialog */}
@@ -719,6 +874,109 @@ export default function StudentPreferenceManagement() {
               >
                 <Save className="w-4 h-4 mr-2" />
                 {updatePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Central Admin Edit Dialog */}
+        <Dialog open={isCentralEditDialogOpen} onOpenChange={setIsCentralEditDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5" />
+                Update Student Preferences - {centralSelectedStudent?.name}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              {centralSelectedStudent && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">App No:</span>
+                      <div className="text-gray-900">{centralSelectedStudent.appNo}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Merit No:</span>
+                      <div className="text-gray-900">{centralSelectedStudent.meritNumber}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Stream:</span>
+                      <div className="text-gray-900">{centralSelectedStudent.stream}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Current District:</span>
+                      <div className="text-gray-900">{centralSelectedStudent.counselingDistrict || 'Not assigned'}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h4 className="text-lg font-medium mb-4">District Preferences (Priority Order)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((choiceNum) => {
+                    const choiceKey = `choice${choiceNum}`;
+                    return (
+                      <div key={choiceNum} className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-700 w-16">
+                          Choice {choiceNum}:
+                        </span>
+                        <Select
+                          value={centralEditChoices[choiceKey] || ""}
+                          onValueChange={(value) => handleCentralChoiceChange(choiceKey, value === "__none__" ? "" : value)}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select district" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Clear Choice</SelectItem>
+                            {districts.map((district) => (
+                              <SelectItem key={district} value={district}>
+                                {district}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {centralSelectedStudent?.isLocked && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-medium text-amber-800">Note: Student is Locked</h4>
+                        <p className="text-sm text-amber-700 mt-1">
+                          This student's preferences have been locked by the district admin. 
+                          Your changes will override the lock as central admin.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCentralEditDialogOpen(false)}
+                data-testid="button-cancel-central-edit"
+              >
+                <X className="w-4 h-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCentralSavePreferences}
+                disabled={updatePreferencesMutation.isPending}
+                data-testid="button-save-central-preferences"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {updatePreferencesMutation.isPending ? "Saving..." : "Update Preferences"}
               </Button>
             </DialogFooter>
           </DialogContent>
