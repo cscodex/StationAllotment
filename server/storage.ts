@@ -524,9 +524,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStudentsByDistrict(district: string, limit = 50, offset = 0): Promise<{students: Student[], total: number}> {
+    // District admins can see:
+    // 1. Students assigned to their district (counselingDistrict = district)
+    // 2. Students not assigned to any district (counselingDistrict is null)
+    // 3. Students that are not released (isReleased = false)
     const studentsResult = await db.select().from(students)
       .where(and(
-        eq(students.counselingDistrict, district),
+        or(
+          eq(students.counselingDistrict, district),
+          sql`${students.counselingDistrict} IS NULL`
+        ),
         eq(students.isReleased, false)
       ))
       .orderBy(asc(students.meritNumber))
@@ -536,7 +543,10 @@ export class DatabaseStorage implements IStorage {
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(students)
       .where(and(
-        eq(students.counselingDistrict, district),
+        or(
+          eq(students.counselingDistrict, district),
+          sql`${students.counselingDistrict} IS NULL`
+        ),
         eq(students.isReleased, false)
       ));
     
