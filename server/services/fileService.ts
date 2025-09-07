@@ -153,12 +153,47 @@ export class FileService {
       // Insert entrance results (don't clear existing ones, allow additions)
       await this.storage.bulkCreateStudentsEntranceResults(entranceResults);
 
+      // Auto-create student records from entrance results with common fields
+      const studentsToCreate: InsertStudent[] = [];
+      
+      for (const result of entranceResults) {
+        // Check if student already exists
+        const existingStudent = await this.storage.getStudentByMeritNumber(result.meritNo);
+        
+        if (!existingStudent) {
+          studentsToCreate.push({
+            appNo: result.applicationNo,
+            meritNumber: result.meritNo,
+            name: result.studentName,
+            gender: result.gender,
+            category: result.category,
+            stream: result.stream || '',
+            choice1: null,
+            choice2: null,
+            choice3: null,
+            choice4: null,
+            choice5: null,
+            choice6: null,
+            choice7: null,
+            choice8: null,
+            choice9: null,
+            choice10: null,
+            allocationStatus: 'pending',
+          });
+        }
+      }
+
+      // Insert the new student records
+      if (studentsToCreate.length > 0) {
+        await this.storage.bulkCreateStudents(studentsToCreate);
+      }
+
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'processed',
         validationResults: { 
           errors: [], 
           processed: entranceResults.length,
-          message: `Successfully processed ${entranceResults.length} entrance result records` 
+          message: `Successfully processed ${entranceResults.length} entrance result records and auto-created ${studentsToCreate.length} student records` 
         },
       });
 
