@@ -582,9 +582,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allocated = req.query.allocated === 'true';
       const user = await storage.getUser(req.session.userId);
       
+      console.log('📚 Students API called by:', { 
+        userId: user?.id, 
+        username: user?.username, 
+        role: user?.role, 
+        district: user?.district,
+        limit, 
+        offset, 
+        allocated 
+      });
+      
       if (allocated) {
         // For the reports page - return all students
         const students = await storage.getStudents(10000, 0);
+        console.log('📊 Returning all students for reports:', students.length);
         return res.json(students);
       }
       
@@ -592,13 +603,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // District admin can only see students in their district
       if (user?.role === 'district_admin' && user.district) {
+        console.log('🏢 Fetching students for district admin:', user.district);
         const result = await storage.getStudentsByDistrict(user.district, limit, offset);
         students = result.students;
         total = result.total;
+        console.log('📋 District students found:', { count: students.length, total });
       } else {
         // Central admin can see all students
+        console.log('🌐 Fetching all students for central admin');
         students = await storage.getStudents(limit, offset);
         total = await storage.getStudentsCount();
+        console.log('📋 All students found:', { count: students.length, total });
       }
       
       // Map database fields to frontend expected fields
@@ -607,6 +622,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         applicationNumber: student.appNo, // Map appNo to applicationNumber
       }));
       
+      console.log('✅ Returning students response:', { count: mappedStudents.length, total });
       res.json({ students: mappedStudents, total });
     } catch (error) {
       console.error("Get students error:", error);
