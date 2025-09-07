@@ -23,7 +23,7 @@ async function seedUsers() {
     console.log('🌱 Starting user seeding...');
     
     // Read credentials.json
-    const credentialsData = fs.readFileSync('../credentials.json', 'utf-8');
+    const credentialsData = fs.readFileSync('./credentials.json', 'utf-8');
     const credentials: Credentials = JSON.parse(credentialsData);
     
     const usersToSeed: CredentialUser[] = [
