@@ -565,11 +565,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Students routes
-  app.get('/api/students', isAuthenticated, async (req, res) => {
+  app.get('/api/students', isAuthenticated, async (req: any, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
       const allocated = req.query.allocated === 'true';
+      const user = await storage.getUser(req.session.userId);
       
       if (allocated) {
         // For the reports page - return all students
@@ -577,8 +578,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json(students);
       }
       
-      const students = await storage.getStudents(limit, offset);
-      const total = await storage.getStudentsCount();
+      let students, total;
+      
+      // District admin can only see students in their district
+      if (user?.role === 'district_admin' && user.district) {
+        const result = await storage.getStudentsByDistrict(user.district, limit, offset);
+        students = result.students;
+        total = result.total;
+      } else {
+        // Central admin can see all students
+        students = await storage.getStudents(limit, offset);
+        total = await storage.getStudentsCount();
+      }
       
       // Map database fields to frontend expected fields
       const mappedStudents = students.map(student => ({

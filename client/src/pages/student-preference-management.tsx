@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Search, Users, Edit3, Save, X, AlertTriangle, Lock, Unlock, Plus } from "lucide-react";
+import { Search, Users, Edit3, Save, X, AlertTriangle, Lock, Unlock, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -22,6 +22,7 @@ export default function StudentPreferenceManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isOverrideConfirmOpen, setIsOverrideConfirmOpen] = useState(false);
   const [editChoices, setEditChoices] = useState<{[key: string]: string}>({});
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
   
   // State for central admin student search
   const [centralSearchTerm, setCentralSearchTerm] = useState("");
@@ -137,7 +138,7 @@ export default function StudentPreferenceManagement() {
       
       const payload = user?.role === 'central_admin' && data.isOverride
         ? { preferences: data.preferences, reason: "Central admin override of locked preferences" }
-        : { preferences: data.preferences };
+        : data.preferences;
         
       const response = await apiRequest('PUT', endpoint, payload);
       return response.json();
@@ -282,6 +283,10 @@ export default function StudentPreferenceManagement() {
     });
   };
 
+  const toggleStudentExpansion = (studentId: string) => {
+    setExpandedStudent(expandedStudent === studentId ? null : studentId);
+  };
+
   const getDistrictStatusBadge = (district: string) => {
     const status = districtStatuses?.find(ds => ds.district === district);
     if (!status) return null;
@@ -372,6 +377,7 @@ export default function StudentPreferenceManagement() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12"></TableHead>
                         <TableHead>App No</TableHead>
                         <TableHead>Merit No</TableHead>
                         <TableHead>Student Name</TableHead>
@@ -391,8 +397,23 @@ export default function StudentPreferenceManagement() {
                         </TableRow>
                       ) : (
                         centralFilteredStudents.map((student: Student) => (
-                          <TableRow key={student.id} data-testid={`central-student-row-${student.meritNumber}`}>
-                            <TableCell className="font-medium">{student.appNo}</TableCell>
+                          <React.Fragment key={student.id}>
+                            <TableRow data-testid={`central-student-row-${student.meritNumber}`}>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleStudentExpansion(student.id)}
+                                  className="p-1 h-8 w-8"
+                                >
+                                  {expandedStudent === student.id ? (
+                                    <ChevronDown className="w-4 h-4" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              </TableCell>
+                              <TableCell className="font-medium">{student.appNo}</TableCell>
                             <TableCell className="font-medium">{student.meritNumber}</TableCell>
                             <TableCell>{student.name}</TableCell>
                             <TableCell>
@@ -432,10 +453,10 @@ export default function StudentPreferenceManagement() {
                                     size="sm"
                                     onClick={() => handleFetchStudent(student)}
                                     disabled={fetchStudentMutation.isPending}
-                                    data-testid={`button-fetch-${student.meritNumber}`}
+                                    data-testid={`button-assign-${student.meritNumber}`}
                                   >
                                     <Plus className="w-3 h-3 mr-1" />
-                                    Fetch
+                                    Assign
                                   </Button>
                                 ) : (
                                   <>
@@ -465,6 +486,37 @@ export default function StudentPreferenceManagement() {
                               </div>
                             </TableCell>
                           </TableRow>
+                          {expandedStudent === student.id && (
+                            <TableRow>
+                              <TableCell colSpan={9} className="bg-gray-50 p-4">
+                                <div className="space-y-2">
+                                  <h4 className="font-medium text-sm text-gray-700">All District Choices:</h4>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                      { key: 'choice1', value: student.choice1 },
+                                      { key: 'choice2', value: student.choice2 },
+                                      { key: 'choice3', value: student.choice3 },
+                                      { key: 'choice4', value: student.choice4 },
+                                      { key: 'choice5', value: student.choice5 },
+                                      { key: 'choice6', value: student.choice6 },
+                                      { key: 'choice7', value: student.choice7 },
+                                      { key: 'choice8', value: student.choice8 },
+                                      { key: 'choice9', value: student.choice9 },
+                                      { key: 'choice10', value: student.choice10 }
+                                    ].map((choice, index) => (
+                                      <div key={choice.key} className="flex items-center gap-2">
+                                        <span className="text-xs font-medium text-gray-500 w-16">Choice {index + 1}:</span>
+                                        <span className="text-sm text-gray-700">
+                                          {choice.value || <span className="text-gray-400 italic">Not set</span>}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          </React.Fragment>
                         ))
                       )}
                     </TableBody>
@@ -566,10 +618,10 @@ export default function StudentPreferenceManagement() {
                                     size="sm"
                                     onClick={() => handleFetchStudent(student)}
                                     disabled={fetchStudentMutation.isPending}
-                                    data-testid={`button-fetch-${student.meritNumber}`}
+                                    data-testid={`button-assign-${student.meritNumber}`}
                                   >
                                     <Plus className="w-3 h-3 mr-1" />
-                                    Fetch
+                                    Assign
                                   </Button>
                                 ) : (
                                   <>
