@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,15 +24,18 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  Download
+  Download,
+  Eye,
+  Lock,
+  Unlock,
+  RotateCcw
 } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 
 // Use school districts for choice selection (where schools are located)
 const DISTRICTS = SCHOOL_DISTRICTS;
-
-const STREAMS = ['Medical', 'Commerce', 'NonMedical'];
+const STREAMS = ["Medical", "NonMedical", "Commerce"];
 
 const updatePreferencesSchema = z.object({
   stream: z.enum(['Medical', 'Commerce', 'NonMedical']),
@@ -52,9 +56,59 @@ export default function DistrictAdmin() {
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [showBatchActions, setShowBatchActions] = useState(false);
+  
+  // Modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
+  const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
+  const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
+  
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Form setup for edit modal
+  const form = useForm({
+    resolver: zodResolver(updatePreferencesSchema),
+    defaultValues: {
+      stream: "NonMedical" as const,
+      choice1: "",
+      choice2: "",
+      choice3: "",
+      choice4: "",
+      choice5: "",
+      choice6: "",
+      choice7: "",
+      choice8: "",
+      choice9: "",
+      choice10: "",
+    },
+  });
+
+  // Update preferences mutation for modal
+  const updatePreferencesMutation = useMutation({
+    mutationFn: async (data: { studentId: string, preferences: any }) => {
+      const response = await apiRequest('PUT', `/api/students/${data.studentId}/preferences`, data.preferences);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      setIsEditModalOpen(false);
+      setSelectedStudentForEdit(null);
+      form.reset();
+      toast({
+        title: "Success",
+        description: "Student preferences updated successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update preferences",
+        variant: "destructive",
+      });
+    }
+  });
 
   const { data: studentsData, isLoading } = useQuery({
     queryKey: ["/api/students", { limit: 200, offset: 0, district: user?.district }],
@@ -73,44 +127,6 @@ export default function DistrictAdmin() {
   const deadlineDate = deadline ? new Date(deadline) : null;
   const isDeadlinePassed = deadlineDate ? new Date() > deadlineDate : false;
 
-  const form = useForm<z.infer<typeof updatePreferencesSchema>>({
-    resolver: zodResolver(updatePreferencesSchema),
-    defaultValues: {
-      stream: 'Medical',
-      choice1: '',
-      choice2: '',
-      choice3: '',
-      choice4: '',
-      choice5: '',
-      choice6: '',
-      choice7: '',
-      choice8: '',
-      choice9: '',
-      choice10: '',
-    },
-  });
-
-  const updatePreferencesMutation = useMutation({
-    mutationFn: async ({ studentId, preferences }: { studentId: string, preferences: any }) => {
-      await apiRequest("PUT", `/api/students/${studentId}/preferences`, preferences);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      setEditingStudent(null);
-      form.reset();
-      toast({
-        title: "Preferences Updated",
-        description: "Student preferences have been updated successfully",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Update Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
   const lockStudentMutation = useMutation({
     mutationFn: async ({ studentId, isLocked }: { studentId: string, isLocked: boolean }) => {
@@ -239,6 +255,7 @@ export default function DistrictAdmin() {
     },
   });
 
+
   const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
@@ -318,6 +335,48 @@ export default function DistrictAdmin() {
     if (!canFinalize) return;
     finalizeDistrictMutation.mutate();
   };
+
+  // Modal helper functions
+  const openEditModal = (student: Student) => {
+    if (isDeadlinePassed) {
+      toast({
+        title: "Deadline Passed",
+        description: "Cannot modify preferences after the deadline",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSelectedStudentForEdit(student);
+    form.reset({
+      stream: student.stream as any,
+      choice1: student.choice1 || '',
+      choice2: student.choice2 || '',
+      choice3: student.choice3 || '',
+      choice4: student.choice4 || '',
+      choice5: student.choice5 || '',
+      choice6: student.choice6 || '',
+      choice7: student.choice7 || '',
+      choice8: student.choice8 || '',
+      choice9: student.choice9 || '',
+      choice10: student.choice10 || '',
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const openChoicesModal = (student: Student) => {
+    setSelectedStudentForChoices(student);
+    setIsChoicesModalOpen(true);
+  };
+
+  const handleModalSave = (data: any) => {
+    if (!selectedStudentForEdit) return;
+    updatePreferencesMutation.mutate({
+      studentId: selectedStudentForEdit.id,
+      preferences: data
+    });
+  };
+
 
   const startEditing = (student: Student) => {
     if (isDeadlinePassed) {
@@ -755,18 +814,29 @@ export default function DistrictAdmin() {
                               )}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground max-w-xs">
-                              <div className="flex flex-wrap gap-1">
-                                {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-                                  student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
-                                  .map((choice, index) => choice ? (
-                                    <span key={index} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
-                                      {index + 1}: {choice}
-                                    </span>
-                                  ) : null)
-                                  .filter(Boolean)}
-                                {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-                                  student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
-                                  .filter(Boolean).length === 0 && <span className="text-gray-400">No choices set</span>}
+                              <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap gap-1 flex-1">
+                                  {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+                                    student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                                    .map((choice, index) => choice ? (
+                                      <span key={index} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
+                                        {index + 1}: {choice}
+                                      </span>
+                                    ) : null)
+                                    .filter(Boolean)}
+                                  {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+                                    student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                                    .filter(Boolean).length === 0 && <span className="text-gray-400">No choices set</span>}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openChoicesModal(student)}
+                                  className="p-1 h-6 w-6"
+                                  data-testid={`button-view-choices-${student.meritNumber}`}
+                                >
+                                  <Eye className="w-3 h-3" />
+                                </Button>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -774,8 +844,8 @@ export default function DistrictAdmin() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => startEditing(student)}
-                                  disabled={isDeadlinePassed || editingStudent === student.id || student.isLocked === true}
+                                  onClick={() => openEditModal(student)}
+                                  disabled={isDeadlinePassed || student.isLocked === true}
                                   data-testid={`button-edit-${student.meritNumber}`}
                                 >
                                   <Edit className="w-3 h-3 mr-1" />
@@ -806,9 +876,10 @@ export default function DistrictAdmin() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleReleaseStudent(student)}
-                                  disabled={isDeadlinePassed}
+                                  disabled={isDeadlinePassed || student.counselingDistrict !== null}
                                   data-testid={`button-release-${student.meritNumber}`}
                                 >
+                                  <RotateCcw className="w-3 h-3 mr-1" />
                                   Release
                                 </Button>
                               </div>
@@ -829,37 +900,70 @@ export default function DistrictAdmin() {
             </CardContent>
           </Card>
 
-          {/* Edit Preferences Form */}
-          {editingStudent && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Edit Student Preferences</span>
-                  <Button variant="ghost" size="sm" onClick={cancelEditing}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          {/* Edit Modal */}
+          <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Student Preferences - {selectedStudentForEdit?.name}</DialogTitle>
+              </DialogHeader>
+              
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="stream"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stream</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-stream">
+                                <SelectValue placeholder="Select stream" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {STREAMS.map((stream) => (
+                                <SelectItem key={stream} value={stream}>
+                                  {stream}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <p className="text-sm text-amber-800 dark:text-amber-300">
+                      <strong>District Choices:</strong> Students can select up to 10 districts in order of preference. 
+                      Only the 10 school districts where seats are available are shown. Students will be allocated to their highest available choice during the allocation process.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-5 gap-3 mb-4">
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
                       <FormField
+                        key={choiceNum}
                         control={form.control}
-                        name="stream"
+                        name={`choice${choiceNum}` as any}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Stream</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormLabel>Choice {choiceNum}</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
-                                <SelectTrigger data-testid="select-stream">
-                                  <SelectValue placeholder="Select stream" />
+                                <SelectTrigger data-testid={`select-choice${choiceNum}`}>
+                                  <SelectValue placeholder="Select district" />
                                 </SelectTrigger>
                               </FormControl>
                               <SelectContent>
-                                {STREAMS.map((stream) => (
-                                  <SelectItem key={stream} value={stream}>
-                                    {stream}
+                                <SelectItem value="">None</SelectItem>
+                                {DISTRICTS.map((district) => (
+                                  <SelectItem key={district} value={district}>
+                                    {district}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -868,64 +972,78 @@ export default function DistrictAdmin() {
                           </FormItem>
                         )}
                       />
-                    </div>
+                    ))}
+                  </div>
 
-                    <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                      <p className="text-sm text-amber-800 dark:text-amber-300">
-                        <strong>District Choices:</strong> Students can select up to 10 districts in order of preference. 
-                        Only the 10 school districts where seats are available are shown. Students will be allocated to their highest available choice during the allocation process.
-                      </p>
-                    </div>
+                  <DialogFooter>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setIsEditModalOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      disabled={updatePreferencesMutation.isPending}
+                      data-testid="button-save-preferences"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      {updatePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
 
-                    <div className="grid grid-cols-5 gap-3 mb-4">
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
-                        <FormField
-                          key={choiceNum}
-                          control={form.control}
-                          name={`choice${choiceNum}` as any}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Choice {choiceNum}</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <FormControl>
-                                  <SelectTrigger data-testid={`select-choice${choiceNum}`}>
-                                    <SelectValue placeholder="Select district" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  {DISTRICTS.map((district) => (
-                                    <SelectItem key={district} value={district}>
-                                      {district}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      ))}
+          {/* Choices View Modal */}
+          <Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-2">
+                  {selectedStudentForChoices && [
+                    selectedStudentForChoices.choice1, selectedStudentForChoices.choice2, 
+                    selectedStudentForChoices.choice3, selectedStudentForChoices.choice4, 
+                    selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
+                    selectedStudentForChoices.choice7, selectedStudentForChoices.choice8, 
+                    selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
+                  ].map((choice, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border rounded">
+                      <span className="font-medium">Choice {index + 1}:</span>
+                      <span className={choice ? "text-blue-600" : "text-gray-400"}>
+                        {choice || "Not set"}
+                      </span>
                     </div>
+                  ))}
+                </div>
+                
+                {selectedStudentForChoices && (
+                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div><strong>Stream:</strong> {selectedStudentForChoices.stream || "Not set"}</div>
+                      <div><strong>Status:</strong> {selectedStudentForChoices.isLocked ? "🔒 Locked" : "🔓 Unlocked"}</div>
+                      <div><strong>Merit Number:</strong> {selectedStudentForChoices.meritNumber}</div>
+                      <div><strong>App Number:</strong> {selectedStudentForChoices.appNo}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                    <div className="flex space-x-2">
-                      <Button 
-                        type="submit" 
-                        disabled={updatePreferencesMutation.isPending}
-                        data-testid="button-save-preferences"
-                      >
-                        <Save className="w-4 h-4 mr-2" />
-                        {updatePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={cancelEditing}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          )}
+              <DialogFooter>
+                <Button 
+                  variant="outline"
+                  onClick={() => setIsChoicesModalOpen(false)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </main>
     </div>
