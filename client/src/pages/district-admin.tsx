@@ -22,7 +22,8 @@ import {
   X, 
   Clock,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Download
 } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
@@ -216,6 +217,28 @@ export default function DistrictAdmin() {
     },
   });
 
+  const autoLoadMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/district/${user?.district}/auto-load-students`, {});
+      return response;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
+      toast({
+        title: "Students Loaded Successfully",
+        description: `Loaded ${data.loaded} students from entrance exam results. ${data.skipped} students were already present.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Auto-load Failed",
+        description: error.message || "Failed to auto-load students",
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
@@ -394,6 +417,10 @@ export default function DistrictAdmin() {
     releaseStudentMutation.mutate(student.id);
   };
 
+  const handleAutoLoadStudents = () => {
+    autoLoadMutation.mutate();
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'allotted':
@@ -518,6 +545,37 @@ export default function DistrictAdmin() {
                     </p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Auto-load Students Card */}
+          {totalStudents === 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Download className="w-5 h-5 mr-2 text-primary" />
+                  Load Entrance Exam Students
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      No students found for your district. Load students from entrance exam results to start setting preferences.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      This will automatically import all eligible students from the entrance exam results.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleAutoLoadStudents}
+                    disabled={autoLoadMutation.isPending}
+                    data-testid="button-auto-load-students"
+                  >
+                    {autoLoadMutation.isPending ? "Loading..." : "Load Students"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}

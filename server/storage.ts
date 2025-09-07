@@ -99,6 +99,7 @@ export interface IStorage {
   lockStudent(studentId: string): Promise<Student>;
   unlockStudent(studentId: string): Promise<Student>;
   getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{students: Student[], total: number}>;
+  autoLoadEntranceStudents(district: string): Promise<{ loaded: number; skipped: number }>;
   releaseStudentFromDistrict(studentId: string): Promise<Student>;
 
   // Unlock request operations
@@ -541,6 +542,60 @@ export class DatabaseStorage implements IStorage {
     return {
       students: studentsResult,
       total: countResult.count
+    };
+  }
+
+  async autoLoadEntranceStudents(district: string): Promise<{ loaded: number; skipped: number }> {
+    // Get all entrance exam results
+    const entranceResults = await db.select().from(studentsEntranceResult)
+      .orderBy(asc(studentsEntranceResult.meritNo));
+
+    // Check which students already exist in the preference table
+    const existingStudents = await db.select({ appNo: students.appNo })
+      .from(students);
+    const existingAppNos = new Set(existingStudents.map(s => s.appNo));
+
+    // Filter out students that already exist
+    const newStudents = entranceResults.filter(result => !existingAppNos.has(result.applicationNo));
+
+    if (newStudents.length === 0) {
+      return { loaded: 0, skipped: entranceResults.length };
+    }
+
+    // Convert entrance results to student preference records
+    const studentsToInsert = newStudents.map(result => ({
+      appNo: result.applicationNo,
+      meritNumber: result.meritNo,
+      rollNo: result.rollNo,
+      name: result.studentName,
+      marks: result.marks,
+      gender: result.gender,
+      category: result.category,
+      stream: result.stream || 'NonMedical', // Default to NonMedical if not specified
+      counselingDistrict: district,
+      choice1: '',
+      choice2: '',
+      choice3: '',
+      choice4: '',
+      choice5: '',
+      choice6: '',
+      choice7: '',
+      choice8: '',
+      choice9: '',
+      choice10: '',
+      isLocked: false,
+      isReleased: false,
+      allocationStatus: 'pending',
+    }));
+
+    // Insert the new student records
+    const inserted = await db.insert(students)
+      .values(studentsToInsert)
+      .returning();
+
+    return { 
+      loaded: inserted.length, 
+      skipped: entranceResults.length - newStudents.length 
     };
   }
 

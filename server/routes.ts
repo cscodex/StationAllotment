@@ -1269,6 +1269,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Auto-load entrance exam students for district
+  app.post('/api/district/:district/auto-load-students', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { district } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      
+      // Check if the district admin has access to this district
+      if (user.role === 'district_admin' && user.district !== district) {
+        return res.status(403).json({ message: "You can only load students for your own district" });
+      }
+      
+      const result = await storage.autoLoadEntranceStudents(district);
+      
+      await auditService.log(req.session.userId, 'students_auto_loaded', 'students', null, {
+        district,
+        loaded: result.loaded,
+        skipped: result.skipped
+      }, req.ip, req.get('User-Agent'));
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Auto-load students error:", error);
+      res.status(500).json({ message: "Failed to auto-load students" });
+    }
+  });
+
   // Get students by district for district admins
   app.get('/api/district/:district/students', isAuthenticated, async (req: any, res) => {
     try {
