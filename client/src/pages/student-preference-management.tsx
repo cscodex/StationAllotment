@@ -36,16 +36,16 @@ const STREAMS = ["Medical", "NonMedical", "Commerce"];
 
 const updatePreferencesSchema = z.object({
   stream: z.enum(['Medical', 'Commerce', 'NonMedical']),
-  choice1: z.string().optional(),
-  choice2: z.string().optional(),
-  choice3: z.string().optional(),
-  choice4: z.string().optional(),
-  choice5: z.string().optional(),
-  choice6: z.string().optional(),
-  choice7: z.string().optional(),
-  choice8: z.string().optional(),
-  choice9: z.string().optional(),
-  choice10: z.string().optional(),
+  choice1: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice2: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice3: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice4: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice5: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice6: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice7: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice8: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice9: z.string().transform(val => val === " " ? "" : val).optional(),
+  choice10: z.string().transform(val => val === " " ? "" : val).optional(),
 });
 
 export default function StudentPreferenceManagement() {
@@ -354,7 +354,7 @@ export default function StudentPreferenceManagement() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">
+                              <SelectItem value=" ">
                                 <span className="text-muted-foreground">No selection</span>
                               </SelectItem>
                               {DISTRICTS.map((district) => (
