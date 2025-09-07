@@ -13,6 +13,7 @@ import {
   GraduationCap,
   ShieldQuestion,
   UserCog,
+  User,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -139,17 +140,32 @@ export default function Sidebar({ className }: SidebarProps) {
             </p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start"
-          onClick={handleLogout}
-          disabled={logoutMutation.isPending}
-          data-testid="button-logout"
-        >
-          <LogOut className="w-4 h-4 mr-2" />
-          {logoutMutation.isPending ? "Signing out..." : "Sign Out"}
-        </Button>
+        <div className="space-y-1">
+          <Link
+            href="/profile"
+            className={cn(
+              "flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm w-full",
+              location === "/profile"
+                ? "bg-primary text-primary-foreground font-medium"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+            data-testid="link-profile"
+          >
+            <User className="w-4 h-4" />
+            <span>Profile Settings</span>
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={handleLogout}
+            disabled={logoutMutation.isPending}
+            data-testid="button-logout"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            {logoutMutation.isPending ? "Signing out..." : "Sign Out"}
+          </Button>
+        </div>
       </div>
     </div>
   );

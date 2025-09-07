@@ -329,6 +329,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CSV User import route
+  app.post('/api/users/import', isCentralAdmin, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.readFile(req.file.path);
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const csvData = XLSX.utils.sheet_to_json(worksheet);
+
+      const defaultPassword = req.body.defaultPassword || 'Punjab@2024';
+      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+      let importedCount = 0;
+      let skippedCount = 0;
+      const errors: string[] = [];
+
+      for (const row of csvData) {
+        try {
+          const userData = row as any;
+          
+          // Check if user already exists
+          const existingUser = await storage.getUserByUsername(userData.username);
+          if (existingUser) {
+            skippedCount++;
+            continue;
+          }
+
+          // Validate required fields
+          if (!userData.username || !userData.role) {
+            errors.push(`Row missing required fields: username, role`);
+            continue;
+          }
+
+          // Create user
+          const newUser = {
+            username: userData.username,
+            email: userData.email || null,
+            password: hashedPassword,
+            role: userData.role as 'central_admin' | 'district_admin',
+            district: userData.district || null,
+            firstName: userData.firstName || '',
+            lastName: userData.lastName || '',
+            isBlocked: false,
+          };
+
+          await storage.createUser(newUser);
+          importedCount++;
+        } catch (error) {
+          errors.push(`Error importing user ${userData.username}: ${error}`);
+        }
+      }
+
+      await auditService.log(req.user.id, 'csv_user_import', 'users', 'bulk_import', {
+        importedCount,
+        skippedCount,
+        filename: req.file.originalname,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({
+        success: true,
+        importedCount,
+        skippedCount,
+        errors,
+        defaultPassword,
+      });
+    } catch (error) {
+      console.error("CSV import error:", error);
+      res.status(500).json({ message: "Failed to import users from CSV" });
+    }
+  });
+
+  // Password change route
+  app.put('/api/auth/change-password', isAuthenticated, async (req: any, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password required" });
+      }
+
+      const user = await storage.getUser(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password
+      const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash new password
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+      
+      // Update password
+      await storage.updateUser(user.id, { password: hashedNewPassword });
+
+      await auditService.log(req.session.userId, 'password_change', 'auth', user.id, {
+        username: user.username,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: "Password updated successfully" });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
   // File upload routes
   app.post('/api/files/upload/students', isCentralAdmin, upload.single('file'), async (req: any, res) => {
     try {
