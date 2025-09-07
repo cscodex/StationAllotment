@@ -767,21 +767,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Student release route for central admin
-  app.put('/api/students/:id/release', isCentralAdmin, async (req: any, res) => {
+  // Student release route
+  app.put('/api/students/:id/release', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
+      const user = await storage.getUser(req.session.userId);
       
-      const student = await storage.releaseStudentFromDistrict(id);
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Check if student is locked - locked students cannot be released
+      if (student.isLocked) {
+        return res.status(403).json({ message: "Cannot release locked student" });
+      }
+
+      // Central admin can release any student, district admin can only release from their own district
+      if (user?.role === 'district_admin' && student.counselingDistrict !== user.district) {
+        return res.status(403).json({ message: "Can only release students from your district" });
+      }
+      
+      const updatedStudent = await storage.releaseStudentFromDistrict(id);
       
       await auditService.log(req.session.userId, 'student_release', 'students', id, {
         releasedBy: req.session.userId,
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        fromDistrict: student.counselingDistrict
       }, req.ip, req.get('User-Agent'));
 
-      res.json(student);
+      res.json(updatedStudent);
     } catch (error) {
       console.error("Student release error:", error);
       res.status(500).json({ message: "Failed to release student" });
+    }
+  });
+
+  // Fetch student endpoint
+  app.put('/api/students/:id/fetch', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { counselingDistrict, districtAdmin } = req.body;
+      const user = await storage.getUser(req.session.userId);
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Check if student is already assigned to a district
+      if (student.counselingDistrict) {
+        return res.status(400).json({ message: "Student is already assigned to a district" });
+      }
+
+      // District admin can only fetch to their own district
+      if (user?.role === 'district_admin' && counselingDistrict !== user.district) {
+        return res.status(403).json({ message: "Can only fetch students to your district" });
+      }
+      
+      const updatedStudent = await storage.fetchStudentToDistrict(id, counselingDistrict, districtAdmin);
+      
+      await auditService.log(req.session.userId, 'student_fetch', 'students', id, {
+        fetchedBy: req.session.userId,
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        toDistrict: counselingDistrict,
+        districtAdmin: districtAdmin
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch student" });
     }
   });
 

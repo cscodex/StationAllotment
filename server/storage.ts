@@ -101,6 +101,7 @@ export interface IStorage {
   getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{students: Student[], total: number}>;
   autoLoadEntranceStudents(district: string): Promise<{ loaded: number; skipped: number }>;
   releaseStudentFromDistrict(studentId: string): Promise<Student>;
+  fetchStudentToDistrict(studentId: string, counselingDistrict: string, districtAdmin: string): Promise<Student>;
 
   // Unlock request operations
   createUnlockRequest(request: InsertUnlockRequest): Promise<UnlockRequest>;
@@ -607,6 +608,21 @@ export class DatabaseStorage implements IStorage {
         districtAdmin: null,
         isLocked: false,
         isReleased: true,
+        updatedAt: new Date()
+      })
+      .where(eq(students.id, studentId))
+      .returning();
+    return updated;
+  }
+
+  async fetchStudentToDistrict(studentId: string, counselingDistrict: string, districtAdmin: string): Promise<Student> {
+    const [updated] = await db
+      .update(students)
+      .set({
+        counselingDistrict: counselingDistrict,
+        districtAdmin: districtAdmin,
+        isReleased: false,
+        stream: sql`COALESCE(${students.stream}, 'Non-Medical')`, // Set default stream to Non-Medical if null
         updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
