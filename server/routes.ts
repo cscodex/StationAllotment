@@ -349,9 +349,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const errors: string[] = [];
 
       for (const row of csvData) {
+        const userData = row as any;
         try {
-          const userData = row as any;
-          
           // Check if user already exists
           const existingUser = await storage.getUserByUsername(userData.username);
           if (existingUser) {
@@ -380,7 +379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.createUser(newUser);
           importedCount++;
         } catch (error) {
-          errors.push(`Error importing user ${userData.username}: ${error}`);
+          errors.push(`Error importing user ${userData?.username || 'unknown'}: ${error}`);
         }
       }
 
@@ -827,7 +826,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/students/:id/fetch', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { counselingDistrict, districtAdmin } = req.body;
+      let { counselingDistrict, districtAdmin } = req.body;
       const user = await storage.getUser(req.session.userId);
       
       const student = await storage.getStudent(id);
@@ -835,9 +834,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Student not found" });
       }
 
-      // Check if student is already assigned to a district
-      if (student.counselingDistrict) {
+      // Check if student is already assigned to a district (skip if released)
+      if (student.counselingDistrict && !student.isReleased) {
         return res.status(400).json({ message: "Student is already assigned to a district" });
+      }
+
+      // For central admin, default to SAS Nagar district if not specified
+      if (user?.role === 'central_admin') {
+        counselingDistrict = counselingDistrict || 'SAS Nagar';
+        districtAdmin = districtAdmin || user.id;
       }
 
       // District admin can only fetch to their own district
@@ -1464,13 +1469,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.session.userId);
       
       // Check if the district admin has access to this district
-      if (user.role === 'district_admin' && user.district !== district) {
+      if (user?.role === 'district_admin' && user?.district !== district) {
         return res.status(403).json({ message: "You can only load students for your own district" });
       }
       
       const result = await storage.autoLoadEntranceStudents(district);
       
-      await auditService.log(req.session.userId, 'students_auto_loaded', 'students', null, {
+      await auditService.log(req.session.userId, 'students_auto_loaded', 'students', 'bulk', {
         district,
         loaded: result.loaded,
         skipped: result.skipped
