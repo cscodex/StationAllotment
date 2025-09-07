@@ -18,6 +18,7 @@ import DistrictAdminList from "@/pages/district-admin-list";
 import StudentDetails from "@/pages/student-details";
 import Reports from "@/pages/reports";
 import ManageDistrictAdmins from "@/pages/manage-district-admins";
+import StudentPreferenceManagement from "@/pages/student-preference-management";
 import Profile from "@/pages/profile";
 import MainLayout from "@/components/layout/main-layout";
 
@@ -50,6 +51,7 @@ function Router() {
         <Route path="/district-admin" component={DistrictAdmin} />
         <Route path="/district-admin-list" component={DistrictAdminList} />
         <Route path="/manage-district-admins" component={ManageDistrictAdmins} />
+        <Route path="/student-preference-management" component={StudentPreferenceManagement} />
         <Route path="/profile" component={Profile} />
         <Route path="/student/:id" component={StudentDetails} />
         <Route component={NotFound} />
