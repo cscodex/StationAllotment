@@ -1,0 +1,211 @@
+District,Stream,Gender,Category,Total Seats,Available Seats
+Amritsar,Medical,Male,Open,50,50
+Amritsar,Medical,Male,Disabled,5,5
+Amritsar,Medical,Male,Private,20,20
+Amritsar,Medical,Female,Open,40,40
+Amritsar,Medical,Female,WHH,15,15
+Amritsar,Medical,Female,Disabled,5,5
+Amritsar,Medical,Female,Private,25,25
+Amritsar,NonMedical,Male,Open,50,50
+Amritsar,NonMedical,Male,Disabled,5,5
+Amritsar,NonMedical,Male,Private,20,20
+Amritsar,NonMedical,Female,Open,40,40
+Amritsar,NonMedical,Female,WHH,15,15
+Amritsar,NonMedical,Female,Disabled,5,5
+Amritsar,NonMedical,Female,Private,25,25
+Amritsar,Commerce,Male,Open,50,50
+Amritsar,Commerce,Male,Disabled,5,5
+Amritsar,Commerce,Male,Private,20,20
+Amritsar,Commerce,Female,Open,40,40
+Amritsar,Commerce,Female,WHH,15,15
+Amritsar,Commerce,Female,Disabled,5,5
+Amritsar,Commerce,Female,Private,25,25
+Ludhiana,Medical,Male,Open,50,50
+Ludhiana,Medical,Male,Disabled,5,5
+Ludhiana,Medical,Male,Private,20,20
+Ludhiana,Medical,Female,Open,40,40
+Ludhiana,Medical,Female,WHH,15,15
+Ludhiana,Medical,Female,Disabled,5,5
+Ludhiana,Medical,Female,Private,25,25
+Ludhiana,NonMedical,Male,Open,50,50
+Ludhiana,NonMedical,Male,Disabled,5,5
+Ludhiana,NonMedical,Male,Private,20,20
+Ludhiana,NonMedical,Female,Open,40,40
+Ludhiana,NonMedical,Female,WHH,15,15
+Ludhiana,NonMedical,Female,Disabled,5,5
+Ludhiana,NonMedical,Female,Private,25,25
+Ludhiana,Commerce,Male,Open,50,50
+Ludhiana,Commerce,Male,Disabled,5,5
+Ludhiana,Commerce,Male,Private,20,20
+Ludhiana,Commerce,Female,Open,40,40
+Ludhiana,Commerce,Female,WHH,15,15
+Ludhiana,Commerce,Female,Disabled,5,5
+Ludhiana,Commerce,Female,Private,25,25
+Patiala,Medical,Male,Open,50,50
+Patiala,Medical,Male,Disabled,5,5
+Patiala,Medical,Male,Private,20,20
+Patiala,Medical,Female,Open,40,40
+Patiala,Medical,Female,WHH,15,15
+Patiala,Medical,Female,Disabled,5,5
+Patiala,Medical,Female,Private,25,25
+Patiala,NonMedical,Male,Open,50,50
+Patiala,NonMedical,Male,Disabled,5,5
+Patiala,NonMedical,Male,Private,20,20
+Patiala,NonMedical,Female,Open,40,40
+Patiala,NonMedical,Female,WHH,15,15
+Patiala,NonMedical,Female,Disabled,5,5
+Patiala,NonMedical,Female,Private,25,25
+Patiala,Commerce,Male,Open,50,50
+Patiala,Commerce,Male,Disabled,5,5
+Patiala,Commerce,Male,Private,20,20
+Patiala,Commerce,Female,Open,40,40
+Patiala,Commerce,Female,WHH,15,15
+Patiala,Commerce,Female,Disabled,5,5
+Patiala,Commerce,Female,Private,25,25
+SAS Nagar,Medical,Male,Open,50,50
+SAS Nagar,Medical,Male,Disabled,5,5
+SAS Nagar,Medical,Male,Private,20,20
+SAS Nagar,Medical,Female,Open,40,40
+SAS Nagar,Medical,Female,WHH,15,15
+SAS Nagar,Medical,Female,Disabled,5,5
+SAS Nagar,Medical,Female,Private,25,25
+SAS Nagar,NonMedical,Male,Open,50,50
+SAS Nagar,NonMedical,Male,Disabled,5,5
+SAS Nagar,NonMedical,Male,Private,20,20
+SAS Nagar,NonMedical,Female,Open,40,40
+SAS Nagar,NonMedical,Female,WHH,15,15
+SAS Nagar,NonMedical,Female,Disabled,5,5
+SAS Nagar,NonMedical,Female,Private,25,25
+SAS Nagar,Commerce,Male,Open,50,50
+SAS Nagar,Commerce,Male,Disabled,5,5
+SAS Nagar,Commerce,Male,Private,20,20
+SAS Nagar,Commerce,Female,Open,40,40
+SAS Nagar,Commerce,Female,WHH,15,15
+SAS Nagar,Commerce,Female,Disabled,5,5
+SAS Nagar,Commerce,Female,Private,25,25
+Jalandhar,Medical,Male,Open,50,50
+Jalandhar,Medical,Male,Disabled,5,5
+Jalandhar,Medical,Male,Private,20,20
+Jalandhar,Medical,Female,Open,40,40
+Jalandhar,Medical,Female,WHH,15,15
+Jalandhar,Medical,Female,Disabled,5,5
+Jalandhar,Medical,Female,Private,25,25
+Jalandhar,NonMedical,Male,Open,50,50
+Jalandhar,NonMedical,Male,Disabled,5,5
+Jalandhar,NonMedical,Male,Private,20,20
+Jalandhar,NonMedical,Female,Open,40,40
+Jalandhar,NonMedical,Female,WHH,15,15
+Jalandhar,NonMedical,Female,Disabled,5,5
+Jalandhar,NonMedical,Female,Private,25,25
+Jalandhar,Commerce,Male,Open,50,50
+Jalandhar,Commerce,Male,Disabled,5,5
+Jalandhar,Commerce,Male,Private,20,20
+Jalandhar,Commerce,Female,Open,40,40
+Jalandhar,Commerce,Female,WHH,15,15
+Jalandhar,Commerce,Female,Disabled,5,5
+Jalandhar,Commerce,Female,Private,25,25
+Bathinda,Medical,Male,Open,50,50
+Bathinda,Medical,Male,Disabled,5,5
+Bathinda,Medical,Male,Private,20,20
+Bathinda,Medical,Female,Open,40,40
+Bathinda,Medical,Female,WHH,15,15
+Bathinda,Medical,Female,Disabled,5,5
+Bathinda,Medical,Female,Private,25,25
+Bathinda,NonMedical,Male,Open,50,50
+Bathinda,NonMedical,Male,Disabled,5,5
+Bathinda,NonMedical,Male,Private,20,20
+Bathinda,NonMedical,Female,Open,40,40
+Bathinda,NonMedical,Female,WHH,15,15
+Bathinda,NonMedical,Female,Disabled,5,5
+Bathinda,NonMedical,Female,Private,25,25
+Bathinda,Commerce,Male,Open,50,50
+Bathinda,Commerce,Male,Disabled,5,5
+Bathinda,Commerce,Male,Private,20,20
+Bathinda,Commerce,Female,Open,40,40
+Bathinda,Commerce,Female,WHH,15,15
+Bathinda,Commerce,Female,Disabled,5,5
+Bathinda,Commerce,Female,Private,25,25
+Ferozepur,Medical,Male,Open,50,50
+Ferozepur,Medical,Male,Disabled,5,5
+Ferozepur,Medical,Male,Private,20,20
+Ferozepur,Medical,Female,Open,40,40
+Ferozepur,Medical,Female,WHH,15,15
+Ferozepur,Medical,Female,Disabled,5,5
+Ferozepur,Medical,Female,Private,25,25
+Ferozepur,NonMedical,Male,Open,50,50
+Ferozepur,NonMedical,Male,Disabled,5,5
+Ferozepur,NonMedical,Male,Private,20,20
+Ferozepur,NonMedical,Female,Open,40,40
+Ferozepur,NonMedical,Female,WHH,15,15
+Ferozepur,NonMedical,Female,Disabled,5,5
+Ferozepur,NonMedical,Female,Private,25,25
+Ferozepur,Commerce,Male,Open,50,50
+Ferozepur,Commerce,Male,Disabled,5,5
+Ferozepur,Commerce,Male,Private,20,20
+Ferozepur,Commerce,Female,Open,40,40
+Ferozepur,Commerce,Female,WHH,15,15
+Ferozepur,Commerce,Female,Disabled,5,5
+Ferozepur,Commerce,Female,Private,25,25
+Sangrur,Medical,Male,Open,50,50
+Sangrur,Medical,Male,Disabled,5,5
+Sangrur,Medical,Male,Private,20,20
+Sangrur,Medical,Female,Open,40,40
+Sangrur,Medical,Female,WHH,15,15
+Sangrur,Medical,Female,Disabled,5,5
+Sangrur,Medical,Female,Private,25,25
+Sangrur,NonMedical,Male,Open,50,50
+Sangrur,NonMedical,Male,Disabled,5,5
+Sangrur,NonMedical,Male,Private,20,20
+Sangrur,NonMedical,Female,Open,40,40
+Sangrur,NonMedical,Female,WHH,15,15
+Sangrur,NonMedical,Female,Disabled,5,5
+Sangrur,NonMedical,Female,Private,25,25
+Sangrur,Commerce,Male,Open,50,50
+Sangrur,Commerce,Male,Disabled,5,5
+Sangrur,Commerce,Male,Private,20,20
+Sangrur,Commerce,Female,Open,40,40
+Sangrur,Commerce,Female,WHH,15,15
+Sangrur,Commerce,Female,Disabled,5,5
+Sangrur,Commerce,Female,Private,25,25
+Gurdaspur,Medical,Male,Open,50,50
+Gurdaspur,Medical,Male,Disabled,5,5
+Gurdaspur,Medical,Male,Private,20,20
+Gurdaspur,Medical,Female,Open,40,40
+Gurdaspur,Medical,Female,WHH,15,15
+Gurdaspur,Medical,Female,Disabled,5,5
+Gurdaspur,Medical,Female,Private,25,25
+Gurdaspur,NonMedical,Male,Open,50,50
+Gurdaspur,NonMedical,Male,Disabled,5,5
+Gurdaspur,NonMedical,Male,Private,20,20
+Gurdaspur,NonMedical,Female,Open,40,40
+Gurdaspur,NonMedical,Female,WHH,15,15
+Gurdaspur,NonMedical,Female,Disabled,5,5
+Gurdaspur,NonMedical,Female,Private,25,25
+Gurdaspur,Commerce,Male,Open,50,50
+Gurdaspur,Commerce,Male,Disabled,5,5
+Gurdaspur,Commerce,Male,Private,20,20
+Gurdaspur,Commerce,Female,Open,40,40
+Gurdaspur,Commerce,Female,WHH,15,15
+Gurdaspur,Commerce,Female,Disabled,5,5
+Gurdaspur,Commerce,Female,Private,25,25
+Talwara,Medical,Male,Open,50,50
+Talwara,Medical,Male,Disabled,5,5
+Talwara,Medical,Male,Private,20,20
+Talwara,Medical,Female,Open,40,40
+Talwara,Medical,Female,WHH,15,15
+Talwara,Medical,Female,Disabled,5,5
+Talwara,Medical,Female,Private,25,25
+Talwara,NonMedical,Male,Open,50,50
+Talwara,NonMedical,Male,Disabled,5,5
+Talwara,NonMedical,Male,Private,20,20
+Talwara,NonMedical,Female,Open,40,40
+Talwara,NonMedical,Female,WHH,15,15
+Talwara,NonMedical,Female,Disabled,5,5
+Talwara,NonMedical,Female,Private,25,25
+Talwara,Commerce,Male,Open,50,50
+Talwara,Commerce,Male,Disabled,5,5
+Talwara,Commerce,Male,Private,20,20
+Talwara,Commerce,Female,Open,40,40
+Talwara,Commerce,Female,WHH,15,15
+Talwara,Commerce,Female,Disabled,5,5
+Talwara,Commerce,Female,Private,25,25
