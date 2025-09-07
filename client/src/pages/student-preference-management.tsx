@@ -28,6 +28,8 @@ export default function StudentPreferenceManagement() {
   const [centralSelectedStudent, setCentralSelectedStudent] = useState<Student | null>(null);
   const [isCentralEditDialogOpen, setIsCentralEditDialogOpen] = useState(false);
   const [centralEditChoices, setCentralEditChoices] = useState<{[key: string]: string}>({});
+  const [centralEditStream, setCentralEditStream] = useState<string>("");
+  const [editStream, setEditStream] = useState<string>("");
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -77,6 +79,7 @@ export default function StudentPreferenceManagement() {
       choice9: student.choice9 || '',
       choice10: student.choice10 || '',
     });
+    setEditStream(student.stream || "Non-Medical");
     setIsEditDialogOpen(true);
   };
 
@@ -102,6 +105,7 @@ export default function StudentPreferenceManagement() {
       choice9: student.choice9 || '',
       choice10: student.choice10 || '',
     });
+    setCentralEditStream(student.stream || "Non-Medical");
     setIsCentralEditDialogOpen(true);
   };
 
@@ -117,7 +121,7 @@ export default function StudentPreferenceManagement() {
     
     updatePreferencesMutation.mutate({
       studentId: centralSelectedStudent.id,
-      preferences: centralEditChoices,
+      preferences: { ...centralEditChoices, stream: centralEditStream },
       isOverride: true
     });
     setIsCentralEditDialogOpen(false);
@@ -251,7 +255,7 @@ export default function StudentPreferenceManagement() {
       // Direct update if not locked or district admin
       updatePreferencesMutation.mutate({
         studentId: selectedStudent.id,
-        preferences: editChoices,
+        preferences: { ...editChoices, stream: editStream },
         isOverride: false
       });
     }
@@ -262,7 +266,7 @@ export default function StudentPreferenceManagement() {
     
     updatePreferencesMutation.mutate({
       studentId: selectedStudent.id,
-      preferences: editChoices,
+      preferences: { ...editChoices, stream: editStream },
       isOverride: true
     });
   };
@@ -656,6 +660,25 @@ export default function StudentPreferenceManagement() {
               )}
 
               <div>
+                <div className="mb-6">
+                  <h4 className="text-lg font-medium mb-4">Student Stream (Editable)</h4>
+                  <div className="max-w-xs">
+                    <Select
+                      value={editStream}
+                      onValueChange={setEditStream}
+                    >
+                      <SelectTrigger data-testid="select-edit-stream">
+                        <SelectValue placeholder="Select stream" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Non-Medical">Non-Medical (Default)</SelectItem>
+                        <SelectItem value="Medical">Medical</SelectItem>
+                        <SelectItem value="Commerce">Commerce</SelectItem>
+                        <SelectItem value="Arts">Arts</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <h4 className="text-lg font-medium mb-4">District Preferences (Priority Order)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((choiceNum) => {
@@ -772,6 +795,25 @@ export default function StudentPreferenceManagement() {
               )}
 
               <div>
+                <div className="mb-6">
+                  <h4 className="text-lg font-medium mb-4">Student Stream (Editable)</h4>
+                  <div className="max-w-xs">
+                    <Select
+                      value={centralEditStream}
+                      onValueChange={setCentralEditStream}
+                    >
+                      <SelectTrigger data-testid="select-central-edit-stream">
+                        <SelectValue placeholder="Select stream" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Non-Medical">Non-Medical (Default)</SelectItem>
+                        <SelectItem value="Medical">Medical</SelectItem>
+                        <SelectItem value="Commerce">Commerce</SelectItem>
+                        <SelectItem value="Arts">Arts</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <h4 className="text-lg font-medium mb-4">District Preferences (Priority Order)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((choiceNum) => {
