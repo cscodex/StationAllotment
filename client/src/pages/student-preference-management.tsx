@@ -51,7 +51,9 @@ const updatePreferencesSchema = z.object({
 export default function StudentPreferenceManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
+  const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -130,6 +132,11 @@ export default function StudentPreferenceManagement() {
     setIsEditModalOpen(true);
   };
 
+  const openChoicesModal = (student: Student) => {
+    setSelectedStudentForChoices(student);
+    setIsChoicesModalOpen(true);
+  };
+
   const handleModalSave = (data: any) => {
     if (!selectedStudentForEdit) return;
     updatePreferencesMutation.mutate({
@@ -203,23 +210,24 @@ export default function StudentPreferenceManagement() {
                       <TableHead>Student Name</TableHead>
                       <TableHead>App No</TableHead>
                       <TableHead>Stream</TableHead>
-                      <TableHead>District</TableHead>
+                      <TableHead>Current District</TableHead>
                       <TableHead>District Admin</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Lock Status</TableHead>
+                      <TableHead>Choices</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
                         </TableCell>
                       </TableRow>
                     ) : filteredStudents.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                           No students found
                         </TableCell>
                       </TableRow>
@@ -267,6 +275,17 @@ export default function StudentPreferenceManagement() {
                                 Unlocked
                               </Badge>
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openChoicesModal(student)}
+                              className="p-1 h-6 w-6"
+                              data-testid={`button-view-choices-${student.id}`}
+                            >
+                              <Eye className="w-3 h-3" />
+                            </Button>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
@@ -391,6 +410,56 @@ export default function StudentPreferenceManagement() {
               </form>
             </Form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Choices View Modal */}
+      <Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2">
+              {selectedStudentForChoices && [
+                selectedStudentForChoices.choice1, selectedStudentForChoices.choice2, 
+                selectedStudentForChoices.choice3, selectedStudentForChoices.choice4, 
+                selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
+                selectedStudentForChoices.choice7, selectedStudentForChoices.choice8, 
+                selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
+              ].map((choice, index) => (
+                <div key={index} className="flex items-center justify-between p-3 border rounded">
+                  <span className="font-medium">Choice {index + 1}:</span>
+                  <span className={choice ? "text-blue-600" : "text-gray-400"}>
+                    {choice || "Not set"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            
+            {selectedStudentForChoices && (
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><strong>Stream:</strong> {selectedStudentForChoices.stream || "Not set"}</div>
+                  <div><strong>Status:</strong> {selectedStudentForChoices.isLocked ? "🔒 Locked" : "🔓 Unlocked"}</div>
+                  <div><strong>Merit Number:</strong> {selectedStudentForChoices.meritNumber}</div>
+                  <div><strong>App Number:</strong> {selectedStudentForChoices.appNo}</div>
+                  <div><strong>Current District:</strong> {selectedStudentForChoices.counselingDistrict || "Not assigned"}</div>
+                  <div><strong>District Admin:</strong> {selectedStudentForChoices.districtAdmin || "Not assigned"}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline"
+              onClick={() => setIsChoicesModalOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
