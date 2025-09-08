@@ -138,9 +138,9 @@ export default function Allocation() {
       title: "District Data Finalization",
       status: allDistrictsFinalized ? "complete" : totalDistricts > 0 ? "error" : "pending",
       description: allDistrictsFinalized 
-        ? `All ${totalDistricts} districts have finalized their student data`
+        ? `✓ All ${totalDistricts} districts have finalized their student data`
         : totalDistricts > 0
-        ? `${pendingDistricts.length} out of ${totalDistricts} districts need to finalize their data: ${pendingDistricts.map(d => d.district).join(', ')}`
+        ? `⚠️ ${finalizedDistricts}/${totalDistricts} districts finalized. Pending: ${pendingDistricts.map(d => d.district).slice(0, 3).join(', ')}${pendingDistricts.length > 3 ? ` (+${pendingDistricts.length - 3} more)` : ''}`
         : "No district data found - districts must finalize their student preferences first",
       icon: allDistrictsFinalized ? Check : totalDistricts > 0 ? AlertTriangle : Clock,
       color: allDistrictsFinalized ? "text-green-500" : totalDistricts > 0 ? "text-red-500" : "text-amber-500",
@@ -148,11 +148,11 @@ export default function Allocation() {
     {
       title: "Minimum Allocation Data",
       status: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 && allDistrictsFinalized ? "complete" : "pending",
-      description: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0
-        ? "Minimum data requirements met for allocation process"
-        : "Need: entrance results + vacancy data + students with choices",
-      icon: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 ? Check : Clock,
-      color: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 ? "text-green-500" : "text-amber-500",
+      description: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 && allDistrictsFinalized
+        ? "All minimum data requirements met for allocation process"
+        : "Required: entrance results + vacancy data + student preferences + all district admins must finalize",
+      icon: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 && allDistrictsFinalized ? Check : Clock,
+      color: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 && allDistrictsFinalized ? "text-green-500" : "text-amber-500",
     },
     {
       title: "Allocation Process",
