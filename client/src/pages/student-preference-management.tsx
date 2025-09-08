@@ -114,22 +114,76 @@ export default function StudentPreferenceManagement() {
     student.districtAdmin?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
+  // Lock student for exclusive editing
+  const lockForEditMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const response = await apiRequest(`/api/students/${studentId}/lock-for-edit`, {
+        method: 'POST',
+      });
+      return response;
+    },
+    onSuccess: (lockedStudent: Student) => {
+      // Student successfully locked, open edit modal
+      setSelectedStudentForEdit(lockedStudent);
+      form.reset({
+        stream: lockedStudent.stream as any || "NonMedical",
+        choice1: lockedStudent.choice1 || '',
+        choice2: lockedStudent.choice2 || '',
+        choice3: lockedStudent.choice3 || '',
+        choice4: lockedStudent.choice4 || '',
+        choice5: lockedStudent.choice5 || '',
+        choice6: lockedStudent.choice6 || '',
+        choice7: lockedStudent.choice7 || '',
+        choice8: lockedStudent.choice8 || '',
+        choice9: lockedStudent.choice9 || '',
+        choice10: lockedStudent.choice10 || '',
+      });
+      setIsEditModalOpen(true);
+      toast({
+        title: "Student Locked",
+        description: "You now have exclusive edit access to this student",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cannot Edit Student",
+        description: error.message || "This student is currently being edited by another admin",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Unlock student when done editing
+  const unlockEditMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      return await apiRequest(`/api/students/${studentId}/unlock-edit`, {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/students'] });
+      setIsEditModalOpen(false);
+      setSelectedStudentForEdit(null);
+      toast({
+        title: "Student Unlocked",
+        description: "Other admins can now edit this student",
+      });
+    }
+  });
+
   const openEditModal = (student: Student) => {
-    setSelectedStudentForEdit(student);
-    form.reset({
-      stream: student.stream as any || "NonMedical",
-      choice1: student.choice1 || '',
-      choice2: student.choice2 || '',
-      choice3: student.choice3 || '',
-      choice4: student.choice4 || '',
-      choice5: student.choice5 || '',
-      choice6: student.choice6 || '',
-      choice7: student.choice7 || '',
-      choice8: student.choice8 || '',
-      choice9: student.choice9 || '',
-      choice10: student.choice10 || '',
-    });
-    setIsEditModalOpen(true);
+    // Check if student is already locked by another user
+    if (student.lockedBy && student.lockedBy !== user?.id) {
+      toast({
+        title: "Student Locked",
+        description: "This student is currently being edited by another admin",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Lock the student for exclusive editing
+    lockForEditMutation.mutate(student.id);
   };
 
   const openChoicesModal = (student: Student) => {
@@ -289,10 +343,23 @@ export default function StudentPreferenceManagement() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
+                              {student.lockedBy && student.lockedBy !== user?.id && (
+                                <Badge variant="destructive" className="text-xs">
+                                  <Lock className="w-3 h-3 mr-1" />
+                                  Locked
+                                </Badge>
+                              )}
+                              {student.lockedBy === user?.id && (
+                                <Badge variant="default" className="text-xs">
+                                  <Lock className="w-3 h-3 mr-1" />
+                                  Editing
+                                </Badge>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openEditModal(student)}
+                                disabled={student.lockedBy && student.lockedBy !== user?.id}
                                 data-testid={`button-edit-${student.id}`}
                               >
                                 <Edit className="w-4 h-4 mr-1" />
@@ -394,10 +461,18 @@ export default function StudentPreferenceManagement() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsEditModalOpen(false)}
+                    onClick={() => {
+                      if (selectedStudentForEdit) {
+                        unlockEditMutation.mutate(selectedStudentForEdit.id);
+                      } else {
+                        setIsEditModalOpen(false);
+                      }
+                    }}
+                    disabled={unlockEditMutation.isPending}
                     data-testid="button-cancel-edit"
                   >
-                    Cancel
+                    <Unlock className="w-4 h-4 mr-1" />
+                    {unlockEditMutation.isPending ? "Unlocking..." : "Unlock & Close"}
                   </Button>
                   <Button
                     type="submit"
