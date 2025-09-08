@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,8 +61,11 @@ export default function DistrictAdmin() {
   // Modal states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
+  const [isUnlockRequestModalOpen, setIsUnlockRequestModalOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
   const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
+  const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
+  const [unlockReason, setUnlockReason] = useState("");
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -485,8 +489,13 @@ export default function DistrictAdmin() {
   };
 
   const handleRequestUnlock = (student: Student) => {
-    const reason = prompt("Please provide a reason for unlock request:");
-    if (!reason || reason.trim() === "") {
+    setSelectedStudentForUnlock(student);
+    setUnlockReason("");
+    setIsUnlockRequestModalOpen(true);
+  };
+
+  const submitUnlockRequest = async () => {
+    if (!selectedStudentForUnlock || !unlockReason.trim()) {
       toast({
         title: "Reason Required",
         description: "Please provide a reason for the unlock request",
@@ -495,23 +504,24 @@ export default function DistrictAdmin() {
       return;
     }
 
-    // This will be implemented with the unlock request API
-    fetch('/api/unlock-requests', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        studentId: student.id,
-        reason: reason.trim(),
-      }),
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.message) {
+    try {
+      const response = await fetch('/api/unlock-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentId: selectedStudentForUnlock.id,
+          reason: unlockReason.trim(),
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
         toast({
           title: "Error",
-          description: data.message,
+          description: data.message || "Failed to send unlock request",
           variant: "destructive",
         });
       } else {
@@ -519,15 +529,17 @@ export default function DistrictAdmin() {
           title: "Unlock Request Sent",
           description: "Your unlock request has been sent to central admin for review",
         });
+        setIsUnlockRequestModalOpen(false);
+        setSelectedStudentForUnlock(null);
+        setUnlockReason("");
       }
-    })
-    .catch(error => {
+    } catch (error) {
       toast({
         title: "Error",
         description: "Failed to send unlock request",
         variant: "destructive",
       });
-    });
+    }
   };
 
   const handleReleaseStudent = (student: Student) => {
@@ -1038,6 +1050,59 @@ export default function DistrictAdmin() {
                   onClick={() => setIsChoicesModalOpen(false)}
                 >
                   Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Unlock Request Modal */}
+          <Dialog open={isUnlockRequestModalOpen} onOpenChange={setIsUnlockRequestModalOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Request Unlock - {selectedStudentForUnlock?.name}</DialogTitle>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                  <div className="text-sm">
+                    <div><strong>Student:</strong> {selectedStudentForUnlock?.name}</div>
+                    <div><strong>Merit Number:</strong> {selectedStudentForUnlock?.meritNumber}</div>
+                    <div><strong>App Number:</strong> {selectedStudentForUnlock?.appNo}</div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label htmlFor="unlock-reason" className="block text-sm font-medium mb-2">
+                    Reason for Unlock Request <span className="text-red-500">*</span>
+                  </label>
+                  <Textarea
+                    id="unlock-reason"
+                    placeholder="Please provide a detailed reason for requesting to unlock this student's preferences..."
+                    value={unlockReason}
+                    onChange={(e) => setUnlockReason(e.target.value)}
+                    className="min-h-[100px]"
+                    data-testid="textarea-unlock-reason"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setIsUnlockRequestModalOpen(false);
+                    setSelectedStudentForUnlock(null);
+                    setUnlockReason("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={submitUnlockRequest}
+                  disabled={!unlockReason.trim()}
+                  data-testid="button-submit-unlock-request"
+                >
+                  Send Request
                 </Button>
               </DialogFooter>
             </DialogContent>
