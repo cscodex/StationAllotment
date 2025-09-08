@@ -581,16 +581,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let students, total;
       
-      // District admin can only see students in their district
-      if (user?.role === 'district_admin' && user.district) {
-        const result = await storage.getStudentsByDistrict(user.district, limit, offset);
-        students = result.students;
-        total = result.total;
-      } else {
-        // Central admin can see all students
-        students = await storage.getStudents(limit, offset);
-        total = await storage.getStudentsCount();
-      }
+      // Show all students for student preference management
+      // This allows both central and district admins to see the full picture
+      students = await storage.getStudents(limit, offset);
+      total = await storage.getStudentsCount();
       
       // Map database fields to frontend expected fields
       const mappedStudents = students.map(student => ({

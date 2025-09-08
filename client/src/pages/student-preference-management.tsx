@@ -80,8 +80,7 @@ export default function StudentPreferenceManagement() {
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: async (data: { studentId: string, preferences: any }) => {
-      const response = await apiRequest('PUT', `/api/students/${data.studentId}/preferences`, data.preferences);
-      return response;
+      return await apiRequest('PUT', `/api/students/${data.studentId}/preferences`, data.preferences);
     },
     onSuccess: (updatedStudent: Student) => {
       // Unlock the student after saving
@@ -119,10 +118,9 @@ export default function StudentPreferenceManagement() {
   // Lock student for exclusive editing
   const lockForEditMutation = useMutation({
     mutationFn: async (studentId: string) => {
-      const response = await apiRequest(`/api/students/${studentId}/lock-for-edit`, {
+      return await apiRequest(`/api/students/${studentId}/lock-for-edit`, {
         method: 'POST',
       });
-      return response;
     },
     onSuccess: (lockedStudent: Student) => {
       // Student successfully locked, open edit modal
@@ -361,7 +359,7 @@ export default function StudentPreferenceManagement() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => openEditModal(student)}
-                                disabled={student.lockedBy && student.lockedBy !== user?.id}
+                                disabled={!!(student.lockedBy && student.lockedBy !== user?.id)}
                                 data-testid={`button-edit-${student.id}`}
                               >
                                 <Edit className="w-4 h-4 mr-1" />
