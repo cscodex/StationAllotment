@@ -82,6 +82,8 @@ export const students = pgTable("students", {
   allottedStream: varchar("allotted_stream"),
   allocationStatus: varchar("allocation_status").default('pending'), // 'pending' | 'allotted' | 'not_allotted'
   isLocked: boolean("is_locked").default(false), // Whether preferences are locked for editing
+  lockedBy: varchar("locked_by"), // User ID of the admin who has exclusive edit lock
+  lockedAt: timestamp("locked_at"), // When the student was locked for editing
   isReleased: boolean("is_released").default(false), // Whether student is released from district
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
