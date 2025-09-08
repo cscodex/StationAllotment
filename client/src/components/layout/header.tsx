@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useQuery } from "@tanstack/react-query";
 import { Menu, Bell, Clock, Users, CheckCircle, XCircle, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "wouter";
 import type { DistrictStatus } from "@shared/schema";
 
 interface HeaderProps {
@@ -24,6 +25,16 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
     queryKey: ["/api/district-status"],
     enabled: user?.role === 'central_admin',
   });
+
+  // Fetch unlock requests for notifications count
+  const { data: unlockRequests } = useQuery({
+    queryKey: ["/api/unlock-requests"],
+    enabled: user?.role === 'central_admin',
+  });
+
+  const pendingUnlockRequests = Array.isArray(unlockRequests) 
+    ? unlockRequests.filter((req: any) => req.status === 'pending').length 
+    : 0;
 
   const deadline = Array.isArray(settings) ? settings.find((s: any) => s.key === 'allocation_deadline')?.value : null;
   const deadlineDate = deadline ? new Date(deadline) : null;
@@ -125,10 +136,21 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
             </Popover>
           )}
           
-          <Button variant="ghost" size="sm" className="relative" data-testid="button-notifications">
-            <Bell className="w-4 h-4" />
-            <Badge variant="destructive" className="absolute -top-1 -right-1 w-2 h-2 p-0" />
-          </Button>
+          {user?.role === 'central_admin' && (
+            <Link href="/notifications">
+              <Button variant="ghost" size="sm" className="relative" data-testid="button-notifications">
+                <Bell className="w-4 h-4" />
+                {pendingUnlockRequests > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center text-xs p-0"
+                  >
+                    {pendingUnlockRequests}
+                  </Badge>
+                )}
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </header>
