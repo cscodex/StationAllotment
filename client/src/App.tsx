@@ -21,6 +21,7 @@ import ManageDistrictAdmins from "@/pages/manage-district-admins";
 import StudentPreferenceManagement from "@/pages/student-preference-management";
 import Profile from "@/pages/profile";
 import Notifications from "@/pages/notifications";
+import DistrictAnalysis from "@/pages/district-analysis";
 import MainLayout from "@/components/layout/main-layout";
 
 function Router() {
@@ -54,6 +55,7 @@ function Router() {
         <Route path="/manage-district-admins" component={ManageDistrictAdmins} />
         <Route path="/student-preference-management" component={StudentPreferenceManagement} />
         <Route path="/notifications" component={Notifications} />
+        <Route path="/district-analysis" component={DistrictAnalysis} />
         <Route path="/profile" component={Profile} />
         <Route path="/student/:id" component={StudentDetails} />
         <Route component={NotFound} />
