@@ -83,14 +83,16 @@ export default function StudentPreferenceManagement() {
       const response = await apiRequest('PUT', `/api/students/${data.studentId}/preferences`, data.preferences);
       return response;
     },
-    onSuccess: () => {
+    onSuccess: (updatedStudent: Student) => {
+      // Unlock the student after saving
+      if (selectedStudentForEdit) {
+        unlockEditMutation.mutate(selectedStudentForEdit.id);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      setIsEditModalOpen(false);
-      setSelectedStudentForEdit(null);
       form.reset();
       toast({
         title: "Success",
-        description: "Student preferences updated successfully",
+        description: "Student preferences updated and unlocked successfully",
       });
     },
     onError: (error: any) => {
