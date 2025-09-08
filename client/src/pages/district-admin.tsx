@@ -286,8 +286,22 @@ export default function DistrictAdmin() {
   const handleBatchLock = () => {
     if (selectedStudents.size === 0) return;
     
-    // Validate that all selected students have complete preferences
-    const selectedStudentObjects = filteredStudents.filter((s: Student) => selectedStudents.has(s.id));
+    // Only lock students with current district that belong to this district admin
+    const selectedStudentObjects = filteredStudents.filter((s: Student) => 
+      selectedStudents.has(s.id) && 
+      s.counselingDistrict === user?.district && 
+      s.districtAdmin === user?.username
+    );
+    
+    if (selectedStudentObjects.length === 0) {
+      toast({
+        title: "Cannot Lock Students",
+        description: "Only students assigned to your district can be locked.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const studentsWithoutStream = selectedStudentObjects.filter((s: Student) => !s.stream);
     const studentsWithIncompleteChoices = selectedStudentObjects.filter((s: Student) => 
       !s.choice1 || !s.choice2 || !s.choice3 || !s.choice4 || !s.choice5 || 
@@ -312,7 +326,7 @@ export default function DistrictAdmin() {
       return;
     }
     
-    batchLockMutation.mutate(Array.from(selectedStudents));
+    batchLockMutation.mutate(selectedStudentObjects.map((s: Student) => s.id));
   };
 
   const handleBatchUnlock = () => {
@@ -320,15 +334,18 @@ export default function DistrictAdmin() {
     batchUnlockMutation.mutate(Array.from(selectedStudents));
   };
 
-  // Calculate finalization readiness
-  const totalStudents = filteredStudents.length;
-  const lockedStudents = filteredStudents.filter((s: Student) => s.isLocked).length;
-  const studentsWithChoices = filteredStudents.filter((s: Student) => 
+  // Calculate finalization readiness - only consider students with current district belonging to this admin
+  const eligibleStudents = filteredStudents.filter((s: Student) => 
+    s.counselingDistrict === user?.district && s.districtAdmin === user?.username
+  );
+  const totalEligibleStudents = eligibleStudents.length;
+  const lockedEligibleStudents = eligibleStudents.filter((s: Student) => s.isLocked).length;
+  const studentsWithChoices = eligibleStudents.filter((s: Student) => 
     s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 || 
     s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10
   ).length;
 
-  const canFinalize = lockedStudents === totalStudents && totalStudents > 0 && !isDeadlinePassed;
+  const canFinalize = lockedEligibleStudents === totalEligibleStudents && totalEligibleStudents > 0 && !isDeadlinePassed;
   const isFinalized = (districtStatus as any)?.isFinalized;
 
   const handleFinalize = () => {
@@ -623,11 +640,11 @@ export default function DistrictAdmin() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-3 border rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">{totalStudents}</div>
+                    <div className="text-2xl font-bold text-blue-600">{totalEligibleStudents}</div>
                     <div className="text-sm text-muted-foreground">Total Students</div>
                   </div>
                   <div className="p-3 border rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">{lockedStudents}</div>
+                    <div className="text-2xl font-bold text-green-600">{lockedEligibleStudents}</div>
                     <div className="text-sm text-muted-foreground">Locked Students</div>
                   </div>
                   <div className="p-3 border rounded-lg">
@@ -636,12 +653,12 @@ export default function DistrictAdmin() {
                   </div>
                 </div>
                 
-                {!canFinalize && totalStudents > 0 && (
+                {!canFinalize && totalEligibleStudents > 0 && (
                   <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
                     <p className="text-sm text-amber-800 dark:text-amber-300">
                       <strong>To finalize:</strong> All students must be locked before you can finalize the district data.
-                      {lockedStudents < totalStudents && (
-                        <span> You need to lock {totalStudents - lockedStudents} more students.</span>
+                      {lockedEligibleStudents < totalEligibleStudents && (
+                        <span> You need to lock {totalEligibleStudents - lockedEligibleStudents} more students.</span>
                       )}
                     </p>
                   </div>
@@ -659,7 +676,7 @@ export default function DistrictAdmin() {
           )}
 
           {/* Auto-load Students Card */}
-          {totalStudents === 0 && (
+          {totalEligibleStudents === 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -743,15 +760,6 @@ export default function DistrictAdmin() {
                       >
                         🔒 Lock Selected
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={handleBatchUnlock}
-                        disabled={batchUnlockMutation.isPending || isDeadlinePassed}
-                        data-testid="button-batch-unlock"
-                      >
-                        🔓 Unlock Selected
-                      </Button>
                     </>
                   )}
                 </div>
@@ -814,20 +822,7 @@ export default function DistrictAdmin() {
                               )}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground max-w-xs">
-                              <div className="flex items-center gap-2">
-                                <div className="flex flex-wrap gap-1 flex-1">
-                                  {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-                                    student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
-                                    .map((choice, index) => choice ? (
-                                      <span key={index} className="bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-xs">
-                                        {index + 1}: {choice}
-                                      </span>
-                                    ) : null)
-                                    .filter(Boolean)}
-                                  {[student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-                                    student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
-                                    .filter(Boolean).length === 0 && <span className="text-gray-400">No choices set</span>}
-                                </div>
+                              <div className="flex items-center justify-center">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -872,16 +867,19 @@ export default function DistrictAdmin() {
                                     🔒 Lock
                                   </Button>
                                 )}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleReleaseStudent(student)}
-                                  disabled={isDeadlinePassed || student.counselingDistrict !== null}
-                                  data-testid={`button-release-${student.meritNumber}`}
-                                >
-                                  <RotateCcw className="w-3 h-3 mr-1" />
-                                  Release
-                                </Button>
+                                {/* Show release button only if student has current district and data is not locked */}
+                                {student.counselingDistrict && !student.isLocked && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleReleaseStudent(student)}
+                                    disabled={isDeadlinePassed}
+                                    data-testid={`button-release-${student.meritNumber}`}
+                                  >
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    Release
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
