@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import bcrypt from 'bcrypt';
 import { storage } from './storage';
 import type { InsertUser } from '@shared/schema';
@@ -23,7 +24,7 @@ async function seedUsers() {
     console.log('🌱 Starting user seeding...');
     
     // Read credentials.json
-    const credentialsData = fs.readFileSync('../credentials.json', 'utf-8');
+    const credentialsData = fs.readFileSync(path.join(import.meta.dirname, '..', 'credentials.json'), 'utf-8');
     const credentials: Credentials = JSON.parse(credentialsData);
     
     const usersToSeed: CredentialUser[] = [
