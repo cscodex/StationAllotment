@@ -96,8 +96,10 @@ export interface IStorage {
   finalizeDistrict(district: string, userId: string): Promise<DistrictStatus>;
 
   // Student locking operations
-  lockStudent(studentId: string): Promise<Student>;
+  lockStudent(studentId: string, userId: string): Promise<Student>;
   unlockStudent(studentId: string): Promise<Student>;
+  canEditStudent(studentId: string, userId: string): Promise<boolean>;
+  lockStudentForEdit(studentId: string, userId: string): Promise<{ success: boolean; message: string; student?: Student }>;
   getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{students: Student[], total: number}>;
   autoLoadEntranceStudents(district: string): Promise<{ loaded: number; skipped: number }>;
   releaseStudentFromDistrict(studentId: string): Promise<Student>;
@@ -505,10 +507,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Student locking operations
-  async lockStudent(studentId: string): Promise<Student> {
+  async lockStudent(studentId: string, userId: string): Promise<Student> {
     const [updated] = await db
       .update(students)
-      .set({ isLocked: true, updatedAt: new Date() })
+      .set({ 
+        isLocked: true, 
+        lockedBy: userId, 
+        lockedAt: new Date(),
+        updatedAt: new Date() 
+      })
       .where(eq(students.id, studentId))
       .returning();
     return updated;
@@ -517,10 +524,60 @@ export class DatabaseStorage implements IStorage {
   async unlockStudent(studentId: string): Promise<Student> {
     const [updated] = await db
       .update(students)
-      .set({ isLocked: false, updatedAt: new Date() })
+      .set({ 
+        isLocked: false, 
+        lockedBy: null, 
+        lockedAt: null,
+        updatedAt: new Date() 
+      })
       .where(eq(students.id, studentId))
       .returning();
     return updated;
+  }
+
+  // Check if a user can edit a specific student (exclusive lock system)
+  async canEditStudent(studentId: string, userId: string): Promise<boolean> {
+    const [student] = await db.select().from(students).where(eq(students.id, studentId));
+    if (!student) return false;
+    
+    // Student can be edited if:
+    // 1. Not locked by anyone (lockedBy is null)
+    // 2. OR locked by the same user requesting to edit
+    return !student.lockedBy || student.lockedBy === userId;
+  }
+
+  // Attempt to lock a student for exclusive editing
+  async lockStudentForEdit(studentId: string, userId: string): Promise<{ success: boolean; message: string; student?: Student }> {
+    const [student] = await db.select().from(students).where(eq(students.id, studentId));
+    if (!student) {
+      return { success: false, message: "Student not found" };
+    }
+
+    // Check if student is already locked by another user
+    if (student.lockedBy && student.lockedBy !== userId) {
+      const [lockingUser] = await db.select({ username: users.username })
+        .from(users)
+        .where(eq(users.id, student.lockedBy));
+      
+      return { 
+        success: false, 
+        message: `Student is currently being edited by ${lockingUser?.username || 'another admin'}. Please try again later.` 
+      };
+    }
+
+    // Lock the student for this user
+    const [updated] = await db
+      .update(students)
+      .set({ 
+        isLocked: true, 
+        lockedBy: userId, 
+        lockedAt: new Date(),
+        updatedAt: new Date() 
+      })
+      .where(eq(students.id, studentId))
+      .returning();
+
+    return { success: true, message: "Student locked for editing", student: updated };
   }
 
   async getStudentsByDistrict(district: string, limit = 50, offset = 0): Promise<{students: Student[], total: number}> {
@@ -617,7 +674,9 @@ export class DatabaseStorage implements IStorage {
         counselingDistrict: null,
         districtAdmin: null,
         isLocked: false,
-        isReleased: true,
+        lockedBy: null,
+        lockedAt: null,
+        isReleased: false, // Set to false so student appears in other district admin's lists
         updatedAt: new Date()
       })
       .where(eq(students.id, studentId))

@@ -686,11 +686,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Exclusive lock for editing student preferences
+  app.post('/api/students/:id/lock-for-edit', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session.userId;
+      
+      const result = await storage.lockStudentForEdit(id, userId);
+      
+      if (!result.success) {
+        return res.status(409).json({ message: result.message });
+      }
+      
+      await auditService.log(userId, 'student_lock_for_edit', 'students', id, {
+        studentName: result.student?.name,
+        appNo: result.student?.appNo
+      }, req.ip, req.get('User-Agent'));
+      
+      res.json(result.student);
+    } catch (error) {
+      console.error("Lock student for edit error:", error);
+      res.status(500).json({ message: "Failed to lock student for editing" });
+    }
+  });
+
   app.put('/api/students/:id/preferences', isDistrictAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
       const preferences = req.body;
       const user = await storage.getUser(req.session.userId);
+      
+      // Check if user can edit this student (exclusive lock check)
+      const canEdit = await storage.canEditStudent(id, req.session.userId);
+      if (!canEdit) {
+        return res.status(409).json({ 
+          message: "This student is currently being edited by another admin. Please try again later." 
+        });
+      }
       
       // Validate deadline hasn't passed
       const deadline = await storage.getSetting('allocation_deadline');
@@ -759,7 +791,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const updatedStudent = await storage.updateStudent(id, { isLocked });
+      const updatedStudent = isLocked 
+        ? await storage.lockStudent(id, req.session.userId)
+        : await storage.unlockStudent(id);
       
       await auditService.log(req.user.id, 'student_lock_status_change', 'students', id, {
         isLocked,
@@ -1324,7 +1358,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedStudent = isLocked 
-        ? await storage.lockStudent(id)
+        ? await storage.lockStudent(id, req.session.userId)
         : await storage.unlockStudent(id);
       
       await auditService.log(req.session.userId, 
@@ -1339,6 +1373,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Lock/unlock student error:", error);
       res.status(500).json({ message: "Failed to update student lock status" });
+    }
+  });
+
+  // Unlock student after editing (release exclusive lock)
+  app.post('/api/students/:id/unlock-edit', isDistrictAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const userId = req.session.userId;
+      
+      // Check if this user has the lock
+      const canEdit = await storage.canEditStudent(id, userId);
+      if (!canEdit) {
+        return res.status(403).json({ 
+          message: "You don't have edit permissions for this student" 
+        });
+      }
+      
+      const updatedStudent = await storage.unlockStudent(id);
+      
+      await auditService.log(userId, 'student_unlock_edit', 'students', id, {
+        studentName: updatedStudent.name,
+        appNo: updatedStudent.appNo
+      }, req.ip, req.get('User-Agent'));
+      
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Unlock student edit error:", error);
+      res.status(500).json({ message: "Failed to unlock student" });
     }
   });
 
