@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -629,7 +630,215 @@ export default function DistrictAdmin() {
             </CardContent>
           </Card>
 
-          {/* Finalization Status Card */}
+          {/* Tabs Navigation */}
+          <Tabs defaultValue="student-management" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="student-management">Student Preference Management</TabsTrigger>
+              <TabsTrigger value="district-finalization">District Finalization Status</TabsTrigger>
+            </TabsList>
+
+            {/* Student Management Tab */}
+            <TabsContent value="student-management" className="space-y-6">
+              {/* Student Search and Management */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Search className="w-5 h-5 mr-2 text-primary" />
+                      Student Preference Management
+                    </div>
+                    {selectedStudents.size > 0 && (
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                        {selectedStudents.size} selected
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name, merit number, or application number..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                        data-testid="input-search-students"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={selectAll}
+                        disabled={filteredStudents.length === 0}
+                        data-testid="button-select-all"
+                      >
+                        Select All
+                      </Button>
+                      {selectedStudents.size > 0 && (
+                        <>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={clearSelection}
+                            data-testid="button-clear-selection"
+                          >
+                            Clear
+                          </Button>
+                          <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            onClick={handleBatchLock}
+                            disabled={batchLockMutation.isPending || isDeadlinePassed}
+                            data-testid="button-batch-lock"
+                          >
+                            🔒 Lock Selected
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <div className="flex items-center justify-center p-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-12">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStudents.size === filteredStudents.length && filteredStudents.length > 0}
+                                  onChange={selectedStudents.size === filteredStudents.length ? clearSelection : selectAll}
+                                  className="rounded border-gray-300"
+                                  data-testid="checkbox-select-all"
+                                />
+                              </TableHead>
+                              <TableHead>App No.</TableHead>
+                              <TableHead>Merit No.</TableHead>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Stream</TableHead>
+                              <TableHead>Counseling District</TableHead>
+                              <TableHead>District Admin</TableHead>
+                              <TableHead>Locked</TableHead>
+                              <TableHead>Choices (1-10)</TableHead>
+                              <TableHead>Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredStudents.map((student: Student) => (
+                              <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                                <TableCell>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedStudents.has(student.id)}
+                                    onChange={() => toggleStudentSelection(student.id)}
+                                    className="rounded border-gray-300"
+                                    data-testid={`checkbox-select-${student.meritNumber}`}
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">{student.appNo}</TableCell>
+                                <TableCell className="font-medium">{student.meritNumber}</TableCell>
+                                <TableCell>{student.name}</TableCell>
+                                <TableCell>{student.stream}</TableCell>
+                                <TableCell>{student.counselingDistrict || 'N/A'}</TableCell>
+                                <TableCell>{student.districtAdmin || 'N/A'}</TableCell>
+                                <TableCell>
+                                  {student.isLocked === true ? (
+                                    <Badge variant="destructive" className="bg-red-100 text-red-800">
+                                      🔒 Locked
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="bg-green-100 text-green-800">
+                                      🔓 Unlocked
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground max-w-xs">
+                                  <div className="flex items-center justify-center">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openChoicesModal(student)}
+                                      className="p-1 h-6 w-6"
+                                      data-testid={`button-view-choices-${student.meritNumber}`}
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex gap-1">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => openEditModal(student)}
+                                      disabled={isDeadlinePassed || student.isLocked === true}
+                                      data-testid={`button-edit-${student.meritNumber}`}
+                                    >
+                                      <Edit className="w-3 h-3 mr-1" />
+                                      Edit
+                                    </Button>
+                                    {student.isLocked === true ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleRequestUnlock(student)}
+                                        disabled={isDeadlinePassed}
+                                        data-testid={`button-request-unlock-${student.meritNumber}`}
+                                      >
+                                        📝 Request Unlock
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => handleLockToggle(student)}
+                                        disabled={isDeadlinePassed}
+                                        data-testid={`button-lock-${student.meritNumber}`}
+                                      >
+                                        🔒 Lock
+                                      </Button>
+                                    )}
+                                    {/* Show release button only if student has current district and data is not locked */}
+                                    {student.counselingDistrict && !student.isLocked && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleReleaseStudent(student)}
+                                        disabled={isDeadlinePassed}
+                                        data-testid={`button-release-${student.meritNumber}`}
+                                      >
+                                        <RotateCcw className="w-3 h-3 mr-1" />
+                                        Release
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {filteredStudents.length === 0 && (
+                        <div className="text-center py-8">
+                          <p className="text-muted-foreground">No students found matching your search.</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* District Finalization Tab */}
+            <TabsContent value="district-finalization" className="space-y-6">
+              {/* Finalization Status Card */}
           {!isFinalized && (
             <Card>
               <CardHeader>
@@ -687,51 +896,6 @@ export default function DistrictAdmin() {
             </Card>
           )}
 
-          {/* Auto-load Students Card */}
-          {totalEligibleStudents === 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Download className="w-5 h-5 mr-2 text-primary" />
-                  Load Entrance Exam Students
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      No students found for your district. Load students from entrance exam results to start setting preferences.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      This will automatically import all eligible students from the entrance exam results.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={handleAutoLoadStudents}
-                    disabled={autoLoadMutation.isPending}
-                    data-testid="button-auto-load-students"
-                  >
-                    {autoLoadMutation.isPending ? "Loading..." : "Load Students"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Student Search and Management */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Search className="w-5 h-5 mr-2 text-primary" />
-                  Student Preference Management
-                </div>
-                {selectedStudents.size > 0 && (
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                    {selectedStudents.size} selected
-                  </Badge>
-                )}
-              </CardTitle>
               <div className="flex items-center justify-between gap-4">
                 <div className="relative flex-1 max-w-md">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -801,6 +965,8 @@ export default function DistrictAdmin() {
                           <TableHead>Merit No.</TableHead>
                           <TableHead>Name</TableHead>
                           <TableHead>Stream</TableHead>
+                          <TableHead>Counseling District</TableHead>
+                          <TableHead>District Admin</TableHead>
                           <TableHead>Locked</TableHead>
                           <TableHead>Choices (1-10)</TableHead>
                           <TableHead>Actions</TableHead>
@@ -822,6 +988,8 @@ export default function DistrictAdmin() {
                             <TableCell className="font-medium">{student.meritNumber}</TableCell>
                             <TableCell>{student.name}</TableCell>
                             <TableCell>{student.stream}</TableCell>
+                            <TableCell>{student.counselingDistrict || 'N/A'}</TableCell>
+                            <TableCell>{student.districtAdmin || 'N/A'}</TableCell>
                             <TableCell>
                               {student.isLocked === true ? (
                                 <Badge variant="destructive" className="bg-red-100 text-red-800">
@@ -1107,8 +1275,11 @@ export default function DistrictAdmin() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+            </TabsContent>
+          </Tabs>
         </div>
-      </main>
+
+        </main>
     </div>
   );
 }
