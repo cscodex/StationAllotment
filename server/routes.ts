@@ -681,7 +681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Exclusive lock for editing student preferences
-  app.post('/api/students/:id/lock-for-edit', isDistrictAdmin, async (req: any, res) => {
+  app.post('/api/students/:id/lock-for-edit', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
       const userId = req.session.userId;
@@ -704,7 +704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/students/:id/preferences', isDistrictAdmin, async (req: any, res) => {
+  app.put('/api/students/:id/preferences', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
       const preferences = req.body;
@@ -1371,7 +1371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Unlock student after editing (release exclusive lock)
-  app.post('/api/students/:id/unlock-edit', isDistrictAdmin, async (req: any, res) => {
+  app.post('/api/students/:id/unlock-edit', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
       const userId = req.session.userId;
