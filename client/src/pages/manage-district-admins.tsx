@@ -368,10 +368,10 @@ export default function ManageDistrictAdmins() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
+                        <TableHead>District Admin Name</TableHead>
                         <TableHead>Username</TableHead>
                         <TableHead>Email</TableHead>
-                        <TableHead>District</TableHead>
+                        <TableHead>Counseling District</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="w-32">Actions</TableHead>
                       </TableRow>

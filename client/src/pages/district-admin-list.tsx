@@ -63,9 +63,9 @@ export default function DistrictAdminList() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>District</TableHead>
+                        <TableHead>Counseling District</TableHead>
                         <TableHead>Username</TableHead>
-                        <TableHead>Name</TableHead>
+                        <TableHead>District Admin Name</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
