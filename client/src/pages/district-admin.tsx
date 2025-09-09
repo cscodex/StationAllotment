@@ -1095,8 +1095,6 @@ export default function DistrictAdmin() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-            </TabsContent>
-          </Tabs>
         </div>
 
         </main>
