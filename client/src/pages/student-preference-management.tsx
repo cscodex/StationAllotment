@@ -80,7 +80,8 @@ export default function StudentPreferenceManagement() {
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: async (data: { studentId: string, preferences: any }) => {
-      return await apiRequest('PUT', `/api/students/${data.studentId}/preferences`, data.preferences);
+      const response = await apiRequest('PUT', `/api/students/${data.studentId}/preferences`, data.preferences);
+      return await response.json();
     },
     onSuccess: (updatedStudent: Student) => {
       // Unlock the student after saving
@@ -118,9 +119,8 @@ export default function StudentPreferenceManagement() {
   // Lock student for exclusive editing
   const lockForEditMutation = useMutation({
     mutationFn: async (studentId: string) => {
-      return await apiRequest(`/api/students/${studentId}/lock-for-edit`, {
-        method: 'POST',
-      });
+      const response = await apiRequest('POST', `/api/students/${studentId}/lock-for-edit`);
+      return await response.json();
     },
     onSuccess: (lockedStudent: Student) => {
       // Student successfully locked, open edit modal
@@ -156,9 +156,8 @@ export default function StudentPreferenceManagement() {
   // Unlock student when done editing
   const unlockEditMutation = useMutation({
     mutationFn: async (studentId: string) => {
-      return await apiRequest(`/api/students/${studentId}/unlock-edit`, {
-        method: 'POST',
-      });
+      const response = await apiRequest('POST', `/api/students/${studentId}/unlock-edit`);
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/students'] });
