@@ -54,6 +54,7 @@ async function seedUsers() {
         district: userData.district || null,
         firstName: userData.firstName,
         lastName: userData.lastName,
+        credentials: userData, // Store original credentials data
         isBlocked: false,
       };
       
