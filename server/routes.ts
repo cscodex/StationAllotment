@@ -1274,10 +1274,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // District status routes
-  app.get('/api/district-status', isCentralAdmin, async (req, res) => {
+  app.get('/api/district-status', isDistrictAdmin, async (req: any, res) => {
     try {
-      const statuses = await storage.getAllDistrictStatuses();
-      res.json(statuses);
+      const user = req.user;
+      
+      if (user.role === 'central_admin') {
+        // Central admin can see all district statuses
+        const statuses = await storage.getAllDistrictStatuses();
+        res.json(statuses);
+      } else if (user.role === 'district_admin') {
+        // District admin can only see their own district status
+        const status = await storage.getDistrictStatus(user.district);
+        res.json(status ? [status] : []);
+      } else {
+        res.status(403).json({ message: "Forbidden" });
+      }
     } catch (error) {
       console.error("Get district statuses error:", error);
       res.status(500).json({ message: "Failed to fetch district statuses" });
