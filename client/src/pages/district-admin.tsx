@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -63,9 +64,11 @@ export default function DistrictAdmin() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
   const [isUnlockRequestModalOpen, setIsUnlockRequestModalOpen] = useState(false);
+  const [isLockConfirmDialogOpen, setIsLockConfirmDialogOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
   const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
   const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
+  const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
   const [unlockReason, setUnlockReason] = useState("");
   
   const { user } = useAuth();
@@ -450,29 +453,47 @@ export default function DistrictAdmin() {
       return;
     }
 
-    // District admin can only lock students, not unlock them
+    // District admin can only lock students, not unlock them (except central admin)
     if (student.isLocked) {
-      toast({
-        title: "Cannot Unlock",
-        description: "Only central admin can unlock students. You can request unlock from central admin.",
-        variant: "destructive",
-      });
+      if (user?.role === 'central_admin') {
+        // Central admin can unlock directly
+        lockStudentMutation.mutate({
+          studentId: student.id,
+          isLocked: false,
+        });
+      } else {
+        toast({
+          title: "Cannot Unlock",
+          description: "Only central admin can unlock students. You can request unlock from central admin.",
+          variant: "destructive",
+        });
+      }
       return;
     }
 
+    // For locking, show confirmation dialog
+    setSelectedStudentForLock(student);
+    setIsLockConfirmDialogOpen(true);
+  };
+
+  const confirmLockStudent = () => {
+    if (!selectedStudentForLock) return;
+
     // Validate that all preferences including stream are set before locking
-    if (!student.stream) {
+    if (!selectedStudentForLock.stream) {
       toast({
         title: "Cannot Lock Student",
         description: "Student stream must be set before locking. Please update the student's stream preference.",
         variant: "destructive",
       });
+      setIsLockConfirmDialogOpen(false);
+      setSelectedStudentForLock(null);
       return;
     }
 
-    const hasAllChoices = student.choice1 && student.choice2 && student.choice3 && 
-                         student.choice4 && student.choice5 && student.choice6 &&
-                         student.choice7 && student.choice8 && student.choice9 && student.choice10;
+    const hasAllChoices = selectedStudentForLock.choice1 && selectedStudentForLock.choice2 && selectedStudentForLock.choice3 && 
+                         selectedStudentForLock.choice4 && selectedStudentForLock.choice5 && selectedStudentForLock.choice6 &&
+                         selectedStudentForLock.choice7 && selectedStudentForLock.choice8 && selectedStudentForLock.choice9 && selectedStudentForLock.choice10;
     
     if (!hasAllChoices) {
       toast({
@@ -480,13 +501,18 @@ export default function DistrictAdmin() {
         description: "All 10 district preferences must be set before locking. Please complete all choices.",
         variant: "destructive",
       });
+      setIsLockConfirmDialogOpen(false);
+      setSelectedStudentForLock(null);
       return;
     }
 
     lockStudentMutation.mutate({
-      studentId: student.id,
+      studentId: selectedStudentForLock.id,
       isLocked: true,
     });
+
+    setIsLockConfirmDialogOpen(false);
+    setSelectedStudentForLock(null);
   };
 
   const handleRequestUnlock = (student: Student) => {
@@ -1168,6 +1194,80 @@ export default function DistrictAdmin() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Lock Confirmation Dialog */}
+          <AlertDialog open={isLockConfirmDialogOpen} onOpenChange={setIsLockConfirmDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Lock Student Preferences</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to lock {selectedStudentForLock?.name}'s preferences? 
+                  This will prevent further edits to their district choices until unlocked by a central administrator.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              
+              {selectedStudentForLock && (
+                <div className="space-y-3 py-4">
+                  <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Student Name</p>
+                      <p className="font-semibold" data-testid="text-lock-student-name">
+                        {selectedStudentForLock.name}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Merit Number</p>
+                      <p className="font-mono" data-testid="text-lock-student-merit">
+                        {selectedStudentForLock.meritNumber}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Stream</p>
+                      <p className="font-semibold" data-testid="text-lock-student-stream">
+                        {selectedStudentForLock.stream}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Total Choices</p>
+                      <p className="font-semibold">
+                        {[selectedStudentForLock.choice1, selectedStudentForLock.choice2, selectedStudentForLock.choice3,
+                          selectedStudentForLock.choice4, selectedStudentForLock.choice5, selectedStudentForLock.choice6,
+                          selectedStudentForLock.choice7, selectedStudentForLock.choice8, selectedStudentForLock.choice9,
+                          selectedStudentForLock.choice10].filter(Boolean).length} / 10
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      ⚠️ Once locked, only a central administrator can unlock this student's preferences. 
+                      This action ensures data integrity during the allocation process.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <AlertDialogFooter>
+                <AlertDialogCancel 
+                  onClick={() => {
+                    setIsLockConfirmDialogOpen(false);
+                    setSelectedStudentForLock(null);
+                  }}
+                  data-testid="button-cancel-lock"
+                >
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmLockStudent}
+                  disabled={lockStudentMutation.isPending}
+                  data-testid="button-confirm-lock"
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {lockStudentMutation.isPending ? "Locking..." : "🔒 Lock Student"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         </main>
