@@ -211,6 +211,30 @@ export default function StudentPreferenceManagement() {
     }
   };
 
+  // Helper function to determine if current user can edit a specific student
+  const canEditStudent = (student: Student) => {
+    if (!user) return false;
+    
+    // Central admin can edit all students
+    if (user.role === 'central_admin') {
+      return true;
+    }
+    
+    // District admin logic
+    if (user.role === 'district_admin') {
+      // If student has no assigned district admin (N/A), all district admins can edit
+      if (!student.districtAdmin) {
+        return true;
+      }
+      
+      // If student has an assigned district admin, only that admin can edit
+      // Check if the student's districtAdmin matches current user's district
+      return student.districtAdmin === user.district;
+    }
+    
+    return false;
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       <Header 
@@ -354,16 +378,29 @@ export default function StudentPreferenceManagement() {
                                   Editing
                                 </Badge>
                               )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openEditModal(student)}
-                                disabled={!!(student.lockedBy && student.lockedBy !== user?.id)}
-                                data-testid={`button-edit-${student.id}`}
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                Edit
-                              </Button>
+                              {canEditStudent(student) ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openEditModal(student)}
+                                  disabled={!!(student.lockedBy && student.lockedBy !== user?.id)}
+                                  data-testid={`button-edit-${student.id}`}
+                                >
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Edit
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled
+                                  data-testid={`button-edit-disabled-${student.id}`}
+                                  className="text-muted-foreground"
+                                >
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Edit
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
