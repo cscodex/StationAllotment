@@ -222,17 +222,27 @@ export default function StudentPreferenceManagement() {
     
     // District admin logic
     if (user.role === 'district_admin') {
-      // If student has no assigned district admin (N/A), all district admins can edit
-      if (!student.districtAdmin) {
+      // Check if student belongs to this district
+      const belongsToDistrict = student.counselingDistrict === user.district;
+      
+      // If student has no assigned district admin (N/A), any district admin from that district can edit
+      if (!student.districtAdmin && belongsToDistrict) {
         return true;
       }
       
-      // If student has an assigned district admin, only that admin can edit
-      // Check if the student's districtAdmin matches current user's district
-      return student.districtAdmin === user.district;
+      // If student has an assigned district admin, only that specific admin can edit
+      return student.districtAdmin === user.username && belongsToDistrict;
     }
     
     return false;
+  };
+
+  // Helper function to check if all student preferences are filled
+  const areAllPreferencesFilled = (student: Student) => {
+    return !!(student.choice1?.trim() && student.choice2?.trim() && student.choice3?.trim() && 
+              student.choice4?.trim() && student.choice5?.trim() && student.choice6?.trim() && 
+              student.choice7?.trim() && student.choice8?.trim() && student.choice9?.trim() && 
+              student.choice10?.trim() && student.stream);
   };
 
   return (
