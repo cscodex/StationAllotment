@@ -1540,6 +1540,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Combined respond endpoint for unlock requests (approve or reject)
+  app.put('/api/unlock-requests/:id/respond', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { action, reviewComments } = req.body;
+
+      if (!action || !['approve', 'reject'].includes(action)) {
+        return res.status(400).json({ message: "Invalid action. Must be 'approve' or 'reject'" });
+      }
+
+      const unlockRequest = await storage.updateUnlockRequest(id, {
+        status: action === 'approve' ? 'approved' : 'rejected',
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date(),
+        reviewComments
+      });
+
+      // If approved, unlock the student
+      if (action === 'approve' && unlockRequest.studentId) {
+        await storage.unlockStudent(unlockRequest.studentId);
+      }
+
+      await auditService.log(req.session.userId, `unlock_request_${action}d`, 'unlock_request', id, {
+        reviewComments
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(unlockRequest);
+    } catch (error) {
+      console.error("Respond to unlock request error:", error);
+      res.status(500).json({ message: "Failed to process unlock request" });
+    }
+  });
+
   // Auto-load entrance exam students for district
   app.post('/api/district/:district/auto-load-students', isDistrictAdmin, async (req: any, res) => {
     try {

@@ -833,15 +833,27 @@ export default function DistrictAdmin() {
                                     {/* Lock/Unlock buttons - only show if user can edit student */}
                                     {canEditStudent(student) && (
                                       student.isLocked === true ? (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => handleRequestUnlock(student)}
-                                          disabled={isDeadlinePassed}
-                                          data-testid={`button-request-unlock-${student.meritNumber}`}
-                                        >
-                                          📝 Request Unlock
-                                        </Button>
+                                        user?.role === 'central_admin' ? (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleLockToggle(student)}
+                                            disabled={isDeadlinePassed}
+                                            data-testid={`button-unlock-${student.meritNumber}`}
+                                          >
+                                            🔓 Unlock
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleRequestUnlock(student)}
+                                            disabled={isDeadlinePassed}
+                                            data-testid={`button-request-unlock-${student.meritNumber}`}
+                                          >
+                                            📝 Request Unlock
+                                          </Button>
+                                        )
                                       ) : areAllPreferencesFilled(student) ? (
                                         <Button
                                           variant="secondary"
