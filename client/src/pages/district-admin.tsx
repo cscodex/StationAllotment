@@ -584,13 +584,13 @@ export default function DistrictAdmin() {
     
     // District admin logic
     if (user.role === 'district_admin') {
-      // Check if student belongs to this district
-      const belongsToDistrict = student.counselingDistrict === user.district;
-      
-      // If student has no assigned district admin (N/A), any district admin from that district can edit
-      if (!student.districtAdmin && belongsToDistrict) {
+      // If student has no assigned district admin (N/A), any district admin can edit
+      if (!student.districtAdmin) {
         return true;
       }
+      
+      // Check if student belongs to this district
+      const belongsToDistrict = student.counselingDistrict === user.district;
       
       // If student has an assigned district admin, only that specific admin can edit
       return student.districtAdmin === user.username && belongsToDistrict;
