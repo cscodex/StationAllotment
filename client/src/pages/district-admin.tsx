@@ -597,6 +597,14 @@ export default function DistrictAdmin() {
     return false;
   };
 
+  // Helper function to check if all student preferences are filled
+  const areAllPreferencesFilled = (student: Student) => {
+    return !!(student.choice1 && student.choice2 && student.choice3 && 
+              student.choice4 && student.choice5 && student.choice6 && 
+              student.choice7 && student.choice8 && student.choice9 && 
+              student.choice10);
+  };
+
   return (
     <div className="flex-1 flex flex-col">
       <Header 
@@ -820,29 +828,43 @@ export default function DistrictAdmin() {
                                         Edit
                                       </Button>
                                     )}
-                                    {student.isLocked === true ? (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleRequestUnlock(student)}
-                                        disabled={isDeadlinePassed}
-                                        data-testid={`button-request-unlock-${student.meritNumber}`}
-                                      >
-                                        📝 Request Unlock
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        variant="secondary"
-                                        size="sm"
-                                        onClick={() => handleLockToggle(student)}
-                                        disabled={isDeadlinePassed}
-                                        data-testid={`button-lock-${student.meritNumber}`}
-                                      >
-                                        🔒 Lock
-                                      </Button>
+                                    {/* Lock/Unlock buttons - only show if user can edit student */}
+                                    {canEditStudent(student) && (
+                                      student.isLocked === true ? (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleRequestUnlock(student)}
+                                          disabled={isDeadlinePassed}
+                                          data-testid={`button-request-unlock-${student.meritNumber}`}
+                                        >
+                                          📝 Request Unlock
+                                        </Button>
+                                      ) : areAllPreferencesFilled(student) ? (
+                                        <Button
+                                          variant="secondary"
+                                          size="sm"
+                                          onClick={() => handleLockToggle(student)}
+                                          disabled={isDeadlinePassed}
+                                          data-testid={`button-lock-${student.meritNumber}`}
+                                        >
+                                          🔒 Lock
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled
+                                          data-testid={`button-lock-disabled-${student.meritNumber}`}
+                                          className="text-muted-foreground"
+                                          title="Fill all preferences to enable lock"
+                                        >
+                                          🔒 Lock
+                                        </Button>
+                                      )
                                     )}
-                                    {/* Show release button only if student has current district and data is not locked */}
-                                    {student.counselingDistrict && !student.isLocked && (
+                                    {/* Show release button only if user can edit student, student has current district and data is not locked */}
+                                    {canEditStudent(student) && student.counselingDistrict && !student.isLocked && (
                                       <Button
                                         variant="outline"
                                         size="sm"
