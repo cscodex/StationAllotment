@@ -1131,6 +1131,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Allocation has already been completed" });
       }
 
+      // Check if all districts with eligible students are finalized
+      const allDistrictStatuses = await storage.getAllDistrictStatuses();
+      const studentsData = await storage.getStudents(10000, 0);
+      
+      // Get list of districts that have students with district admin assignments and preferences
+      const districtsWithEligibleStudents = new Set<string>();
+      studentsData.forEach((student) => {
+        if (student.districtAdmin && student.choice1 && student.counselingDistrict) {
+          districtsWithEligibleStudents.add(student.counselingDistrict);
+        }
+      });
+
+      // Check if all districts with eligible students are finalized
+      const unfinalizedDistricts: string[] = [];
+      districtsWithEligibleStudents.forEach(district => {
+        const districtStatus = allDistrictStatuses.find(status => status.district === district);
+        if (!districtStatus || !districtStatus.isFinalized) {
+          unfinalizedDistricts.push(district);
+        }
+      });
+
+      if (unfinalizedDistricts.length > 0) {
+        return res.status(400).json({ 
+          message: `Cannot run allocation: ${unfinalizedDistricts.length} districts with eligible students are not finalized. All districts must finalize their data before allocation can be run.`,
+          unfinalizedDistricts,
+          totalDistricts: districtsWithEligibleStudents.size
+        });
+      }
+
       const result = await allocationService.runAllocation();
       
       await storage.setSetting({
@@ -1315,14 +1344,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Can only finalize your own district" });
       }
 
-      // Check if all students in district are locked
+      // Check if all eligible students in district are locked
       const districtStudents = await storage.getStudentsByDistrict(district);
-      const unlockedStudents = districtStudents.students.filter(s => !s.isLocked);
       
-      if (unlockedStudents.length > 0) {
+      // Only consider students that have district admin assigned AND have preference data for finalization
+      const eligibleStudents = districtStudents.students.filter(s => 
+        s.districtAdmin && s.choice1 // Must have district admin and at least first choice
+      );
+      
+      const unlockedEligibleStudents = eligibleStudents.filter(s => !s.isLocked);
+      
+      if (unlockedEligibleStudents.length > 0) {
         return res.status(400).json({ 
-          message: `Cannot finalize district: ${unlockedStudents.length} students are not locked. All students must be locked before finalization.`,
-          unlockedCount: unlockedStudents.length
+          message: `Cannot finalize district: ${unlockedEligibleStudents.length} eligible students are not locked. All students with district admin assignments and preferences must be locked before finalization.`,
+          unlockedCount: unlockedEligibleStudents.length,
+          eligibleTotal: eligibleStudents.length
         });
       }
 
@@ -1360,6 +1396,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Only central admin can unlock students - district admin can only lock
       if (!isLocked && user?.role === 'district_admin') {
         return res.status(403).json({ message: "Only central admin can unlock students" });
+      }
+
+      // Business rule validation: Students with no district admin and no preference data cannot be locked
+      if (isLocked && !student.districtAdmin && !student.choice1) {
+        return res.status(400).json({ 
+          message: "Cannot lock student: Student has no district admin assigned and no preference data. Only students with district admin assignments and preferences can be locked." 
+        });
       }
 
       const updatedStudent = isLocked 

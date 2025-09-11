@@ -495,15 +495,21 @@ export class DatabaseStorage implements IStorage {
   async finalizeDistrict(district: string, userId: string): Promise<DistrictStatus> {
     // Get current district student stats for the status record
     const districtStudents = await this.getStudentsByDistrict(district);
-    const lockedStudents = districtStudents.students.filter(s => s.isLocked).length;
+    
+    // Only consider students that have district admin assigned AND have preference data
+    const eligibleStudents = districtStudents.students.filter(s => 
+      s.districtAdmin && s.choice1 // Must have district admin and at least first choice
+    );
+    
+    const lockedEligibleStudents = eligibleStudents.filter(s => s.isLocked).length;
     const studentsWithChoices = districtStudents.students.filter(s => s.choice1).length;
 
     // Create or update district status with finalization
     const statusData: InsertDistrictStatus = {
       district,
       isFinalized: true,
-      totalStudents: districtStudents.total,
-      lockedStudents,
+      totalStudents: eligibleStudents.length, // Only count eligible students
+      lockedStudents: lockedEligibleStudents,
       studentsWithChoices,
       finalizedBy: userId,
       finalizedAt: new Date(),
