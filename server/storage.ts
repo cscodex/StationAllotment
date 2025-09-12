@@ -65,6 +65,7 @@ export interface IStorage {
     counselingDistrict?: string; districtAdmin?: string;
   }): Promise<Student>;
   checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{hasConflict: boolean, currentDistrict?: string}>;
+  releaseAssignment(studentId: string): Promise<Student>;
 
   // Vacancy operations
   getVacancies(): Promise<Vacancy[]>;
@@ -291,6 +292,19 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(students)
       .set({ ...preferences, updatedAt: new Date() })
+      .where(eq(students.id, studentId))
+      .returning();
+    return updated;
+  }
+
+  async releaseAssignment(studentId: string): Promise<Student> {
+    const [updated] = await db
+      .update(students)
+      .set({ 
+        counselingDistrict: null, 
+        districtAdmin: null,
+        updatedAt: new Date() 
+      })
       .where(eq(students.id, studentId))
       .returning();
     return updated;

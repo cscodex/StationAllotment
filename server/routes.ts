@@ -18,6 +18,18 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
 });
 
+// Helper function to check if student preferences are complete
+function isPreferencesComplete(student: any): boolean {
+  if (!student.stream || !student.stream.trim()) return false;
+  
+  const choices = [
+    student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+    student.choice6, student.choice7, student.choice8, student.choice9, student.choice10
+  ];
+  
+  return choices.every(choice => choice && choice.trim());
+}
+
 function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
@@ -690,10 +702,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Exclusive lock for editing student preferences
-  app.post('/api/students/:id/lock-for-edit', isAuthenticated, async (req: any, res) => {
+  app.post('/api/students/:id/lock-for-edit', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
       const userId = req.session.userId;
+      
+      // First get the student to validate business rules
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Business Rule 1: Student must be assigned to central admin
+      if (student.counselingDistrict !== 'Mohali' || student.districtAdmin !== 'Central_admin') {
+        return res.status(403).json({ 
+          message: "Student is not currently assigned to central admin and cannot be locked for editing" 
+        });
+      }
+
+      // Business Rule 2: Student must have complete preferences
+      if (!isPreferencesComplete(student)) {
+        return res.status(403).json({ 
+          message: "Student preferences are incomplete. Only students with complete preferences can be locked for editing" 
+        });
+      }
       
       const result = await storage.lockStudentForEdit(id, userId);
       
@@ -744,26 +776,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Debug logging to understand user object and role
-      console.log("User object in preferences update:", JSON.stringify(user, null, 2));
-      console.log("User role:", user?.role);
-      console.log("Incoming preferences:", JSON.stringify(preferences, null, 2));
-
       // Set district admin info if not already set
       if (user?.role === 'district_admin' && user.district) {
-        console.log("Setting district admin info for district admin");
         preferences.counselingDistrict = user.district;
         preferences.districtAdmin = user.username;
       }
       
       // Set central admin info when central admin edits preferences
       if (user?.role === 'central_admin') {
-        console.log("Setting central admin info - counselingDistrict to Mohali, districtAdmin to Central_admin");
         preferences.counselingDistrict = 'Mohali';
         preferences.districtAdmin = 'Central_admin';
       }
-      
-      console.log("Final preferences to be saved:", JSON.stringify(preferences, null, 2));
 
       const student = await storage.updateStudent(id, preferences);
       
@@ -882,6 +905,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Student release error:", error);
       res.status(500).json({ message: "Failed to release student" });
+    }
+  });
+
+  // Release assignment endpoint - specifically for central admin to unset district assignment
+  app.post('/api/students/:id/release-assignment', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      
+      // Only central admin can use this endpoint
+      if (user?.role !== 'central_admin') {
+        return res.status(403).json({ message: "Only central admin can release assignments" });
+      }
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Verify student is currently assigned to central admin
+      if (student.counselingDistrict !== 'Mohali' || student.districtAdmin !== 'Central_admin') {
+        return res.status(400).json({ 
+          message: "Student is not currently assigned to central admin" 
+        });
+      }
+
+      // Check if student is locked - locked students cannot be released
+      if (student.lockedBy && student.lockedBy !== req.session.userId) {
+        return res.status(409).json({ 
+          message: "Student is locked by another admin. Cannot release assignment." 
+        });
+      }
+      
+      const updatedStudent = await storage.releaseAssignment(id);
+      
+      await auditService.log(req.session.userId, 'assignment_release', 'students', id, {
+        releasedBy: req.session.userId,
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        previousDistrict: student.counselingDistrict,
+        previousDistrictAdmin: student.districtAdmin
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Release assignment error:", error);
+      res.status(500).json({ message: "Failed to release assignment" });
     }
   });
 
