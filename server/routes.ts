@@ -1309,7 +1309,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (user.role === 'central_admin') {
         // Central admin can see all district statuses
-        const statuses = await storage.getAllDistrictStatuses();
+        let statuses = await storage.getAllDistrictStatuses();
+        
+        // Get all students to identify districts with eligible students
+        const studentsData = await storage.getStudents(10000, 0);
+        
+        // Get list of districts that have students with district admin assignments and preferences
+        const districtsWithEligibleStudents = new Set<string>();
+        studentsData.forEach((student) => {
+          if (student.districtAdmin && student.choice1 && student.counselingDistrict) {
+            districtsWithEligibleStudents.add(student.counselingDistrict);
+          }
+        });
+
+        // Create status records for districts that have eligible students but no status record
+        const existingDistricts = new Set(statuses.map(status => status.district));
+        const missingDistricts = Array.from(districtsWithEligibleStudents).filter(district => 
+          !existingDistricts.has(district)
+        );
+
+        // Create default status records for missing districts
+        for (const district of missingDistricts) {
+          await storage.createOrUpdateDistrictStatus({
+            district,
+            isFinalized: false,
+            totalStudents: 0,
+            lockedStudents: 0,
+            studentsWithChoices: 0
+          });
+        }
+
+        // Fetch updated statuses if we created any
+        if (missingDistricts.length > 0) {
+          statuses = await storage.getAllDistrictStatuses();
+        }
+        
         res.json(statuses);
       } else if (user.role === 'district_admin') {
         // District admin can only see their own district status

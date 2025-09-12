@@ -129,6 +129,8 @@ export default function DistrictAdmin() {
   const { data: districtStatus } = useQuery({
     queryKey: ["/api/district-status", user?.district],
     enabled: !!user?.district,
+    staleTime: 0, // Ensure fresh data
+    gcTime: 0, // Don't cache responses
   });
 
   const deadline = (settings as any)?.find((s: any) => s.key === 'allocation_deadline')?.value;
@@ -225,9 +227,11 @@ export default function DistrictAdmin() {
       await apiRequest("POST", `/api/district-status/${user?.district}/finalize`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
+      // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      // Force refetch the specific district status
+      queryClient.refetchQueries({ queryKey: ["/api/district-status", user?.district] });
       toast({
         title: "District Finalized",
         description: "District data has been finalized and submitted for allocation",
