@@ -744,17 +744,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // Debug logging to understand user object and role
+      console.log("User object in preferences update:", JSON.stringify(user, null, 2));
+      console.log("User role:", user?.role);
+      console.log("Incoming preferences:", JSON.stringify(preferences, null, 2));
+
       // Set district admin info if not already set
       if (user?.role === 'district_admin' && user.district) {
+        console.log("Setting district admin info for district admin");
         preferences.counselingDistrict = user.district;
         preferences.districtAdmin = user.username;
       }
       
       // Set central admin info when central admin edits preferences
       if (user?.role === 'central_admin') {
+        console.log("Setting central admin info - counselingDistrict to Mohali, districtAdmin to Central_admin");
         preferences.counselingDistrict = 'Mohali';
         preferences.districtAdmin = 'Central_admin';
       }
+      
+      console.log("Final preferences to be saved:", JSON.stringify(preferences, null, 2));
 
       const student = await storage.updateStudent(id, preferences);
       

@@ -396,25 +396,31 @@ export default function StudentPreferenceManagement() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => unlockEditMutation.mutate(student.id)}
-                                      disabled={unlockEditMutation.isPending || (student.lockedBy && student.lockedBy !== user?.id)}
+                                      onClick={() => {
+                                        console.log(`Unlocking student ${student.id}: lockedBy=${student.lockedBy}, user.id=${user?.id}`);
+                                        unlockEditMutation.mutate(student.id);
+                                      }}
+                                      disabled={unlockEditMutation.isPending}
                                       data-testid={`button-unlock-${student.id}`}
                                     >
                                       <Unlock className="w-4 h-4 mr-1" />
                                       Unlock
                                     </Button>
-                                  ) : !student.lockedBy ? (
+                                  ) : (
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => lockForEditMutation.mutate(student.id)}
+                                      onClick={() => {
+                                        console.log(`Locking student ${student.id}: lockedBy=${student.lockedBy}, user.id=${user?.id}, user.role=${user?.role}`);
+                                        lockForEditMutation.mutate(student.id);
+                                      }}
                                       disabled={lockForEditMutation.isPending || !!(student.lockedBy && student.lockedBy !== user?.id)}
                                       data-testid={`button-lock-${student.id}`}
                                     >
                                       <Lock className="w-4 h-4 mr-1" />
-                                      Lock
+                                      {student.lockedBy ? 'Take Lock' : 'Lock'}
                                     </Button>
-                                  ) : null}
+                                  )}
                                 </>
                               )}
 
