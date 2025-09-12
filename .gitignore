@@ -3,4 +3,11 @@ dist
 .DS_Store
 server/public
 vite.config.ts.*
-*.tar.gzcredentials.json
+*.tar.gz
+
+# Security: Credential files
+credentials.json
+cookies.txt
+jar.txt
+*.cookie
+*.jar
