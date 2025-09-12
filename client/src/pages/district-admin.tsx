@@ -164,6 +164,7 @@ export default function DistrictAdmin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
       toast({
         title: "Student Released",
         description: "Student has been released from district successfully",
@@ -415,9 +416,17 @@ export default function DistrictAdmin() {
 
   const handleModalSave = (data: any) => {
     if (!selectedStudentForEdit) return;
+    
+    // If user is central admin, automatically set district and district admin
+    const preferences: any = { ...data };
+    if (user?.role === 'central_admin') {
+      preferences.counselingDistrict = "Mohali";
+      preferences.districtAdmin = "central_admin";
+    }
+    
     updatePreferencesMutation.mutate({
       studentId: selectedStudentForEdit.id,
-      preferences: data
+      preferences: preferences
     });
   };
 
@@ -455,9 +464,16 @@ export default function DistrictAdmin() {
 
   const onSubmit = (values: z.infer<typeof updatePreferencesSchema>) => {
     if (editingStudent) {
+      // If user is central admin, automatically set district and district admin
+      const preferences: any = { ...values };
+      if (user?.role === 'central_admin') {
+        preferences.counselingDistrict = "Mohali";
+        preferences.districtAdmin = "central_admin";
+      }
+      
       updatePreferencesMutation.mutate({
         studentId: editingStudent,
-        preferences: values,
+        preferences: preferences,
       });
     }
   };
@@ -1029,6 +1045,15 @@ export default function DistrictAdmin() {
               <DialogHeader>
                 <DialogTitle>Edit Student Preferences - {selectedStudentForEdit?.name}</DialogTitle>
               </DialogHeader>
+              
+              {/* Central Admin Notice */}
+              {user?.role === 'central_admin' && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-4" data-testid="text-central-admin-edit-notice">
+                  <p className="text-sm text-blue-800 dark:text-blue-300">
+                    <strong>Central Admin Mode:</strong> When you save these preferences, the student will be automatically assigned to district <strong>"Mohali"</strong> with district admin <strong>"central_admin"</strong>.
+                  </p>
+                </div>
+              )}
               
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
