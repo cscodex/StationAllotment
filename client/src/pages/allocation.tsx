@@ -81,11 +81,24 @@ export default function Allocation() {
     entranceResults?.some((er: any) => er.applicationNo === s.appNo && er.meritNo)
   )?.length || 0;
 
-  // District finalization checks
-  const totalDistricts = districtStatuses?.length || 0;
-  const finalizedDistricts = districtStatuses?.filter(ds => ds.isFinalized).length || 0;
+  // District finalization checks - only consider districts with eligible students
+  // Get list of districts that have students with district admin assignments and preferences
+  const districtsWithEligibleStudents = new Set<string>();
+  students?.forEach((student: any) => {
+    if (student.districtAdmin && student.choice1 && student.counselingDistrict) {
+      districtsWithEligibleStudents.add(student.counselingDistrict);
+    }
+  });
+
+  // Only check finalization status for districts with eligible students
+  const eligibleDistrictStatuses = districtStatuses?.filter(ds => 
+    districtsWithEligibleStudents.has(ds.district)
+  ) || [];
+  
+  const totalDistricts = eligibleDistrictStatuses.length;
+  const finalizedDistricts = eligibleDistrictStatuses.filter(ds => ds.isFinalized).length;
   const allDistrictsFinalized = totalDistricts > 0 && finalizedDistricts === totalDistricts;
-  const pendingDistricts = districtStatuses?.filter(ds => !ds.isFinalized) || [];
+  const pendingDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized) || [];
 
   // Minimum requirements for allocation
   const canRunAllocation = hasEntranceResults && // At least one entrance result
@@ -138,10 +151,10 @@ export default function Allocation() {
       title: "District Data Finalization",
       status: allDistrictsFinalized ? "complete" : totalDistricts > 0 ? "error" : "pending",
       description: allDistrictsFinalized 
-        ? `✓ All ${totalDistricts} districts have finalized their student data`
+        ? `✓ All ${totalDistricts} districts with eligible students have finalized their data`
         : totalDistricts > 0
-        ? `⚠️ ${finalizedDistricts}/${totalDistricts} districts finalized. Pending: ${pendingDistricts.map(d => d.district).slice(0, 3).join(', ')}${pendingDistricts.length > 3 ? ` (+${pendingDistricts.length - 3} more)` : ''}`
-        : "No district data found - districts must finalize their student preferences first",
+        ? `⚠️ ${finalizedDistricts}/${totalDistricts} districts with eligible students finalized. Pending: ${pendingDistricts.map(d => d.district).slice(0, 3).join(', ')}${pendingDistricts.length > 3 ? ` (+${pendingDistricts.length - 3} more)` : ''}`
+        : "No districts with eligible students found - districts must have students with preferences and district admin assignments",
       icon: allDistrictsFinalized ? Check : totalDistricts > 0 ? AlertTriangle : Clock,
       color: allDistrictsFinalized ? "text-green-500" : totalDistricts > 0 ? "text-red-500" : "text-amber-500",
     },

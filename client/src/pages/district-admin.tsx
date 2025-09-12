@@ -938,7 +938,6 @@ export default function DistrictAdmin() {
             {/* District Finalization Tab */}
             <TabsContent value="district-finalization" className="space-y-6">
               {/* Finalization Status Card */}
-          {!isFinalized && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
@@ -947,13 +946,13 @@ export default function DistrictAdmin() {
                     District Finalization Status
                   </div>
                   <Button
-                    variant={canFinalize ? "default" : "outline"}
+                    variant={isFinalized ? "secondary" : (canFinalize ? "default" : "outline")}
                     size="sm"
                     onClick={handleFinalize}
-                    disabled={!canFinalize || finalizeDistrictMutation.isPending}
+                    disabled={isFinalized || !canFinalize || finalizeDistrictMutation.isPending}
                     data-testid="button-finalize-district"
                   >
-                    {finalizeDistrictMutation.isPending ? "Finalizing..." : "Finalize District"}
+                    {isFinalized ? "District Finalized" : (finalizeDistrictMutation.isPending ? "Finalizing..." : "Finalize District")}
                   </Button>
                 </CardTitle>
               </CardHeader>
@@ -991,9 +990,16 @@ export default function DistrictAdmin() {
                     </p>
                   </div>
                 )}
+
+                {isFinalized && (
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="text-sm text-blue-800 dark:text-blue-300">
+                      <strong>District Finalized!</strong> Your district data has been successfully finalized and submitted for allocation processing.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
-          )}
             </TabsContent>
           </Tabs>
 
