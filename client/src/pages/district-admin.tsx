@@ -227,13 +227,20 @@ export default function DistrictAdmin() {
       await apiRequest("POST", `/api/district-status/${user?.district}/finalize`, {});
     },
     onSuccess: () => {
-      // Invalidate all relevant queries - ensure exact query key match
+      // Invalidate all relevant queries with exact key matching
       queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      // Force refetch both general and specific district status queries
-      queryClient.refetchQueries({ queryKey: ["/api/district-status"] });
-      queryClient.refetchQueries({ queryKey: ["/api/district-status", user?.district] });
+      
+      // Force refetch with await to ensure immediate update
+      queryClient.refetchQueries({ 
+        queryKey: ["/api/district-status", user?.district],
+        type: 'active' 
+      });
+      
+      // Also remove any cached data and force fresh fetch
+      queryClient.removeQueries({ queryKey: ["/api/district-status", user?.district] });
+      
       toast({
         title: "District Finalized",
         description: "District data has been finalized and submitted for allocation",
@@ -361,7 +368,12 @@ export default function DistrictAdmin() {
   ).length;
 
   const canFinalize = lockedEligibleStudents === totalEligibleStudents && totalEligibleStudents > 0 && !isDeadlinePassed;
-  const isFinalized = (districtStatus as any)?.isFinalized;
+  
+  // districtStatus is an array, find the current district's status
+  const currentDistrictStatus = Array.isArray(districtStatus) 
+    ? districtStatus.find((status: any) => status.district === user?.district)
+    : districtStatus;
+  const isFinalized = currentDistrictStatus?.isFinalized || false;
 
   const handleFinalize = () => {
     if (!canFinalize) return;
