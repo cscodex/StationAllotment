@@ -226,6 +226,7 @@ export default function DistrictAdmin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       toast({
         title: "District Finalized",

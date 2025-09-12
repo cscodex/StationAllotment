@@ -1524,7 +1524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/unlock-requests', isCentralAdmin, async (req, res) => {
     try {
-      const requests = await storage.getPendingUnlockRequests();
+      const requests = await storage.getUnlockRequests();
       res.json(requests);
     } catch (error) {
       console.error("Get unlock requests error:", error);
