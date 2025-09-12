@@ -749,6 +749,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         preferences.counselingDistrict = user.district;
         preferences.districtAdmin = user.username;
       }
+      
+      // Set central admin info when central admin edits preferences
+      if (user?.role === 'central_admin') {
+        preferences.counselingDistrict = 'Mohali';
+        preferences.districtAdmin = 'Central_admin';
+      }
 
       const student = await storage.updateStudent(id, preferences);
       

@@ -388,6 +388,36 @@ export default function StudentPreferenceManagement() {
                                   Editing
                                 </Badge>
                               )}
+                              
+                              {/* Central Admin specific buttons */}
+                              {user?.role === 'central_admin' && (
+                                <>
+                                  {student.lockedBy === user?.id ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => unlockEditMutation.mutate(student.id)}
+                                      disabled={unlockEditMutation.isPending || (student.lockedBy && student.lockedBy !== user?.id)}
+                                      data-testid={`button-unlock-${student.id}`}
+                                    >
+                                      <Unlock className="w-4 h-4 mr-1" />
+                                      Unlock
+                                    </Button>
+                                  ) : !student.lockedBy ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => lockForEditMutation.mutate(student.id)}
+                                      disabled={lockForEditMutation.isPending || !!(student.lockedBy && student.lockedBy !== user?.id)}
+                                      data-testid={`button-lock-${student.id}`}
+                                    >
+                                      <Lock className="w-4 h-4 mr-1" />
+                                      Lock
+                                    </Button>
+                                  ) : null}
+                                </>
+                              )}
+
                               {canEditStudent(student) ? (
                                 <Button
                                   variant="outline"
