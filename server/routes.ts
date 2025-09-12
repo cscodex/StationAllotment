@@ -1381,9 +1381,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if all eligible students in district are locked
       const districtStudents = await storage.getStudentsByDistrict(district);
       
-      // Only consider students that have district admin assigned AND have preference data for finalization
+      // Only consider students that belong to this district AND have district admin assigned AND have preference data for finalization
       const eligibleStudents = districtStudents.students.filter(s => 
-        s.districtAdmin && s.choice1 // Must have district admin and at least first choice
+        s.counselingDistrict === district && s.districtAdmin && s.choice1 // Must belong to district, have district admin and at least first choice
       );
       
       const unlockedEligibleStudents = eligibleStudents.filter(s => !s.isLocked);

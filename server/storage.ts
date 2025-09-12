@@ -496,9 +496,9 @@ export class DatabaseStorage implements IStorage {
     // Get current district student stats for the status record
     const districtStudents = await this.getStudentsByDistrict(district);
     
-    // Only consider students that have district admin assigned AND have preference data
+    // Only consider students that belong to this district AND have district admin assigned AND have preference data
     const eligibleStudents = districtStudents.students.filter(s => 
-      s.districtAdmin && s.choice1 // Must have district admin and at least first choice
+      s.counselingDistrict === district && s.districtAdmin && s.choice1 // Must belong to district, have district admin and at least first choice
     );
     
     const lockedEligibleStudents = eligibleStudents.filter(s => s.isLocked).length;

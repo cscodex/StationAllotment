@@ -227,10 +227,12 @@ export default function DistrictAdmin() {
       await apiRequest("POST", `/api/district-status/${user?.district}/finalize`, {});
     },
     onSuccess: () => {
-      // Invalidate all relevant queries
+      // Invalidate all relevant queries - ensure exact query key match
       queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      // Force refetch the specific district status
+      // Force refetch both general and specific district status queries
+      queryClient.refetchQueries({ queryKey: ["/api/district-status"] });
       queryClient.refetchQueries({ queryKey: ["/api/district-status", user?.district] });
       toast({
         title: "District Finalized",
