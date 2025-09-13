@@ -90,6 +90,50 @@ export default function StudentPreferenceManagement() {
     },
   });
 
+  // Lock student for editing mutation
+  const lockForEditMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/lock`);
+      return await response.json();
+    },
+    onSuccess: (updatedStudent: Student) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "Success",
+        description: "Student locked for editing",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to lock student",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Unlock student mutation  
+  const unlockEditMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/unlock`);
+      return await response.json();
+    },
+    onSuccess: (updatedStudent: Student) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "Success", 
+        description: "Student unlocked",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unlock student",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: async (data: { studentId: string, preferences: any }) => {
@@ -353,50 +397,93 @@ export default function StudentPreferenceManagement() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
-                              {/* Release button for central admin with filled preferences */}
-                              {user?.role === 'central_admin' && 
-                               student.counselingDistrict === 'Mohali' && 
-                               student.districtAdmin === 'central_admin' && 
-                               areAllPreferencesFilled(student) && (
+                              {/* Show lock status indicator */}
+                              {student.lockedBy && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Lock className="w-3 h-3 mr-1" />
+                                  Locked
+                                </Badge>
+                              )}
+
+                              {/* Case 1: Student is locked - show only unlock button */}
+                              {user?.role === 'central_admin' && student.lockedBy && (
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    if (window.confirm('Are you sure you want to release this assignment? This will clear the district and district admin assignment.')) {
-                                      releaseAssignmentMutation.mutate(student.id);
-                                    }
-                                  }}
-                                  disabled={releaseAssignmentMutation.isPending}
-                                  data-testid={`button-release-${student.id}`}
-                                  className="text-red-600 border-red-300 hover:bg-red-50"
+                                  onClick={() => unlockEditMutation.mutate(student.id)}
+                                  disabled={unlockEditMutation.isPending}
+                                  data-testid={`button-unlock-${student.id}`}
                                 >
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Release
+                                  <Unlock className="w-4 h-4 mr-1" />
+                                  Unlock
                                 </Button>
                               )}
 
-                              {/* Edit button for all editable students */}
-                              {canEditStudent(student) ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openEditModal(student)}
-                                  data-testid={`button-edit-${student.id}`}
-                                >
-                                  <Edit className="w-4 h-4 mr-1" />
-                                  Edit
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  disabled
-                                  data-testid={`button-edit-disabled-${student.id}`}
-                                  className="text-muted-foreground"
-                                >
-                                  <Edit className="w-4 h-4 mr-1" />
-                                  Edit
-                                </Button>
+                              {/* Case 2: Central admin filled all preferences and student not locked - show lock + release buttons */}
+                              {user?.role === 'central_admin' && 
+                               student.counselingDistrict === 'Mohali' && 
+                               student.districtAdmin === 'central_admin' && 
+                               areAllPreferencesFilled(student) && 
+                               !student.lockedBy && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => lockForEditMutation.mutate(student.id)}
+                                    disabled={lockForEditMutation.isPending}
+                                    data-testid={`button-lock-${student.id}`}
+                                  >
+                                    <Lock className="w-4 h-4 mr-1" />
+                                    Lock
+                                  </Button>
+                                  
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (window.confirm('Are you sure you want to release this assignment? This will clear the district and district admin assignment.')) {
+                                        releaseAssignmentMutation.mutate(student.id);
+                                      }
+                                    }}
+                                    disabled={releaseAssignmentMutation.isPending}
+                                    data-testid={`button-release-${student.id}`}
+                                    className="text-red-600 border-red-300 hover:bg-red-50"
+                                  >
+                                    <XCircle className="w-4 h-4 mr-1" />
+                                    Release
+                                  </Button>
+                                </>
+                              )}
+
+                              {/* Case 3: Regular edit button for all other cases */}
+                              {!(user?.role === 'central_admin' && student.lockedBy) && 
+                               !(user?.role === 'central_admin' && 
+                                 student.counselingDistrict === 'Mohali' && 
+                                 student.districtAdmin === 'central_admin' && 
+                                 areAllPreferencesFilled(student) && 
+                                 !student.lockedBy) && (
+                                canEditStudent(student) && !student.lockedBy ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openEditModal(student)}
+                                    data-testid={`button-edit-${student.id}`}
+                                  >
+                                    <Edit className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled
+                                    data-testid={`button-edit-disabled-${student.id}`}
+                                    className="text-muted-foreground"
+                                  >
+                                    <Edit className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                )
                               )}
                             </div>
                           </TableCell>
