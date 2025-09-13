@@ -6,6 +6,7 @@ import { z } from "zod";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -364,7 +365,7 @@ export default function ManageDistrictAdmins() {
                           <FormItem>
                             <FormLabel>Password</FormLabel>
                             <FormControl>
-                              <Input type="password" placeholder="Enter password" {...field} data-testid="input-password" />
+                              <PasswordInput placeholder="Enter password" {...field} data-testid="input-password" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -723,8 +724,7 @@ export default function ManageDistrictAdmins() {
                     <FormItem>
                       <FormLabel>New Password</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="password" 
+                        <PasswordInput 
                           placeholder="Enter new password"
                           data-testid="input-new-password"
                           {...field} 
@@ -741,8 +741,7 @@ export default function ManageDistrictAdmins() {
                     <FormItem>
                       <FormLabel>Confirm New Password</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="password" 
+                        <PasswordInput 
                           placeholder="Confirm new password"
                           data-testid="input-confirm-password"
                           {...field} 

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
@@ -37,10 +38,7 @@ export default function Profile() {
   // Change password mutation
   const changePasswordMutation = useMutation({
     mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
-      return apiRequest('/api/auth/change-password', {
-        method: 'PUT',
-        body: data,
-      });
+      return apiRequest('PUT', '/api/auth/change-password', data);
     },
     onSuccess: () => {
       toast({
@@ -203,9 +201,8 @@ export default function Profile() {
           <form onSubmit={handlePasswordChange} className="space-y-4">
             <div>
               <Label htmlFor="current-password">Current Password</Label>
-              <Input
+              <PasswordInput
                 id="current-password"
-                type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
@@ -214,9 +211,8 @@ export default function Profile() {
             </div>
             <div>
               <Label htmlFor="new-password">New Password</Label>
-              <Input
+              <PasswordInput
                 id="new-password"
-                type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
@@ -226,9 +222,8 @@ export default function Profile() {
             </div>
             <div>
               <Label htmlFor="confirm-password">Confirm New Password</Label>
-              <Input
+              <PasswordInput
                 id="confirm-password"
-                type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required

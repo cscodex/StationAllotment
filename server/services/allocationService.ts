@@ -10,9 +10,9 @@ export class AllocationService {
     notAllottedStudents: number;
     allocationsByDistrict: Record<string, number>;
   }> {
-    // Get all entrance results (contains students with merit order) and students with preferences
-    const entranceResults = await this.storage.getStudentsEntranceResults(10000, 0);
+    // Get all students with preferences and their entrance results
     const students = await this.storage.getStudents(10000, 0);
+    const entranceResults = await this.storage.getStudentsEntranceResults(10000, 0);
     const vacancies = await this.storage.getVacancies();
 
     // Create vacancy map for district->stream->gender->category tracking
@@ -25,103 +25,82 @@ export class AllocationService {
       vacancyMap.set(key, vacancy.availableSeats || 0);
     });
 
-    // Create student preference map
-    const studentPreferencesMap = new Map<string, Student>();
-    students.forEach(student => {
-      if (student.appNo) {
-        studentPreferencesMap.set(student.appNo, student);
+    // Create entrance result map for easy lookup by application number
+    const entranceResultMap = new Map<string, StudentsEntranceResult>();
+    entranceResults.forEach(result => {
+      if (result.applicationNo) {
+        entranceResultMap.set(result.applicationNo, result);
       }
     });
 
-    // Group entrance results by gender, category, and stream, then sort by merit (marks descending)
-    const studentGroups = this.groupAndSortStudents(entranceResults);
+    // Filter students who have preferences and valid entrance results, then sort by merit number (ascending = better rank)
+    const eligibleStudents = students
+      .filter(student => {
+        // Must have app number and at least one choice
+        if (!student.appNo || !student.choice1) return false;
+        
+        // Must have corresponding entrance result
+        const entranceResult = entranceResultMap.get(student.appNo);
+        return !!entranceResult;
+      })
+      .sort((a, b) => a.meritNumber - b.meritNumber); // Lower merit number = better rank
 
     const allocationsByDistrict: Record<string, number> = {};
     let allottedCount = 0;
     let notAllottedCount = 0;
 
-    // Process each group in merit order within gender-category
-    for (const group of studentGroups) {
-      for (const entranceResult of group.students) {
-        const studentPreferences = studentPreferencesMap.get(entranceResult.applicationNo);
-        if (!studentPreferences) {
-          // No preferences set, mark as not allotted
-          notAllottedCount++;
-          continue;
-        }
+    // Process students in merit order (best to worst)
+    for (const student of eligibleStudents) {
+      const entranceResult = entranceResultMap.get(student.appNo);
+      if (!entranceResult) continue;
 
-        let allocated = false;
+      let allocated = false;
 
-        // Check each choice from 1 to 10
-        for (let i = 1; i <= 10; i++) {
-          const choice = (studentPreferences as any)[`choice${i}`];
-          if (!choice) continue;
+      // Check each choice from 1 to 10
+      for (let i = 1; i <= 10; i++) {
+        const choice = (student as any)[`choice${i}`];
+        if (!choice) continue;
 
-          // Create vacancy key for this specific combination
-          const vacancyKey = `${choice}|${entranceResult.stream}|${entranceResult.gender}|${entranceResult.category}`;
-          const availableSeats = vacancyMap.get(vacancyKey);
-          
-          if (availableSeats && availableSeats > 0) {
-            // Allocate the seat
-            await this.storage.updateStudent(studentPreferences.id, {
-              allottedDistrict: choice,
-              allottedStream: entranceResult.stream,
-              allocationStatus: 'allotted',
-            });
-
-            // Reduce vacancy count
-            vacancyMap.set(vacancyKey, availableSeats - 1);
-            
-            // Update statistics
-            allottedCount++;
-            allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
-            allocated = true;
-            break;
-          }
-        }
-
-        if (!allocated) {
-          // Mark as not allotted
-          await this.storage.updateStudent(studentPreferences.id, {
-            allocationStatus: 'not_allotted',
+        // Create vacancy key using STUDENT'S stream preference (not entrance stream)
+        // This ensures we match against the correct stream the student wants
+        const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${entranceResult.category}`;
+        const availableSeats = vacancyMap.get(vacancyKey);
+        
+        if (availableSeats && availableSeats > 0) {
+          // Allocate the seat
+          await this.storage.updateStudent(student.id, {
+            allottedDistrict: choice,
+            allottedStream: student.stream, // Use student's preferred stream
+            allocationStatus: 'allotted',
           });
-          notAllottedCount++;
+
+          // Reduce vacancy count
+          vacancyMap.set(vacancyKey, availableSeats - 1);
+          
+          // Update statistics
+          allottedCount++;
+          allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
+          allocated = true;
+          break;
         }
+      }
+
+      if (!allocated) {
+        // Mark as not allotted
+        await this.storage.updateStudent(student.id, {
+          allocationStatus: 'not_allotted',
+        });
+        notAllottedCount++;
       }
     }
 
     return {
-      totalStudents: entranceResults.length,
+      totalStudents: eligibleStudents.length,
       allottedStudents: allottedCount,
       notAllottedStudents: notAllottedCount,
       allocationsByDistrict,
     };
   }
 
-  private groupAndSortStudents(entranceResults: StudentsEntranceResult[]) {
-    // Group by gender, category, and stream
-    const groups = new Map<string, StudentsEntranceResult[]>();
-    
-    entranceResults.forEach(result => {
-      const key = `${result.gender}-${result.category}-${result.stream}`;
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-      groups.get(key)!.push(result);
-    });
-
-    // Sort each group by marks (descending - higher marks = better merit)
-    const sortedGroups = Array.from(groups.entries()).map(([key, students]) => {
-      const [gender, category, stream] = key.split('-');
-      return {
-        gender,
-        category,
-        stream,
-        students: students.sort((a, b) => b.marks - a.marks)
-      };
-    });
-
-    return sortedGroups;
-  }
 
 }

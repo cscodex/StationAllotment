@@ -369,6 +369,72 @@ export default function Vacancies() {
                         </tr>
                       </tbody>
                     </table>
+                    
+                    {/* Detailed Category and Gender Breakdown */}
+                    <div className="mt-8 space-y-6">
+                      <h3 className="text-lg font-semibold flex items-center">
+                        <Users className="w-5 h-5 mr-2 text-primary" />
+                        Remaining Vacancies by Category & Gender
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {districts.map((district) => (
+                          <Card key={`breakdown-${district.district}`} className="border-l-4 border-l-primary">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base">{district.district}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              {/* Gender Breakdown */}
+                              <div>
+                                <h4 className="text-sm font-medium text-muted-foreground mb-2">By Gender</h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {Object.entries(district.genderBreakdown).map(([gender, data]: [string, any]) => (
+                                    <div key={gender} className="bg-muted/50 p-2 rounded text-center">
+                                      <div className="text-xs text-muted-foreground">{gender}</div>
+                                      <div className="text-sm font-medium text-green-600" data-testid={`remaining-${district.district}-${gender.toLowerCase()}`}>
+                                        {data.available} / {data.total}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              {/* Category Breakdown */}
+                              <div>
+                                <h4 className="text-sm font-medium text-muted-foreground mb-2">By Category</h4>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {Object.entries(district.categories).map(([category, data]: [string, any]) => (
+                                    <div key={category} className="bg-muted/50 p-2 rounded text-center">
+                                      <div className="text-xs text-muted-foreground">{category}</div>
+                                      <div className="text-sm font-medium text-green-600" data-testid={`remaining-${district.district}-${category.toLowerCase()}`}>
+                                        {data.available} / {data.total}
+                                      </div>
+                                      {data.available === 0 && (
+                                        <Badge variant="destructive" className="text-xs mt-1">Full</Badge>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              {/* Stream Breakdown */}
+                              <div>
+                                <h4 className="text-sm font-medium text-muted-foreground mb-2">By Stream</h4>
+                                <div className="space-y-1">
+                                  {Object.entries(district.streamBreakdown).map(([stream, data]: [string, any]) => (
+                                    <div key={stream} className="flex justify-between items-center bg-muted/50 p-2 rounded">
+                                      <div className="text-xs font-medium">{stream}</div>
+                                      <div className="text-sm font-medium text-green-600" data-testid={`remaining-${district.district}-${stream.toLowerCase()}`}>
+                                        {data.available} / {data.total}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
