@@ -450,7 +450,7 @@ export default function StudentPreferenceManagement() {
                                 </Button>
                               ) : user?.role === 'central_admin' && 
                                         student.counselingDistrict === 'Mohali' && 
-                                        student.districtAdmin === 'central_admin' && 
+                                        student.districtAdmin === 'Central_admin' && 
                                         areAllPreferencesFilled(student) ? (
                                 /* Case 2: Central admin with filled preferences and not locked - show lock + release buttons */
                                 <>
