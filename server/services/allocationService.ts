@@ -61,20 +61,24 @@ export class AllocationService {
         const choice = (student as any)[`choice${i}`];
         if (!choice) continue;
 
-        // Create vacancy key using STUDENT'S stream preference (not entrance stream)
-        // This ensures we match against the correct stream the student wants
+        // STRICT MATCHING: Create vacancy key using exact gender and category combination
+        // Student can ONLY be allocated if there's a seat available for their exact:
+        // - District (choice), Stream (preference), Gender, and Category combination
         const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${entranceResult.category}`;
         const availableSeats = vacancyMap.get(vacancyKey);
         
+        // STRICT CONSTRAINT: Only allocate if exact gender/category/stream/district combination has seats
+        // No fallback to other categories or genders - student gets NO ALLOCATION if their 
+        // specific category is full, even if other categories have seats
         if (availableSeats && availableSeats > 0) {
-          // Allocate the seat
+          // Allocate the seat with strict constraints satisfied
           await this.storage.updateStudent(student.id, {
             allottedDistrict: choice,
-            allottedStream: student.stream, // Use student's preferred stream
+            allottedStream: student.stream,
             allocationStatus: 'allotted',
           });
 
-          // Reduce vacancy count
+          // Reduce vacancy count for this exact combination
           vacancyMap.set(vacancyKey, availableSeats - 1);
           
           // Update statistics
@@ -83,6 +87,8 @@ export class AllocationService {
           allocated = true;
           break;
         }
+        // If no seats available for exact gender/category combination, continue to next choice
+        // No cross-category or cross-gender allocation allowed
       }
 
       if (!allocated) {
