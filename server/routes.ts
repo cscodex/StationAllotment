@@ -242,6 +242,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const updateData = req.body;
       
+      // Security: Prevent password updates through this route
+      // Use dedicated password change/reset routes instead
+      if (updateData.password !== undefined) {
+        return res.status(400).json({ 
+          message: "Password updates are not allowed through this route. Use the dedicated password change or reset endpoints." 
+        });
+      }
+      
       const user = await storage.updateUser(id, updateData);
       
       await auditService.log(req.user.id, 'user_update', 'users', id, {
@@ -458,6 +466,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Change password error:", error);
       res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // Password reset route for central admin to reset district admin passwords
+  app.put('/api/users/:id/reset-password', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { newPassword } = req.body;
+      
+      if (!newPassword) {
+        return res.status(400).json({ message: "New password is required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters long" });
+      }
+
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Ensure only district admins can have their passwords reset by central admin
+      if (targetUser.role !== 'district_admin') {
+        return res.status(403).json({ message: "Password reset is only allowed for district administrators" });
+      }
+
+      // Hash new password
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+      
+      // Update password
+      await storage.updateUser(id, { password: hashedNewPassword });
+
+      await auditService.log(req.session.userId, 'admin_password_reset', 'users', id, {
+        targetUsername: targetUser.username,
+        targetRole: targetUser.role,
+        targetDistrict: targetUser.district,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: "Password reset successfully" });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
     }
   });
 

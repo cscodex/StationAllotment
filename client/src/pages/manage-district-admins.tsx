@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DataPagination } from "@/components/ui/data-pagination";
 import { useToast } from "@/hooks/use-toast";
@@ -25,7 +25,8 @@ import {
   X,
   UserPlus,
   Ban,
-  Shield
+  Shield,
+  Key
 } from "lucide-react";
 import type { User } from "@shared/schema";
 import { DISTRICTS } from "@shared/schema";
@@ -41,9 +42,18 @@ const createAdminSchema = z.object({
 
 const updateAdminSchema = createAdminSchema.partial().omit({ password: true });
 
+const passwordResetSchema = z.object({
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Password confirmation is required"),
+}).refine(data => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
 export default function ManageDistrictAdmins() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<User | null>(null);
+  const [resetPasswordAdmin, setResetPasswordAdmin] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const { toast } = useToast();
@@ -81,6 +91,14 @@ export default function ManageDistrictAdmins() {
       firstName: '',
       lastName: '',
       email: '',
+    },
+  });
+
+  const passwordResetForm = useForm<z.infer<typeof passwordResetSchema>>({
+    resolver: zodResolver(passwordResetSchema),
+    defaultValues: {
+      newPassword: '',
+      confirmPassword: '',
     },
   });
 
@@ -191,6 +209,28 @@ export default function ManageDistrictAdmins() {
     },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ id, newPassword }: { id: string, newPassword: string }) => {
+      await apiRequest("PUT", `/api/users/${id}/reset-password`, { newPassword });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setResetPasswordAdmin(null);
+      passwordResetForm.reset();
+      toast({
+        title: "Password Reset",
+        description: "District administrator password has been reset successfully",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Password Reset Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const startEdit = (admin: User) => {
     setEditingAdmin(admin);
     editForm.reset({
@@ -215,6 +255,17 @@ export default function ManageDistrictAdmins() {
     if (editingAdmin) {
       updateMutation.mutate({ id: editingAdmin.id, data: values });
     }
+  };
+
+  const onPasswordResetSubmit = (values: z.infer<typeof passwordResetSchema>) => {
+    if (resetPasswordAdmin) {
+      resetPasswordMutation.mutate({ id: resetPasswordAdmin.id, newPassword: values.newPassword });
+    }
+  };
+
+  const startPasswordReset = (admin: User) => {
+    setResetPasswordAdmin(admin);
+    passwordResetForm.reset();
   };
 
 
@@ -413,6 +464,16 @@ export default function ManageDistrictAdmins() {
                                 data-testid={`button-edit-${admin.id}`}
                               >
                                 <Edit2 className="w-3 h-3" />
+                              </Button>
+                              
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => startPasswordReset(admin)}
+                                className="text-blue-600 hover:text-blue-700"
+                                data-testid={`button-reset-password-${admin.id}`}
+                              >
+                                <Key className="w-3 h-3" />
                               </Button>
                               
                               {admin.isBlocked ? (
@@ -634,6 +695,77 @@ export default function ManageDistrictAdmins() {
                   </Button>
                   <Button type="submit" disabled={updateMutation.isPending}>
                     {updateMutation.isPending ? "Updating..." : "Update Admin"}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Password Reset Dialog */}
+        <Dialog open={!!resetPasswordAdmin} onOpenChange={(open) => !open && setResetPasswordAdmin(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                <Key className="w-5 h-5 mr-2 inline" />
+                Reset Password for {resetPasswordAdmin?.firstName} {resetPasswordAdmin?.lastName}
+              </DialogTitle>
+              <DialogDescription>
+                Enter a new password for this district administrator. The password must be at least 6 characters long.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...passwordResetForm}>
+              <form onSubmit={passwordResetForm.handleSubmit(onPasswordResetSubmit)} className="space-y-4">
+                <FormField
+                  control={passwordResetForm.control}
+                  name="newPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>New Password</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="password" 
+                          placeholder="Enter new password"
+                          data-testid="input-new-password"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={passwordResetForm.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm New Password</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="password" 
+                          placeholder="Confirm new password"
+                          data-testid="input-confirm-password"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setResetPasswordAdmin(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={resetPasswordMutation.isPending}
+                    data-testid="button-confirm-reset-password"
+                  >
+                    {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
                   </Button>
                 </div>
               </form>
