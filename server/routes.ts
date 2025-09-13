@@ -955,6 +955,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Lock student for editing
+  app.post('/api/students/:id/lock', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      
+      // Only central admin can lock students
+      if (user?.role !== 'central_admin') {
+        return res.status(403).json({ message: "Only central admin can lock students" });
+      }
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Check if student is already locked
+      if (student.lockedBy && student.lockedBy !== req.session.userId) {
+        return res.status(409).json({ 
+          message: "Student is already locked by another admin" 
+        });
+      }
+      
+      const updatedStudent = await storage.updateStudent(id, {
+        lockedBy: req.session.userId
+      });
+      
+      await auditService.log(req.session.userId, 'student_lock', 'students', id, {
+        lockedBy: req.session.userId,
+        studentName: student.name,
+        meritNumber: student.meritNumber
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student lock error:", error);
+      res.status(500).json({ message: "Failed to lock student" });
+    }
+  });
+
+  // Unlock student
+  app.post('/api/students/:id/unlock', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(req.session.userId);
+      
+      // Only central admin can unlock students
+      if (user?.role !== 'central_admin') {
+        return res.status(403).json({ message: "Only central admin can unlock students" });
+      }
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Check if student is locked by current user or is unlocked
+      if (student.lockedBy && student.lockedBy !== req.session.userId) {
+        return res.status(403).json({ 
+          message: "Student is locked by another admin" 
+        });
+      }
+      
+      const updatedStudent = await storage.updateStudent(id, {
+        lockedBy: null
+      });
+      
+      await auditService.log(req.session.userId, 'student_unlock', 'students', id, {
+        unlockedBy: req.session.userId,
+        studentName: student.name,
+        meritNumber: student.meritNumber
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student unlock error:", error);
+      res.status(500).json({ message: "Failed to unlock student" });
+    }
+  });
+
+  // Finalize allocation process
+  app.post('/api/allocation/finalize', isCentralAdmin, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId);
+      
+      // Check if already finalized
+      const settings = await storage.getSettings();
+      const finalizedSetting = settings.find(s => s.key === 'allocation_finalized');
+      
+      if (finalizedSetting && finalizedSetting.value === 'true') {
+        return res.status(400).json({ 
+          message: "Allocation process has already been finalized" 
+        });
+      }
+      
+      const currentTime = new Date().toISOString();
+      
+      // Set allocation as finalized
+      await storage.setSetting({
+        key: 'allocation_finalized',
+        value: 'true'
+      });
+      await storage.setSetting({
+        key: 'allocation_finalized_at',
+        value: currentTime
+      });
+      await storage.setSetting({
+        key: 'allocation_finalized_by',
+        value: req.session.userId
+      });
+      
+      await auditService.log(req.session.userId, 'allocation_finalize', 'allocation', 'system', {
+        finalizedBy: req.session.userId,
+        finalizedAt: currentTime
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ 
+        message: "Allocation process finalized successfully",
+        finalizedAt: currentTime,
+        finalizedBy: user?.username
+      });
+    } catch (error) {
+      console.error("Allocation finalize error:", error);
+      res.status(500).json({ message: "Failed to finalize allocation" });
+    }
+  });
+
   // Fetch student endpoint
   app.put('/api/students/:id/fetch', isAuthenticated, async (req: any, res) => {
     try {

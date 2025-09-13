@@ -194,6 +194,28 @@ export default function StudentPreferenceManagement() {
     }
   });
 
+  // Finalize allocation mutation
+  const finalizeAllocationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/allocation/finalize');
+      return await response.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({
+        title: "Success",
+        description: "Allocation process finalized successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to finalize allocation",
+        variant: "destructive",
+      });
+    }
+  });
+
   const openEditModal = (student: Student) => {
     // Directly open edit modal without locking
     setSelectedStudentForEdit(student);
@@ -286,6 +308,23 @@ export default function StudentPreferenceManagement() {
                   <UserCog className="w-5 h-5 mr-2 text-primary" />
                   Student Preferences - Central Admin View
                 </div>
+                {user?.role === 'central_admin' && (
+                  <Button 
+                    variant="default" 
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to finalize the allocation process? This action cannot be undone.')) {
+                        finalizeAllocationMutation.mutate();
+                      }
+                    }}
+                    disabled={finalizeAllocationMutation.isPending}
+                    data-testid="button-finalize-allocation"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    {finalizeAllocationMutation.isPending ? "Finalizing..." : "Finalize Allocation"}
+                  </Button>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -372,7 +411,7 @@ export default function StudentPreferenceManagement() {
                             {getStatusBadge(student.allocationStatus || 'pending')}
                           </TableCell>
                           <TableCell>
-                            {student.isLocked ? (
+                            {student.lockedBy ? (
                               <Badge variant="secondary" className="bg-blue-100 text-blue-800">
                                 <Lock className="w-3 h-3 mr-1" />
                                 Locked
@@ -397,16 +436,8 @@ export default function StudentPreferenceManagement() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
-                              {/* Show lock status indicator */}
-                              {student.lockedBy && (
-                                <Badge variant="secondary" className="text-xs">
-                                  <Lock className="w-3 h-3 mr-1" />
-                                  Locked
-                                </Badge>
-                              )}
-
                               {/* Case 1: Student is locked - show only unlock button */}
-                              {user?.role === 'central_admin' && student.lockedBy && (
+                              {user?.role === 'central_admin' && student.lockedBy ? (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -417,14 +448,11 @@ export default function StudentPreferenceManagement() {
                                   <Unlock className="w-4 h-4 mr-1" />
                                   Unlock
                                 </Button>
-                              )}
-
-                              {/* Case 2: Central admin filled all preferences and student not locked - show lock + release buttons */}
-                              {user?.role === 'central_admin' && 
-                               student.counselingDistrict === 'Mohali' && 
-                               student.districtAdmin === 'central_admin' && 
-                               areAllPreferencesFilled(student) && 
-                               !student.lockedBy && (
+                              ) : user?.role === 'central_admin' && 
+                                        student.counselingDistrict === 'Mohali' && 
+                                        student.districtAdmin === 'central_admin' && 
+                                        areAllPreferencesFilled(student) ? (
+                                /* Case 2: Central admin with filled preferences and not locked - show lock + release buttons */
                                 <>
                                   <Button
                                     variant="outline"
@@ -453,15 +481,8 @@ export default function StudentPreferenceManagement() {
                                     Release
                                   </Button>
                                 </>
-                              )}
-
-                              {/* Case 3: Regular edit button for all other cases */}
-                              {!(user?.role === 'central_admin' && student.lockedBy) && 
-                               !(user?.role === 'central_admin' && 
-                                 student.counselingDistrict === 'Mohali' && 
-                                 student.districtAdmin === 'central_admin' && 
-                                 areAllPreferencesFilled(student) && 
-                                 !student.lockedBy) && (
+                              ) : (
+                                /* Case 3: Regular edit button for all other cases */
                                 canEditStudent(student) && !student.lockedBy ? (
                                   <Button
                                     variant="outline"
