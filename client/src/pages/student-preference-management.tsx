@@ -417,7 +417,7 @@ export default function StudentPreferenceManagement() {
                                 </Badge>
                               )}
                               
-                              {/* Requirement 2: Unlock button should show ONLY when user.role === 'central_admin' AND student.lockedBy === user.id */}
+                              {/* Requirement 3: Unlock button shows ONLY when central admin has locked the student */}
                               {user?.role === 'central_admin' && student.lockedBy === user?.id && (
                                 <Button
                                   variant="outline"
@@ -431,10 +431,10 @@ export default function StudentPreferenceManagement() {
                                 </Button>
                               )}
 
-                              {/* Requirement 1: Lock + Release buttons should show ONLY when all conditions are met */}
+                              {/* Requirement 2: Lock + Release buttons show when central admin fills all preferences and student is NOT locked */}
                               {user?.role === 'central_admin' && 
                                student.counselingDistrict === 'Mohali' && 
-                               student.districtAdmin === 'Central_admin' && 
+                               student.districtAdmin === 'central_admin' && 
                                areAllPreferencesFilled(student) && 
                                !student.lockedBy && (
                                 <>
@@ -467,11 +467,15 @@ export default function StudentPreferenceManagement() {
                                 </>
                               )}
 
-                              {/* Requirement 3: Regular Edit button should show for other cases where canEditStudent returns true */}
-                              {/* Only show Edit button if we're NOT showing Lock/Release buttons */}
+                              {/* Regular Edit button for other cases */}
+                              {/* Show Edit button ONLY when:
+                                  1. NOT showing Lock/Release buttons (central admin with filled preferences)
+                                  2. NOT showing Unlock button (central admin with locked student)
+                                  3. User can edit the student (canEditStudent returns true)
+                              */}
                               {!(user?.role === 'central_admin' && 
                                  student.counselingDistrict === 'Mohali' && 
-                                 student.districtAdmin === 'Central_admin' && 
+                                 student.districtAdmin === 'central_admin' && 
                                  areAllPreferencesFilled(student) && 
                                  !student.lockedBy) && 
                                !(user?.role === 'central_admin' && student.lockedBy === user?.id) && (
