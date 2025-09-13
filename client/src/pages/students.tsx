@@ -11,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataPagination } from "@/components/ui/data-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X } from "lucide-react";
+import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { formatDistanceToNow } from "date-fns";
 import type { Student, StudentsEntranceResult } from "@shared/schema";
 
 export default function Students() {
@@ -281,6 +282,7 @@ export default function Students() {
                 <TableHead>Category</TableHead>
                 <TableHead>Stream</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Locked Status</TableHead>
                 <TableHead>Allotted District</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -307,6 +309,23 @@ export default function Students() {
                     </Badge>
                   </TableCell>
                   <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
+                  <TableCell>
+                    {student.isLocked ? (
+                      <div className="flex items-center space-x-1">
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Locked
+                        </Badge>
+                        {student.lockedAt && (
+                          <div className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(student.lockedAt), { addSuffix: true })}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">Unlocked</Badge>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {student.allottedDistrict ? (
                       <Badge className="bg-green-100 text-green-800">{student.allottedDistrict}</Badge>
@@ -525,6 +544,26 @@ export default function Students() {
                   <div>
                     <label className="font-medium">Allotted District</label>
                     <p>{(selectedStudent as Student)?.allottedDistrict || 'Not Allotted'}</p>
+                  </div>
+                  <div>
+                    <label className="font-medium">Locked Status</label>
+                    <div className="flex items-center space-x-2 mt-1">
+                      {(selectedStudent as Student)?.isLocked ? (
+                        <>
+                          <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Locked
+                          </Badge>
+                          {(selectedStudent as Student)?.lockedAt && (
+                            <span className="text-sm text-muted-foreground">
+                              {formatDistanceToNow(new Date((selectedStudent as Student).lockedAt!), { addSuffix: true })}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Unlocked</Badge>
+                      )}
+                    </div>
                   </div>
                   {(selectedStudent as Student)?.choice1 && (
                     <div className="col-span-2">

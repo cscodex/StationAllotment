@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNow } from "date-fns";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import {
   CheckCircle, 
   AlertTriangle,
   TrendingUp,
+  Clock,
 } from "lucide-react";
 import type { DistrictStatus, Student } from "@shared/schema";
 
@@ -231,6 +233,12 @@ export default function DistrictAnalysis() {
                                   {getStatusIcon(!!district.isFinalized)}
                                   <h3 className="font-semibold">{district.district}</h3>
                                   {getFinalizationBadge(!!district.isFinalized)}
+                                  {district.isFinalized && district.finalizedAt && (
+                                    <div className="flex items-center text-xs text-muted-foreground">
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      {formatDistanceToNow(new Date(district.finalizedAt), { addSuffix: true })}
+                                    </div>
+                                  )}
                                 </div>
                                 
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -277,6 +285,12 @@ export default function DistrictAnalysis() {
                             {getStatusIcon(!!district.isFinalized)}
                             <h3 className="font-semibold">{district.district}</h3>
                             {getFinalizationBadge(!!district.isFinalized)}
+                            {district.isFinalized && district.finalizedAt && (
+                              <div className="flex items-center text-xs text-muted-foreground">
+                                <Clock className="w-3 h-3 mr-1" />
+                                {formatDistanceToNow(new Date(district.finalizedAt), { addSuffix: true })}
+                              </div>
+                            )}
                           </div>
                           
                           <div className="grid grid-cols-3 gap-4">
@@ -309,6 +323,12 @@ export default function DistrictAnalysis() {
                               <div className="flex items-center space-x-2">
                                 {getStatusIcon(!!district.isFinalized)}
                                 <h3 className="font-semibold">{district.district}</h3>
+                                {district.isFinalized && district.finalizedAt && (
+                                  <div className="flex items-center text-xs text-muted-foreground">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    {formatDistanceToNow(new Date(district.finalizedAt), { addSuffix: true })}
+                                  </div>
+                                )}
                               </div>
                               <Badge variant={demandRatio > 1 ? "destructive" : demandRatio > 0.8 ? "outline" : "secondary"}>
                                 {demandRatio > 1 ? "Over-demand" : demandRatio > 0.8 ? "High Demand" : "Normal"}
