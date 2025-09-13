@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -55,6 +56,14 @@ export default function StudentPreferenceManagement() {
   const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
   const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
+  
+  // Confirmation dialog states
+  const [isLockConfirmDialogOpen, setIsLockConfirmDialogOpen] = useState(false);
+  const [isUnlockConfirmDialogOpen, setIsUnlockConfirmDialogOpen] = useState(false);
+  const [isReleaseConfirmDialogOpen, setIsReleaseConfirmDialogOpen] = useState(false);
+  const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
+  const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
+  const [selectedStudentForRelease, setSelectedStudentForRelease] = useState<Student | null>(null);
   
   const { user } = useAuth();
   const { toast } = useToast();
@@ -215,6 +224,31 @@ export default function StudentPreferenceManagement() {
       });
     }
   });
+
+  // Confirmation functions for actions
+  const confirmLockStudent = () => {
+    if (!selectedStudentForLock) return;
+    
+    lockForEditMutation.mutate(selectedStudentForLock.id);
+    setIsLockConfirmDialogOpen(false);
+    setSelectedStudentForLock(null);
+  };
+
+  const confirmUnlockStudent = () => {
+    if (!selectedStudentForUnlock) return;
+    
+    unlockEditMutation.mutate(selectedStudentForUnlock.id);
+    setIsUnlockConfirmDialogOpen(false);
+    setSelectedStudentForUnlock(null);
+  };
+
+  const confirmReleaseAssignment = () => {
+    if (!selectedStudentForRelease) return;
+    
+    releaseAssignmentMutation.mutate(selectedStudentForRelease.id);
+    setIsReleaseConfirmDialogOpen(false);
+    setSelectedStudentForRelease(null);
+  };
 
   const openEditModal = (student: Student) => {
     // Directly open edit modal without locking
@@ -441,7 +475,10 @@ export default function StudentPreferenceManagement() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => unlockEditMutation.mutate(student.id)}
+                                  onClick={() => {
+                                    setSelectedStudentForUnlock(student);
+                                    setIsUnlockConfirmDialogOpen(true);
+                                  }}
                                   disabled={unlockEditMutation.isPending}
                                   data-testid={`button-unlock-${student.id}`}
                                 >
@@ -457,7 +494,10 @@ export default function StudentPreferenceManagement() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => lockForEditMutation.mutate(student.id)}
+                                    onClick={() => {
+                                      setSelectedStudentForLock(student);
+                                      setIsLockConfirmDialogOpen(true);
+                                    }}
                                     disabled={lockForEditMutation.isPending}
                                     data-testid={`button-lock-${student.id}`}
                                   >
@@ -469,9 +509,8 @@ export default function StudentPreferenceManagement() {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => {
-                                      if (window.confirm('Are you sure you want to release this assignment? This will clear the district and district admin assignment.')) {
-                                        releaseAssignmentMutation.mutate(student.id);
-                                      }
+                                      setSelectedStudentForRelease(student);
+                                      setIsReleaseConfirmDialogOpen(true);
                                     }}
                                     disabled={releaseAssignmentMutation.isPending}
                                     data-testid={`button-release-${student.id}`}
@@ -671,6 +710,192 @@ export default function StudentPreferenceManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lock Confirmation Dialog */}
+      <AlertDialog open={isLockConfirmDialogOpen} onOpenChange={setIsLockConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Lock Student Preferences</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to lock {selectedStudentForLock?.name}'s preferences? 
+              This will prevent further edits to their district choices until unlocked by a central administrator.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {selectedStudentForLock && (
+            <div className="space-y-3 py-4">
+              <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Student Name</p>
+                  <p className="font-semibold" data-testid="text-lock-student-name">
+                    {selectedStudentForLock.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Merit Number</p>
+                  <p className="font-mono" data-testid="text-lock-student-merit">
+                    {selectedStudentForLock.meritNumber}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Stream</p>
+                  <p className="font-semibold" data-testid="text-lock-student-stream">
+                    {selectedStudentForLock.stream}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Total Choices</p>
+                  <p className="font-semibold">
+                    {[selectedStudentForLock.choice1, selectedStudentForLock.choice2, selectedStudentForLock.choice3,
+                      selectedStudentForLock.choice4, selectedStudentForLock.choice5, selectedStudentForLock.choice6,
+                      selectedStudentForLock.choice7, selectedStudentForLock.choice8, selectedStudentForLock.choice9,
+                      selectedStudentForLock.choice10].filter(Boolean).length} / 10
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-3 border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-950/20">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>⚠️ Important:</strong> Once locked, only central administrators can unlock this student's preferences for further editing.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmLockStudent}
+              disabled={lockForEditMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {lockForEditMutation.isPending ? "Locking..." : "🔒 Lock Student"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unlock Confirmation Dialog */}
+      <AlertDialog open={isUnlockConfirmDialogOpen} onOpenChange={setIsUnlockConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlock Student Preferences</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to unlock {selectedStudentForUnlock?.name}'s preferences? 
+              This will allow them or district administrators to edit their district choices again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {selectedStudentForUnlock && (
+            <div className="space-y-3 py-4">
+              <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Student Name</p>
+                  <p className="font-semibold" data-testid="text-unlock-student-name">
+                    {selectedStudentForUnlock.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Merit Number</p>
+                  <p className="font-mono" data-testid="text-unlock-student-merit">
+                    {selectedStudentForUnlock.meritNumber}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Stream</p>
+                  <p className="font-semibold" data-testid="text-unlock-student-stream">
+                    {selectedStudentForUnlock.stream}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Locked By</p>
+                  <p className="font-semibold text-blue-600">
+                    {selectedStudentForUnlock.lockedBy || "System"}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-3 border-l-4 border-green-500 bg-green-50 dark:bg-green-950/20">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  <strong>✅ Note:</strong> Unlocking will allow the student's preferences to be edited again by authorized users.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmUnlockStudent}
+              disabled={unlockEditMutation.isPending}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {unlockEditMutation.isPending ? "Unlocking..." : "🔓 Unlock Student"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Release Assignment Confirmation Dialog */}
+      <AlertDialog open={isReleaseConfirmDialogOpen} onOpenChange={setIsReleaseConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release Student Assignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to release {selectedStudentForRelease?.name}'s assignment? 
+              This will clear their district and district admin assignment and make them available for reassignment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          {selectedStudentForRelease && (
+            <div className="space-y-3 py-4">
+              <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Student Name</p>
+                  <p className="font-semibold" data-testid="text-release-student-name">
+                    {selectedStudentForRelease.name}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Merit Number</p>
+                  <p className="font-mono" data-testid="text-release-student-merit">
+                    {selectedStudentForRelease.meritNumber}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Current District</p>
+                  <p className="font-semibold text-blue-600">
+                    {selectedStudentForRelease.counselingDistrict || "None"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">District Admin</p>
+                  <p className="font-semibold text-blue-600">
+                    {selectedStudentForRelease.districtAdmin || "None"}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="p-3 border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  <strong>⚠️ Warning:</strong> This action will remove the student's current district assignment and make them available for reassignment. Their preferences will remain intact.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmReleaseAssignment}
+              disabled={releaseAssignmentMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {releaseAssignmentMutation.isPending ? "Releasing..." : "🔄 Release Assignment"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
