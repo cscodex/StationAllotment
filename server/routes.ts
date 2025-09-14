@@ -1646,8 +1646,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { district } = req.params;
       const user = await storage.getUser(req.session.userId);
       
+      // Permission check: District admins can only finalize their own district
+      // Central admin can finalize Mohali district (which they manage directly)
       if (user?.role === 'district_admin' && user.district !== district) {
         return res.status(403).json({ message: "Can only finalize your own district" });
+      }
+      
+      // Central admin can only finalize Mohali district
+      if (user?.role === 'central_admin' && district !== 'Mohali') {
+        return res.status(403).json({ message: "Central admin can only finalize Mohali district" });
       }
 
       // Check if all eligible students in district are locked
