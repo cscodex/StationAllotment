@@ -244,8 +244,9 @@ export default function DistrictAdmin() {
       queryClient.removeQueries({ queryKey: ["/api/district-status", user?.district] });
       
       toast({
-        title: "District Finalized",
-        description: "District data has been finalized and submitted for allocation",
+        title: "🎉 District Finalized Successfully!",
+        description: `${user?.district} district data has been finalized at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', timeStyle: 'short', dateStyle: 'short' })} and submitted for allocation processing.`,
+        duration: 6000, // Show longer for important success message
       });
     },
     onError: (error) => {
