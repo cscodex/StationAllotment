@@ -45,7 +45,8 @@ async function seedUsers() {
       // Hash the password
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       
-      // Prepare user data
+      // Prepare user data (excluding password from credentials for security)
+      const { password: _, ...safeCredentials } = userData;
       const newUser: InsertUser = {
         username: userData.username,
         email: userData.email,
@@ -54,7 +55,7 @@ async function seedUsers() {
         district: userData.district || null,
         firstName: userData.firstName,
         lastName: userData.lastName,
-        credentials: userData, // Store original credentials data
+        credentials: safeCredentials, // Store credentials without plaintext password
         isBlocked: false,
       };
       
