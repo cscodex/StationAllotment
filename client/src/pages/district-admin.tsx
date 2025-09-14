@@ -31,7 +31,8 @@ import {
   Eye,
   Lock,
   Unlock,
-  RotateCcw
+  RotateCcw,
+  Shield
 } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
@@ -1023,14 +1024,32 @@ export default function DistrictAdmin() {
                     <p className="text-sm text-green-800 dark:text-green-300">
                       <strong>Ready to finalize!</strong> All students are locked and your district is ready for allocation processing.
                     </p>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center">
+                      <Clock className="w-3 h-3 mr-1" />
+                      Status checked at: {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
+                    </p>
                   </div>
                 )}
 
                 {isFinalized && (
                   <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <p className="text-sm text-blue-800 dark:text-blue-300">
-                      <strong>District Finalized!</strong> Your district data has been successfully finalized and submitted for allocation processing.
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-blue-800 dark:text-blue-300">
+                        <strong>District Finalized!</strong> Your district data has been successfully finalized and submitted for allocation processing.
+                      </p>
+                      {currentDistrictStatus?.finalizedAt && (
+                        <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Finalized at: {new Date(currentDistrictStatus.finalizedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
+                        </p>
+                      )}
+                      {currentDistrictStatus?.finalizedBy && (
+                        <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
+                          <Shield className="w-3 h-3 mr-1" />
+                          Finalized by: {currentDistrictStatus.finalizedBy}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </CardContent>
