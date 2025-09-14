@@ -4,6 +4,7 @@ import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AllocationModal from "@/components/modals/allocation-modal";
@@ -54,6 +55,30 @@ export default function Allocation() {
     queryKey: ["/api/district-status"],
   });
 
+  // Finalize allocation mutation
+  const finalizeAllocationMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/allocation/finalize");
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({
+        title: "🎉 Allocation Finalized Successfully!",
+        description: `Allocation process has been finalized at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', timeStyle: 'short', dateStyle: 'short' })}. You can now run the allocation.`,
+        duration: 6000,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Finalization Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
   const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
   const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
@@ -100,12 +125,25 @@ export default function Allocation() {
   const allDistrictsFinalized = totalDistricts > 0 && finalizedDistricts === totalDistricts;
   const pendingDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized) || [];
 
+  // Check if allocation is finalized (separate from completed)
+  const isAllocationFinalized = allocationStatus?.finalized;
+
+  // Conditions for finalize allocation
+  const canFinalizeAllocation = hasEntranceResults && // At least one entrance result
+                               hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
+                               studentsWithCompleteData > 0 && // At least one student with complete data
+                               studentsWithMeritData > 0 && // Students must have merit data
+                               allDistrictsFinalized && // All districts must be finalized
+                               !isAllocationFinalized && // Not already finalized
+                               !allocationStatus?.completed; // Not already completed
+
   // Minimum requirements for allocation
   const canRunAllocation = hasEntranceResults && // At least one entrance result
                           hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
                           studentsWithCompleteData > 0 && // At least one student with complete data
                           studentsWithMeritData > 0 && // Students must have merit data
                           allDistrictsFinalized && // All districts must be finalized
+                          isAllocationFinalized && // Must be finalized first
                           !allocationStatus?.completed; // Not already completed
 
   const preflightChecks = [
@@ -168,13 +206,24 @@ export default function Allocation() {
       color: hasEntranceResults && hasVacancyData && studentsWithCompleteData > 0 && allDistrictsFinalized ? "text-green-500" : "text-amber-500",
     },
     {
+      title: "Central Allocation Finalization",
+      status: isAllocationFinalized ? "complete" : canFinalizeAllocation ? "ready" : "pending",
+      description: isAllocationFinalized
+        ? "✅ Allocation process has been finalized by central admin"
+        : canFinalizeAllocation 
+        ? "Ready to finalize allocation - all requirements met"
+        : "Prerequisites not met - complete all above steps before finalization",
+      icon: isAllocationFinalized ? Check : canFinalizeAllocation ? Clock : AlertTriangle,
+      color: isAllocationFinalized ? "text-green-500" : canFinalizeAllocation ? "text-blue-500" : "text-amber-500",
+    },
+    {
       title: "Allocation Process",
       status: allocationStatus?.completed ? "complete" : canRunAllocation ? "ready" : "pending",
       description: allocationStatus?.completed
         ? "Seat allocation has been completed successfully"
         : canRunAllocation 
-        ? "Ready to run allocation - all minimum requirements met"
-        : "Prerequisites not met - need minimum data before allocation",
+        ? "Ready to run allocation - finalization completed"
+        : "Prerequisites not met - need finalization before running allocation",
       icon: allocationStatus?.completed ? Check : canRunAllocation ? Clock : AlertTriangle,
       color: allocationStatus?.completed ? "text-green-500" : canRunAllocation ? "text-blue-500" : "text-amber-500",
     },
@@ -240,24 +289,79 @@ export default function Allocation() {
                       ))}
                     </div>
 
-                    <div className="flex space-x-4">
-                      <Button 
-                        onClick={() => setShowAllocationModal(true)}
-                        disabled={!canRunAllocation}
-                        className="flex-1"
-                        data-testid="button-run-allocation"
-                      >
-                        <Play className="w-4 h-4 mr-2" />
-                        {canRunAllocation ? "Run Allocation" : "Requirements Not Met"}
-                      </Button>
-                      
-                      {!canRunAllocation && (
+                    <div className="space-y-4">
+                      {/* Finalize Allocation Section */}
+                      {!isAllocationFinalized && !allocationStatus?.completed && (
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Step 1: Finalize Allocation</h4>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                disabled={!canFinalizeAllocation || finalizeAllocationMutation.isPending}
+                                variant="outline"
+                                className="w-full"
+                                data-testid="button-finalize-allocation"
+                              >
+                                <Shield className="w-4 h-4 mr-2" />
+                                {finalizeAllocationMutation.isPending ? "Finalizing..." : 
+                                 canFinalizeAllocation ? "Finalize Allocation" : "Requirements Not Met"}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Finalize Allocation Process</AlertDialogTitle>
+                                <AlertDialogDescription className="space-y-2">
+                                  <p>
+                                    You are about to finalize the allocation process. This action will:
+                                  </p>
+                                  <ul className="list-disc list-inside space-y-1 text-sm">
+                                    <li>Lock the allocation process for running</li>
+                                    <li>Prevent further changes to district finalization</li>
+                                    <li>Enable the "Run Allocation" step</li>
+                                  </ul>
+                                  <p className="font-medium text-amber-600">
+                                    ⚠️ This action cannot be undone. Please ensure all districts have completed their data finalization.
+                                  </p>
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => finalizeAllocationMutation.mutate()}
+                                  data-testid="button-confirm-finalize"
+                                >
+                                  Finalize Allocation
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      )}
+
+                      {/* Run Allocation Section */}
+                      {isAllocationFinalized && !allocationStatus?.completed && (
+                        <div className="space-y-2">
+                          <h4 className="font-medium text-sm">Step 2: Run Allocation</h4>
+                          <Button 
+                            onClick={() => setShowAllocationModal(true)}
+                            disabled={!canRunAllocation}
+                            className="w-full"
+                            data-testid="button-run-allocation"
+                          >
+                            <Play className="w-4 h-4 mr-2" />
+                            Run Allocation Algorithm
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Fallback for when requirements not met */}
+                      {!canFinalizeAllocation && !isAllocationFinalized && !allocationStatus?.completed && (
                         <Button 
                           variant="outline" 
                           onClick={() => window.location.href = '/file-management'}
                           data-testid="button-upload-files"
                         >
-                          Upload Files
+                          Upload Required Files
                         </Button>
                       )}
                     </div>
