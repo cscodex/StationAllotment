@@ -30,6 +30,16 @@ function isPreferencesComplete(student: any): boolean {
   return choices.every(choice => choice && choice.trim());
 }
 
+// District name normalization helper
+function normalizeDistrict(district: string): string {
+  // Normalize SAS Nagar variations to match across frontend/backend
+  const normalized = district.trim();
+  if (normalized === 'SAS Nagar' || normalized === 'S.A.S. Nagar' || normalized === 'SAS Nagar (Mohali)' || normalized === 'Mohali') {
+    return 'SAS Nagar'; // Use consistent name from schema
+  }
+  return normalized;
+}
+
 function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
@@ -1418,7 +1428,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if all districts with eligible students are finalized
       const unfinalizedDistricts: string[] = [];
       districtsWithEligibleStudents.forEach(district => {
-        const districtStatus = allDistrictStatuses.find(status => status.district === district);
+        const normalizedDistrict = normalizeDistrict(district);
+        const districtStatus = allDistrictStatuses.find(status => normalizeDistrict(status.district) === normalizedDistrict);
         if (!districtStatus || !districtStatus.isFinalized) {
           unfinalizedDistricts.push(district);
         }
@@ -1647,14 +1658,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.session.userId);
       
       // Permission check: District admins can only finalize their own district
-      // Central admin can finalize Mohali district (which they manage directly)
-      if (user?.role === 'district_admin' && user.district !== district) {
+      // Central admin can finalize SAS Nagar/Mohali district (which they manage directly)
+      if (user?.role === 'district_admin' && normalizeDistrict(user.district || '') !== normalizeDistrict(district)) {
         return res.status(403).json({ message: "Can only finalize your own district" });
       }
       
-      // Central admin can only finalize Mohali district
-      if (user?.role === 'central_admin' && district !== 'Mohali') {
-        return res.status(403).json({ message: "Central admin can only finalize Mohali district" });
+      // Central admin can only finalize SAS Nagar/Mohali district
+      if (user?.role === 'central_admin' && normalizeDistrict(district) !== 'SAS Nagar') {
+        return res.status(403).json({ message: "Central admin can only finalize SAS Nagar district" });
       }
 
       // Check if all eligible students in district are locked
