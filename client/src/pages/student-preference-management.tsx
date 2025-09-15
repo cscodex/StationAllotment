@@ -172,6 +172,16 @@ export default function StudentPreferenceManagement() {
     queryKey: ["/api/students", { limit: 200, offset: 0 }],
   });
 
+  // Query settings to check if allocation is finalized
+  const { data: settingsData } = useQuery({
+    queryKey: ["/api/settings"],
+  });
+
+  // Check if allocation is finalized
+  const isAllocationFinalized = Array.isArray(settingsData) && settingsData.some((setting: any) => 
+    setting.key === 'allocation_finalized' && setting.value === 'true'
+  );
+
   const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
@@ -211,6 +221,7 @@ export default function StudentPreferenceManagement() {
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       toast({
         title: "Success",
         description: "Allocation process finalized successfully",
@@ -344,19 +355,27 @@ export default function StudentPreferenceManagement() {
                 </div>
                 {user?.role === 'central_admin' && (
                   <Button 
-                    variant="default" 
+                    variant={isAllocationFinalized ? "outline" : "default"}
                     size="sm"
                     onClick={() => {
-                      if (window.confirm('Are you sure you want to finalize the allocation process? This action cannot be undone.')) {
+                      if (!isAllocationFinalized && window.confirm('Are you sure you want to finalize the allocation process? This action cannot be undone.')) {
                         finalizeAllocationMutation.mutate();
                       }
                     }}
-                    disabled={finalizeAllocationMutation.isPending}
+                    disabled={finalizeAllocationMutation.isPending || isAllocationFinalized}
                     data-testid="button-finalize-allocation"
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className={isAllocationFinalized 
+                      ? "bg-gray-100 text-gray-600 cursor-not-allowed" 
+                      : "bg-green-600 hover:bg-green-700 text-white"
+                    }
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    {finalizeAllocationMutation.isPending ? "Finalizing..." : "Finalize Allocation"}
+                    {finalizeAllocationMutation.isPending 
+                      ? "Finalizing..." 
+                      : isAllocationFinalized 
+                        ? "Allocation Finalized" 
+                        : "Finalize Allocation"
+                    }
                   </Button>
                 )}
               </CardTitle>
