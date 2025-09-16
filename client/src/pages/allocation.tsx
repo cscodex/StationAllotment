@@ -125,6 +125,12 @@ export default function Allocation() {
   const allDistrictsFinalized = totalDistricts > 0 && finalizedDistricts === totalDistricts;
   const pendingDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized) || [];
 
+  // Check if there are locked students in any district (including central admin managed districts)
+  const lockedStudents = students?.filter((student: any) => 
+    student.isLocked && student.districtAdmin && student.choice1 && student.counselingDistrict
+  ) || [];
+  const hasLockedStudents = lockedStudents.length > 0;
+
   // Check if allocation is finalized (separate from completed)
   const isAllocationFinalized = allocationStatus?.finalized;
 
@@ -134,6 +140,7 @@ export default function Allocation() {
                                studentsWithCompleteData > 0 && // At least one student with complete data
                                studentsWithMeritData > 0 && // Students must have merit data
                                allDistrictsFinalized && // All districts must be finalized
+                               hasLockedStudents && // At least one student must be locked
                                !isAllocationFinalized && // Not already finalized
                                !allocationStatus?.completed; // Not already completed
 
@@ -195,6 +202,17 @@ export default function Allocation() {
         : "No districts with eligible students found - districts must have students with preferences and district admin assignments",
       icon: allDistrictsFinalized ? Check : totalDistricts > 0 ? AlertTriangle : Clock,
       color: allDistrictsFinalized ? "text-green-500" : totalDistricts > 0 ? "text-red-500" : "text-amber-500",
+    },
+    {
+      title: "Locked Students Requirement",
+      status: hasLockedStudents ? "complete" : lockedStudents.length === 0 && students?.length > 0 ? "error" : "pending",
+      description: hasLockedStudents 
+        ? `✓ ${lockedStudents.length} students are locked and ready for allocation`
+        : lockedStudents.length === 0 && students?.length > 0
+        ? "⚠️ No students are locked yet. At least one student must be locked in any district before finalizing allocation"
+        : "Waiting for students to be added and locked by district admins",
+      icon: hasLockedStudents ? Check : lockedStudents.length === 0 && students?.length > 0 ? AlertTriangle : Clock,
+      color: hasLockedStudents ? "text-green-500" : lockedStudents.length === 0 && students?.length > 0 ? "text-red-500" : "text-amber-500",
     },
     {
       title: "Minimum Allocation Data",
