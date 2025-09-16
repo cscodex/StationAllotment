@@ -106,7 +106,7 @@ export default function Allocation() {
     entranceResults?.some((er: any) => er.applicationNo === s.appNo && er.meritNo)
   )?.length || 0;
 
-  // District finalization checks - only consider districts with eligible students
+  // District finalization checks - consider districts with eligible students plus SAS Nagar
   // Get list of districts that have students with district admin assignments and preferences
   const districtsWithEligibleStudents = new Set<string>();
   students?.forEach((student: any) => {
@@ -115,7 +115,10 @@ export default function Allocation() {
     }
   });
 
-  // Only check finalization status for districts with eligible students
+  // Always include SAS Nagar as it's managed by central admin
+  districtsWithEligibleStudents.add('SAS Nagar');
+
+  // Only check finalization status for districts with eligible students (including SAS Nagar)
   const eligibleDistrictStatuses = districtStatuses?.filter(ds => 
     districtsWithEligibleStudents.has(ds.district)
   ) || [];
@@ -127,7 +130,7 @@ export default function Allocation() {
 
   // Check if there are locked students in any district (including central admin managed districts)
   const lockedStudents = students?.filter((student: any) => 
-    student.isLocked && student.districtAdmin && student.choice1 && student.counselingDistrict
+    student.isLocked && student.choice1 // Only require student to be locked and have preferences
   ) || [];
   const hasLockedStudents = lockedStudents.length > 0;
 
@@ -371,6 +374,22 @@ export default function Allocation() {
                           </Button>
                         </div>
                       )}
+
+                      {/* Flow Diagram Section */}
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">Process Documentation</h4>
+                        <Button 
+                          onClick={() => {
+                            window.open('/api/export/flow-diagram/pdf', '_blank');
+                          }}
+                          variant="outline"
+                          className="w-full"
+                          data-testid="button-export-flow-diagram"
+                        >
+                          <BarChart3 className="w-4 h-4 mr-2" />
+                          Download Flow Diagram PDF
+                        </Button>
+                      </div>
 
                       {/* Fallback for when requirements not met */}
                       {!canFinalizeAllocation && !isAllocationFinalized && !allocationStatus?.completed && (

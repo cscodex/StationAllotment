@@ -18,10 +18,6 @@ externalPort = 80
 localPort = 38623
 externalPort = 3000
 
-[[ports]]
-localPort = 43075
-externalPort = 3001
-
 [env]
 PORT = "5000"
 DATABASE_URL = "postgresql://replit:password@db.postgresql-16.replit.com:5432/replit"

@@ -98,8 +98,8 @@ export class ExportService {
     this.drawStatsCard(doc, 50, 150, 'Total Candidates', students.length.toString(), '#3b82f6');
     this.drawStatsCard(doc, 200, 150, 'Students Allotted', allottedStudents.length.toString(), '#10b981');
     this.drawStatsCard(doc, 350, 150, 'Students Not Allotted', notAllottedStudents.length.toString(), '#ef4444');
-    this.drawStatsCard(doc, 500, 150, 'Total Vacancies', stats.totalVacancies.toString(), '#8b5cf6');
-    this.drawStatsCard(doc, 650, 150, 'Completion Rate', `${Math.round((allottedStudents.length / students.length) * 100)}%`, '#f59e0b');
+    this.drawStatsCard(doc, 500, 150, 'Total Vacancies', (stats?.totalVacancies || 0).toString(), '#8b5cf6');
+    this.drawStatsCard(doc, 650, 150, 'Completion Rate', `${Math.round((allottedStudents.length / (students.length || 1)) * 100)}%`, '#f59e0b');
 
     // District-wise allocation table
     doc.moveDown(8);
@@ -433,6 +433,163 @@ export class ExportService {
       } catch (error) {
         reject(error);
       }
+    });
+  }
+
+  async exportFlowDiagramAsPDF(): Promise<Buffer> {
+    const districtStatuses = await this.storage.getAllDistrictStatuses();
+    const settings = await this.storage.getSettings();
+    const allocationFinalized = settings.find(s => s.key === 'allocation_finalized')?.value === 'true';
+    const allocationCompleted = settings.find(s => s.key === 'allocation_completed')?.value === 'true';
+    const students = await this.storage.getStudents(10000, 0);
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ size: 'A4', layout: 'portrait', margin: 50 });
+        const buffers: Buffer[] = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+          const pdfData = Buffer.concat(buffers);
+          resolve(pdfData);
+        });
+
+        this.generateFlowDiagram(doc, districtStatuses, allocationFinalized, allocationCompleted, students);
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  private generateFlowDiagram(doc: any, districtStatuses: any[], allocationFinalized: boolean, allocationCompleted: boolean, students: any[]) {
+    const currentDate = new Date().toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'long', 
+      day: 'numeric'
+    });
+
+    // Header
+    doc.fontSize(24).fillColor('#2563eb').text('Punjab Seat Allotment System', { align: 'center' });
+    doc.fontSize(18).fillColor('#64748b').text('Allocation Process Flow Diagram', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).fillColor('#374151').text(`Generated: ${currentDate}`, { align: 'center' });
+    doc.moveDown(2);
+
+    // Flow Diagram Steps
+    const steps = [
+      {
+        title: "1. Data Upload & Validation",
+        description: "Upload student choices, entrance results, and vacancy data",
+        status: "complete",
+        color: "#10b981"
+      },
+      {
+        title: "2. District Admin Assignment",
+        description: "Students assigned to counseling districts with district admins",
+        status: "complete", 
+        color: "#10b981"
+      },
+      {
+        title: "3. Student Preference Setting",
+        description: "District admins set student preferences (10 choices per student)",
+        status: "complete",
+        color: "#10b981"
+      },
+      {
+        title: "4. Student Locking",
+        description: "District admins lock students when preferences are finalized",
+        status: "complete",
+        color: "#10b981"
+      },
+      {
+        title: "5. District Finalization",
+        description: `Districts finalize their data (${districtStatuses.filter(d => d.isFinalized).length}/${districtStatuses.length} completed)`,
+        status: districtStatuses.length > 0 && districtStatuses.every(d => d.isFinalized) ? "complete" : "in_progress",
+        color: districtStatuses.length > 0 && districtStatuses.every(d => d.isFinalized) ? "#10b981" : "#f59e0b"
+      },
+      {
+        title: "6. Central Allocation Finalization",
+        description: "Central admin finalizes allocation process (locks all data)",
+        status: allocationFinalized ? "complete" : "pending",
+        color: allocationFinalized ? "#10b981" : "#6b7280"
+      },
+      {
+        title: "7. Run Allocation Algorithm", 
+        description: "Merit-based seat allocation using student preferences",
+        status: allocationCompleted ? "complete" : allocationFinalized ? "ready" : "pending",
+        color: allocationCompleted ? "#10b981" : allocationFinalized ? "#3b82f6" : "#6b7280"
+      },
+      {
+        title: "8. Results Export",
+        description: "Generate and export allocation results (PDF/CSV)",
+        status: allocationCompleted ? "ready" : "pending",
+        color: allocationCompleted ? "#3b82f6" : "#6b7280"
+      }
+    ];
+
+    let currentY = 180;
+    const stepHeight = 80;
+    const boxWidth = 400;
+    const boxHeight = 60;
+    const centerX = (doc.page.width - boxWidth) / 2;
+
+    steps.forEach((step, index) => {
+      // Draw step box
+      doc.rect(centerX, currentY, boxWidth, boxHeight).fillAndStroke(step.color, '#d1d5db');
+      
+      // Step title
+      doc.fontSize(14).fillColor('#ffffff').text(step.title, centerX + 20, currentY + 10, { width: boxWidth - 40 });
+      
+      // Step description  
+      doc.fontSize(10).fillColor('#ffffff').text(step.description, centerX + 20, currentY + 30, { width: boxWidth - 40 });
+      
+      // Status badge
+      const badgeText = step.status.toUpperCase();
+      const badgeWidth = 80;
+      const badgeX = centerX + boxWidth - badgeWidth - 10;
+      doc.rect(badgeX, currentY + 45, badgeWidth, 12).fillAndStroke('#ffffff', '#ffffff');
+      doc.fontSize(8).fillColor(step.color).text(badgeText, badgeX + 5, currentY + 47);
+
+      // Draw arrow to next step (except for last step)
+      if (index < steps.length - 1) {
+        const arrowStartY = currentY + boxHeight;
+        const arrowEndY = currentY + stepHeight;
+        const arrowX = centerX + boxWidth / 2;
+        
+        // Arrow line
+        doc.moveTo(arrowX, arrowStartY).lineTo(arrowX, arrowEndY - 10).stroke('#6b7280');
+        
+        // Arrow head
+        doc.moveTo(arrowX - 5, arrowEndY - 15)
+           .lineTo(arrowX, arrowEndY - 5)
+           .lineTo(arrowX + 5, arrowEndY - 15)
+           .stroke('#6b7280');
+      }
+
+      currentY += stepHeight;
+    });
+
+    // Add summary section
+    currentY += 30;
+    doc.fontSize(16).fillColor('#1f2937').text('Process Summary', { align: 'center' });
+    doc.moveDown();
+
+    const lockedStudents = students.filter(s => s.isLocked).length;
+    const totalStudents = students.length;
+
+    const summary = [
+      `Total Districts: ${districtStatuses.length}`,
+      `Finalized Districts: ${districtStatuses.filter(d => d.isFinalized).length}`,
+      `Total Students: ${totalStudents}`,
+      `Locked Students: ${lockedStudents}`,
+      `Allocation Finalized: ${allocationFinalized ? 'Yes' : 'No'}`,
+      `Allocation Completed: ${allocationCompleted ? 'Yes' : 'No'}`
+    ];
+
+    summary.forEach(item => {
+      doc.fontSize(12).fillColor('#374151').text(`• ${item}`, { align: 'center' });
     });
   }
 }

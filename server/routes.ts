@@ -1110,6 +1110,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Allocation process has already been finalized" 
         });
       }
+
+      // Server-side validation: Check if there are locked students
+      const students = await storage.getStudents(10000, 0);
+      const lockedStudents = students.filter(s => s.isLocked && s.choice1);
+      
+      if (lockedStudents.length === 0) {
+        return res.status(400).json({ 
+          message: "Cannot finalize allocation: No locked students found. At least one student must be locked with preferences." 
+        });
+      }
+
+      // Server-side validation: Check if all districts are finalized
+      const districtStatuses = await storage.getAllDistrictStatuses();
+      const eligibleDistricts = new Set<string>();
+      students.forEach(student => {
+        if (student.districtAdmin && student.choice1 && student.counselingDistrict) {
+          eligibleDistricts.add(student.counselingDistrict);
+        }
+      });
+
+      // Always include SAS Nagar as it's managed by central admin
+      eligibleDistricts.add('SAS Nagar');
+
+      const eligibleDistrictStatuses = districtStatuses.filter(ds => eligibleDistricts.has(ds.district));
+      const unfinalizedDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized);
+      
+      if (unfinalizedDistricts.length > 0) {
+        return res.status(400).json({ 
+          message: `Cannot finalize allocation: ${unfinalizedDistricts.length} districts are not finalized yet: ${unfinalizedDistricts.map(d => d.district).join(', ')}` 
+        });
+      }
       
       const currentTime = new Date().toISOString();
       
@@ -1126,6 +1157,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         key: 'allocation_finalized_by',
         value: req.session.userId
       });
+
+      // Automatically finalize SAS Nagar (Mohali) district when allocation is finalized
+      // SAS Nagar is managed directly by central admin
+      try {
+        const sasNagarStatus = await storage.getDistrictStatus('SAS Nagar');
+        if (!sasNagarStatus?.isFinalized) {
+          await storage.finalizeDistrict('SAS Nagar', req.session.userId);
+          
+          await auditService.log(req.session.userId, 'district_finalized', 'district', 'SAS Nagar', {
+            reason: 'Auto-finalized during allocation finalization',
+            finalizedBy: req.session.userId,
+            finalizedAt: currentTime
+          }, req.ip, req.get('User-Agent'));
+        }
+      } catch (error) {
+        console.warn('Warning: Could not auto-finalize SAS Nagar district during allocation finalization:', error);
+        // Continue with allocation finalization even if SAS Nagar finalization fails
+      }
       
       await auditService.log(req.session.userId, 'allocation_finalize', 'allocation', 'system', {
         finalizedBy: req.session.userId,
@@ -1582,6 +1631,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Export PDF error:", error);
       res.status(500).json({ message: "Failed to export PDF" });
+    }
+  });
+
+  // Export flow diagram PDF
+  app.get('/api/export/flow-diagram/pdf', isCentralAdmin, async (req: any, res) => {
+    try {
+      const pdfBuffer = await exportService.exportFlowDiagramAsPDF();
+      
+      await auditService.log(req.user.id, 'export_flow_diagram_pdf', 'export', 'flow_diagram', {
+        format: 'pdf',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=allocation_flow_diagram.pdf');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Export flow diagram PDF error:", error);
+      res.status(500).json({ message: "Failed to export flow diagram PDF" });
     }
   });
 
