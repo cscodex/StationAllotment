@@ -14,6 +14,10 @@ run = ["npm", "run", "start"]
 localPort = 5000
 externalPort = 80
 
+[[ports]]
+localPort = 40031
+externalPort = 3000
+
 [env]
 PORT = "5000"
 DATABASE_URL = "postgresql://replit:password@db.postgresql-16.replit.com:5432/replit"
