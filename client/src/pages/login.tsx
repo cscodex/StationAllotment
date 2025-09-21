@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -10,12 +10,20 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, User, Shield } from "lucide-react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
 });
+
+interface DemoUser {
+  username: string;
+  role: string;
+  firstName: string;
+  lastName: string;
+  district: string | null;
+}
 
 export default function Login() {
   const { toast } = useToast();
@@ -27,6 +35,13 @@ export default function Login() {
       username: "",
       password: "",
     },
+  });
+
+  // Fetch demo users  
+  const { data: demoUsers = [], isLoading: isDemoUsersLoading, error: demoUsersError } = useQuery<DemoUser[]>({
+    queryKey: ["/api/auth/demo-users"],
+    enabled: true,
+    retry: false,
   });
 
   const loginMutation = useMutation({
@@ -49,8 +64,32 @@ export default function Login() {
     },
   });
 
+  const demoLoginMutation = useMutation({
+    mutationFn: async (username: string) => {
+      await apiRequest("POST", "/api/auth/demo-login", { username });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({
+        title: "Demo Login Successful",
+        description: "Welcome to the Seat Allotment System",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Demo Login Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   function onSubmit(values: z.infer<typeof loginSchema>) {
     loginMutation.mutate(values);
+  }
+
+  function onDemoLogin(username: string) {
+    demoLoginMutation.mutate(username);
   }
 
   return (
@@ -112,6 +151,53 @@ export default function Login() {
               </Button>
             </form>
           </Form>
+
+          {/* Demo Login Section */}
+          {demoUsers && demoUsers.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-sm text-muted-foreground text-center mb-4">
+                Demo Logins (Development Only)
+              </p>
+              <div className="space-y-2">
+                {/* Central Admin Demo Login */}
+                {demoUsers.find((user: any) => user.role === 'central_admin') && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full flex items-center gap-2"
+                    disabled={demoLoginMutation.isPending}
+                    onClick={() => onDemoLogin('central_admin')}
+                    data-testid="button-demo-login-central"
+                  >
+                    <Shield className="w-4 h-4" />
+                    {demoLoginMutation.isPending ? "Logging in..." : "Central Admin Demo"}
+                  </Button>
+                )}
+                
+                {/* District Admin Demo Login - Show first few */}
+                {demoUsers
+                  .filter((user: any) => user.role === 'district_admin')
+                  .slice(0, 3)
+                  .map((user: any) => (
+                    <Button
+                      key={user.username}
+                      type="button"
+                      variant="outline"
+                      className="w-full flex items-center gap-2 text-sm"
+                      disabled={demoLoginMutation.isPending}
+                      onClick={() => onDemoLogin(user.username)}
+                      data-testid={`button-demo-login-${user.username}`}
+                    >
+                      <User className="w-4 h-4" />
+                      {demoLoginMutation.isPending 
+                        ? "Logging in..." 
+                        : `${user.firstName} ${user.lastName} (${user.district})`
+                      }
+                    </Button>
+                  ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

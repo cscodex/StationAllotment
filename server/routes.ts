@@ -12,6 +12,25 @@ import { FileService } from "./services/fileService";
 import { AllocationService } from "./services/allocationService";
 import { ExportService } from "./services/exportService";
 import { AuditService } from "./services/auditService";
+import fs from "fs/promises";
+
+// Cache for demo credentials (only load once at startup in development)
+let cachedCredentials: any = null;
+
+// Load demo credentials at startup (development only)
+async function loadDemoCredentials() {
+  if (process.env.NODE_ENV !== 'development') {
+    return null;
+  }
+  
+  try {
+    const credentialsData = await fs.readFile('./credentials.json', 'utf8');
+    return JSON.parse(credentialsData);
+  } catch (error) {
+    console.warn('Demo credentials file not found - demo login will not be available');
+    return null;
+  }
+}
 
 const upload = multer({ 
   dest: 'uploads/',
@@ -116,6 +135,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.set("trust proxy", 1);
   app.use(getSession());
 
+  // Load demo credentials at startup
+  cachedCredentials = await loadDemoCredentials();
+
   const fileService = new FileService(storage);
   const allocationService = new AllocationService(storage);
   const exportService = new ExportService(storage);
@@ -180,6 +202,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json({ message: "Logged out successfully" });
     });
+  });
+
+  // Demo login route for development
+  app.post('/api/auth/demo-login', async (req, res) => {
+    try {
+      const { username } = req.body;
+      
+      if (!username) {
+        return res.status(400).json({ message: "Username is required" });
+      }
+
+      // Only allow demo login in development
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ message: "Demo login not available in production" });
+      }
+
+      // Check if demo credentials are available
+      if (!cachedCredentials) {
+        return res.status(500).json({ message: "Demo credentials not available" });
+      }
+
+      // Find user in credentials
+      let credentialUser;
+      if (username === cachedCredentials.central_admin.username) {
+        credentialUser = cachedCredentials.central_admin;
+      } else {
+        credentialUser = cachedCredentials.district_admins.find((admin: any) => admin.username === username);
+      }
+
+      if (!credentialUser) {
+        return res.status(404).json({ message: "Demo user not found" });
+      }
+
+      // Normalize username for consistent lookup/storage
+      const normalizedUsername = credentialUser.username.toLowerCase();
+
+      // Check if user exists in database
+      let user = await storage.getUserByUsername(normalizedUsername);
+      
+      // If user doesn't exist, create them
+      if (!user) {
+        const hashedPassword = await bcrypt.hash(credentialUser.password, 10);
+        
+        const newUser = {
+          username: normalizedUsername, // Store normalized version
+          email: credentialUser.email,
+          password: hashedPassword,
+          role: credentialUser.role as 'central_admin' | 'district_admin',
+          district: credentialUser.district || null,
+          firstName: credentialUser.firstName,
+          lastName: credentialUser.lastName,
+          isBlocked: false,
+        };
+
+        user = await storage.createUser(newUser);
+      }
+
+      // Create session
+      (req.session as any).userId = user.id;
+      
+      await auditService.log(user.id, 'demo_login', 'auth', user.id, {
+        username: user.username,
+        role: user.role,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ 
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          role: user.role, 
+          district: user.district,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        } 
+      });
+    } catch (error) {
+      console.error("Demo login error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get available demo users
+  app.get('/api/auth/demo-users', async (req, res) => {
+    try {
+      // Only allow in development
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ message: "Demo users not available in production" });
+      }
+
+      // Check if demo credentials are available
+      if (!cachedCredentials) {
+        return res.json([]); // Return empty array if no credentials available
+      }
+
+      const demoUsers = [
+        {
+          username: cachedCredentials.central_admin.username,
+          role: cachedCredentials.central_admin.role,
+          firstName: cachedCredentials.central_admin.firstName,
+          lastName: cachedCredentials.central_admin.lastName,
+          district: null,
+        },
+        ...cachedCredentials.district_admins.map((admin: any) => ({
+          username: admin.username,
+          role: admin.role,
+          firstName: admin.firstName,
+          lastName: admin.lastName,
+          district: admin.district,
+        })),
+      ];
+
+      res.json(demoUsers);
+    } catch (error) {
+      console.error("Get demo users error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
   });
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
