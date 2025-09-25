@@ -146,6 +146,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const exportService = new ExportService(storage);
   const auditService = new AuditService(storage);
 
+  // Health check endpoint for monitoring/deployment
+  app.get('/api/health', (req, res) => {
+    res.status(200).json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime()
+    });
+  });
+
   // Auth routes
   app.post('/api/auth/login', async (req, res) => {
     try {
