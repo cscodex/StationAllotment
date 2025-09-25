@@ -785,7 +785,15 @@ export default function DistrictAdmin() {
                             variant="secondary" 
                             size="sm" 
                             onClick={handleBatchLock}
-                            disabled={batchLockMutation.isPending || isDeadlinePassed}
+                            disabled={
+                              batchLockMutation.isPending || 
+                              isDeadlinePassed || 
+                              isFinalized ||
+                              Array.from(selectedStudents).every(id => {
+                                const student = filteredStudents.find((s: Student) => s.id === id);
+                                return student?.isLocked === true;
+                              })
+                            }
                             data-testid="button-batch-lock"
                           >
                             🔒 Lock Selected

@@ -102,7 +102,7 @@ export default function StudentPreferenceManagement() {
   // Lock student for editing mutation
   const lockForEditMutation = useMutation({
     mutationFn: async (studentId: string) => {
-      const response = await apiRequest('POST', `/api/students/${studentId}/lock`);
+      const response = await apiRequest('PUT', `/api/students/${studentId}/lock`, { isLocked: true });
       return await response.json();
     },
     onSuccess: (updatedStudent: Student) => {
@@ -124,7 +124,7 @@ export default function StudentPreferenceManagement() {
   // Unlock student mutation  
   const unlockEditMutation = useMutation({
     mutationFn: async (studentId: string) => {
-      const response = await apiRequest('POST', `/api/students/${studentId}/unlock`);
+      const response = await apiRequest('PUT', `/api/students/${studentId}/lock`, { isLocked: false });
       return await response.json();
     },
     onSuccess: (updatedStudent: Student) => {

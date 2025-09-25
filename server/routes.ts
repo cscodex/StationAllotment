@@ -1002,14 +1002,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Student lock/unlock route
-  app.put('/api/students/:id/lock', isDistrictAdmin, async (req: any, res) => {
+  app.put('/api/students/:id/lock', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { isLocked } = req.body;
       
+      // Validate request body
+      if (typeof isLocked !== 'boolean') {
+        return res.status(400).json({ message: "isLocked must be a boolean" });
+      }
+      
+      const user = await storage.getUser(req.session.userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+      
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Check if deadline has passed
+      const deadlineSetting = await storage.getSetting('allocation_deadline');
+      const deadlineDate = deadlineSetting?.value ? new Date(deadlineSetting.value) : null;
+      const isDeadlinePassed = deadlineDate ? new Date() > deadlineDate : false;
+      
+      if (isDeadlinePassed) {
+        return res.status(403).json({ message: "Cannot modify student lock status after deadline" });
+      }
+
+      // Check if district is finalized (for district admin)
+      if (user.role === 'district_admin' && student.counselingDistrict) {
+        const districtStatus = await storage.getDistrictStatus(student.counselingDistrict);
+        if (districtStatus?.isFinalized) {
+          return res.status(403).json({ message: "Cannot modify student lock status - district is finalized" });
+        }
+      }
+
+      // Role-based authorization
+      if (user.role === 'district_admin') {
+        // District admin can only lock/unlock students in their district
+        if (student.counselingDistrict !== user.district) {
+          return res.status(403).json({ message: "Can only lock/unlock students in your district" });
+        }
+        
+        // District admin can only lock students, only central admin can unlock
+        if (!isLocked) {
+          return res.status(403).json({ message: "Only central admin can unlock students" });
+        }
       }
 
       // Validate that all preferences including stream are set before locking
@@ -1035,11 +1075,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? await storage.lockStudent(id, req.session.userId)
         : await storage.unlockStudent(id);
       
-      await auditService.log(req.user.id, 'student_lock_status_change', 'students', id, {
+      await auditService.log(req.session.userId, 'student_lock_status_change', 'students', id, {
         isLocked,
         studentName: student.name,
         appNo: student.appNo,
-        userDistrict: req.user.district,
+        userDistrict: user.district,
+        userRole: user.role,
       }, req.ip, req.get('User-Agent'));
 
       res.json(updatedStudent);
