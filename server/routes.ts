@@ -69,13 +69,16 @@ function getSession() {
     tableName: "sessions",
   });
   return session({
-    secret: process.env.SESSION_SECRET || 'seat-allotment-secret-key',
+    secret: process.env.SESSION_SECRET || (() => {
+      throw new Error('SESSION_SECRET environment variable is required for production security');
+    })(),
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: false, // Set to false for development to avoid SSL issues
+      secure: process.env.NODE_ENV === 'production', // Secure cookies in production
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: sessionTtl,
     },
   });
@@ -519,8 +522,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const csvData = XLSX.utils.sheet_to_json(worksheet);
 
-      const defaultPassword = req.body.defaultPassword || 'Punjab@2024';
-      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      // Generate unique secure password for each imported user
+      const crypto = await import('crypto');
 
       let importedCount = 0;
       let skippedCount = 0;
@@ -542,6 +545,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
+          // Generate unique secure password for this user
+          const uniquePassword = crypto.randomBytes(16).toString('base64').slice(0, 16);
+          const hashedPassword = await bcrypt.hash(uniquePassword, 10);
+          
           // Create user
           const newUser = {
             username: userData.username,
@@ -572,7 +579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         importedCount,
         skippedCount,
         errors,
-        defaultPassword,
+        message: `Imported ${importedCount} users with unique secure passwords. Contact system administrator for password reset access.`,
       });
     } catch (error) {
       console.error("CSV import error:", error);
