@@ -229,6 +229,66 @@ VALUES
     ('system_message', '', 'System-wide message to display to users')
 ON CONFLICT (key) DO NOTHING;
 
+-- ================================================================================
+-- USER ACCOUNTS SETUP
+-- ================================================================================
+-- This section creates user accounts for the Punjab Seat Allotment System
+-- 
+-- ACCOUNTS CREATED:
+-- 1. Central Admin (1 user):
+--    - Username: central_admin
+--    - Password: admin123
+--    - Role: central_admin
+--    - Has access to all system functions
+--
+-- 2. District Admins (23 users - one for each district):
+--    - Username format: admin_[district_name]
+--    - Password: district123 (same for all district admins)
+--    - Role: district_admin
+--    - Each admin is assigned to their specific district
+--
+-- SECURITY NOTE:
+-- - All passwords are bcrypt hashed for security
+-- - Change these default passwords in production
+-- - Passwords can be updated through the application interface
+-- ================================================================================
+
+-- Insert Central Admin User
+-- Username: central_admin | Password: admin123 (hashed with bcrypt)
+INSERT INTO users (username, email, password, role, district, first_name, last_name, is_blocked) 
+VALUES 
+    ('central_admin', 'central@punjab.gov.in', '$2b$10$ZNooDKwIJHCRLJ1NVIbtmO9WKHXtddWpWN/cKdV3BM4qN4OEsnS/W', 'central_admin', NULL, 'Central', 'Administrator', false)
+ON CONFLICT (username) DO NOTHING;
+
+-- Insert District Admin Users for all 23 districts
+-- Username format: admin_[district] | Password: district123 (hashed with bcrypt)
+INSERT INTO users (username, email, password, role, district, first_name, last_name, is_blocked) 
+VALUES 
+    ('admin_amritsar', 'amritsar@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Amritsar', 'Amritsar', 'Administrator', false),
+    ('admin_barnala', 'barnala@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Barnala', 'Barnala', 'Administrator', false),
+    ('admin_bathinda', 'bathinda@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Bathinda', 'Bathinda', 'Administrator', false),
+    ('admin_faridkot', 'faridkot@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Faridkot', 'Faridkot', 'Administrator', false),
+    ('admin_fatehgarh_sahib', 'fatehgarhsahib@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Fatehgarh Sahib', 'Fatehgarh Sahib', 'Administrator', false),
+    ('admin_fazilka', 'fazilka@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Fazilka', 'Fazilka', 'Administrator', false),
+    ('admin_ferozepur', 'ferozepur@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Ferozepur', 'Ferozepur', 'Administrator', false),
+    ('admin_gurdaspur', 'gurdaspur@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Gurdaspur', 'Gurdaspur', 'Administrator', false),
+    ('admin_hoshiarpur', 'hoshiarpur@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Hoshiarpur', 'Hoshiarpur', 'Administrator', false),
+    ('admin_jalandhar', 'jalandhar@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Jalandhar', 'Jalandhar', 'Administrator', false),
+    ('admin_kapurthala', 'kapurthala@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Kapurthala', 'Kapurthala', 'Administrator', false),
+    ('admin_ludhiana', 'ludhiana@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Ludhiana', 'Ludhiana', 'Administrator', false),
+    ('admin_mansa', 'mansa@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Mansa', 'Mansa', 'Administrator', false),
+    ('admin_moga', 'moga@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Moga', 'Moga', 'Administrator', false),
+    ('admin_muktsar', 'muktsar@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Muktsar', 'Muktsar', 'Administrator', false),
+    ('admin_nawanshahr', 'nawanshahr@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Nawanshahr', 'Nawanshahr', 'Administrator', false),
+    ('admin_pathankot', 'pathankot@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Pathankot', 'Pathankot', 'Administrator', false),
+    ('admin_patiala', 'patiala@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Patiala', 'Patiala', 'Administrator', false),
+    ('admin_rupnagar', 'rupnagar@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Rupnagar', 'Rupnagar', 'Administrator', false),
+    ('admin_sas_nagar', 'sasnagar@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'SAS Nagar', 'SAS Nagar', 'Administrator', false),
+    ('admin_sangrur', 'sangrur@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Sangrur', 'Sangrur', 'Administrator', false),
+    ('admin_tarn_taran', 'tarntaran@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Tarn Taran', 'Tarn Taran', 'Administrator', false),
+    ('admin_talwara', 'talwara@punjab.gov.in', '$2b$10$q6L/KKFPSpXgzEMFOwcTGehtaQfRZCogGo/nac.5fMAjM5xkDdAyy', 'district_admin', 'Talwara', 'Talwara', 'Administrator', false)
+ON CONFLICT (username) DO NOTHING;
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_students_merit_number ON students (merit_number);
 CREATE INDEX IF NOT EXISTS idx_students_counseling_district ON students (counseling_district);
