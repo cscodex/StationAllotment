@@ -17,20 +17,9 @@ async function testLogin() {
     console.log('✅ User found:', user.username);
     console.log('🔑 Stored password hash:', user.password.substring(0, 30) + '...');
     
-    // Test password comparison
-    const testPassword = 'Punjab@2024';
-    const isValid = await bcrypt.compare(testPassword, user.password);
-    console.log('🔍 Password comparison result:', isValid);
-    
-    if (!isValid) {
-      console.log('❌ Password does not match!');
-      console.log('🧪 Testing hash generation...');
-      const newHash = await bcrypt.hash(testPassword, 10);
-      console.log('📝 New hash would be:', newHash.substring(0, 30) + '...');
-      console.log('🔍 Hash prefix check:', user.password.startsWith('$2b$10$'));
-    } else {
-      console.log('✅ Password matches correctly!');
-    }
+    console.log('ℹ️  This is a debug script for testing database connectivity.');
+    console.log('🔒 For security reasons, password testing has been removed.');
+    console.log('📄 Please check secure-credentials.json for login information.');
     
     process.exit(0);
   } catch (error) {

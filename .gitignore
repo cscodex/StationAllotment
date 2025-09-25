@@ -7,6 +7,8 @@ vite.config.ts.*
 
 # Security: Credential files
 credentials.json
+secure-credentials.json
+secure-password-update.mjs
 cookies.txt
 jar.txt
 *.cookie
