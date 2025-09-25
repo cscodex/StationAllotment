@@ -1,5 +1,68 @@
+-- ================================================================================
 -- Punjab Seat Allotment System Database Creation Script
+-- ================================================================================
 -- Execute this script on your Neon database server to create all required tables
+--
+-- EXTERNAL DATABASE SERVER CONNECTION CONFIGURATION INSTRUCTIONS:
+-- ================================================================================
+--
+-- STEP 1: CREATE DATABASE ON NEON (or your PostgreSQL server)
+-- ----------------------------------------------------------------
+-- 1. Go to your Neon dashboard (https://console.neon.tech/)
+-- 2. Create a new database or use existing one
+-- 3. Copy the connection string from your Neon dashboard
+--    Format: postgresql://username:password@host:port/database?sslmode=require
+--    Example: postgresql://user123:pass456@ep-example-123456.us-east-1.aws.neon.tech/neondb?sslmode=require
+--
+-- STEP 2: CONFIGURE APPLICATION DATABASE CONNECTION
+-- ----------------------------------------------------------------
+-- The application reads database connection from environment variable: DATABASE_URL
+--
+-- ** IN REPLIT ENVIRONMENT: **
+-- 1. Go to Replit Secrets (lock icon in left sidebar)
+-- 2. Add/Update secret: DATABASE_URL
+-- 3. Set value to your Neon connection string
+-- 4. Restart your Replit application
+--
+-- ** IN LOCAL DEVELOPMENT: **
+-- 1. Create .env file in project root (if not exists)
+-- 2. Add line: DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require
+-- 3. Restart your development server
+--
+-- ** IN PRODUCTION DEPLOYMENT: **
+-- 1. Set DATABASE_URL environment variable in your hosting platform
+-- 2. Ensure SSL is enabled (sslmode=require)
+-- 3. Verify connection pool settings if needed
+--
+-- STEP 3: CONNECTION STRING FORMAT
+-- ----------------------------------------------------------------
+-- Format: postgresql://[username]:[password]@[host]:[port]/[database]?[parameters]
+-- 
+-- Required parameters for Neon:
+-- - sslmode=require (SSL connection required)
+-- - Connection pooling is handled automatically
+--
+-- Example connection strings:
+-- - Neon: postgresql://user:pass@ep-example-123.us-east-1.aws.neon.tech/neondb?sslmode=require
+-- - Heroku: postgresql://user:pass@ec2-host.amazonaws.com:5432/dbname?sslmode=require
+-- - Local: postgresql://postgres:password@localhost:5432/punjab_db
+--
+-- STEP 4: TEST CONNECTION
+-- ----------------------------------------------------------------
+-- After setting DATABASE_URL, test connection by running:
+-- - npm run db:push (to sync schema)
+-- - Or check application logs for connection success
+--
+-- STEP 5: RUN THIS SCRIPT
+-- ----------------------------------------------------------------
+-- Execute this entire SQL script in your Neon SQL Editor or psql client
+-- 
+-- Connection files in codebase:
+-- - server/db.ts: Main database connection configuration
+-- - drizzle.config.ts: Drizzle ORM configuration for migrations
+-- - Both files read from DATABASE_URL environment variable
+--
+-- ================================================================================
 
 -- Enable UUID extension for generating random UUIDs
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
