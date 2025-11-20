@@ -10,8 +10,9 @@
 1. **Create Neon Database** (if not already done):
    - Go to https://console.neon.tech/
    - Create a new database
-   - Copy the connection string
-   - Format: `postgresql://user:password@host/database?sslmode=require`
+   - Copy the connection string from the dashboard
+   - Format: `postgresql://[username]:[password]@[ep-xxxxx-xxxxx.region.aws.neon.tech]/[database]?sslmode=require`
+   - Example: `postgresql://neondb_owner:AbCdEf123456@ep-cool-darkness-123456.us-east-2.aws.neon.tech/neondb?sslmode=require`
 
 2. **Run Database Migrations**:
    ```bash
@@ -38,31 +39,60 @@
 2. **Configure Service**:
    - **Name**: `stationallotment` (or your preferred name)
    - **Environment**: `Node`
-   - **Build Command**: `npm install && npm run build`
+   - **Build Command**: `npm ci --include=dev && npm run build`
    - **Start Command**: `npm start`
    - **Plan**: Starter (or higher)
+   
+   **Note**: The build command uses `npm ci --include=dev` to ensure devDependencies (like `vite` and `esbuild`) are installed, which are required for the build process.
 
 3. **Environment Variables**:
    Set these in Render Dashboard → Environment:
    
+   **Option 1: Copy from `render.env.example` file** (recommended):
+   - Open `render.env.example` in this repository
+   - Copy each line (excluding comments starting with `#`)
+   - In Render Dashboard → Environment → Add Environment Variable
+   - For each variable, paste the KEY=VALUE pair
+   - Replace placeholder values `[username]`, `[password]`, etc. with your actual values
+   
+   **Option 2: Manual Setup**:
    ```
    NODE_ENV=production
    PORT=10000
-   DATABASE_URL=postgresql://user:password@host/database?sslmode=require
-   SESSION_SECRET=<generate-a-random-secret>
+   DATABASE_URL=postgresql://[username]:[password]@[ep-xxxxx-xxxxx.region.aws.neon.tech]/[database]?sslmode=require
+   SESSION_SECRET=[generate-a-random-secret]
    ```
    
    **To generate SESSION_SECRET**:
    ```bash
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
+   
+   **How to add variables in Render Dashboard**:
+   1. Go to your Render service → Environment tab
+   2. Click "Add Environment Variable"
+   3. For each variable from `render.env.example`:
+      - **Key**: Copy the part before `=` (e.g., `NODE_ENV`)
+      - **Value**: Copy the part after `=` (e.g., `production`)
+      - For `DATABASE_URL`: Replace `[username]`, `[password]`, `[ep-xxxxx-xxxxx.region.aws.neon.tech]`, and `[database]` with your actual Neon credentials
+      - For `SESSION_SECRET`: Generate using the command above and paste the result
+   4. Click "Save Changes"
+   
+   **Important**: 
+   - Replace all placeholder values `[username]`, `[password]`, `[ep-xxxxx-xxxxx.region.aws.neon.tech]`, and `[database]` with your actual Neon database credentials
+   - Never commit actual credentials to Git
+   - The `render.env.example` file contains placeholders only
 
 ## Step 3: Build Configuration
 
 The project uses:
-- **Build**: `npm run build` (builds both frontend and backend)
-- **Start**: `npm start` (runs production server)
+- **Build Command**: `npm ci --include=dev && npm run build`
+  - `npm ci --include=dev`: Installs all dependencies including devDependencies (required for vite, esbuild)
+  - `npm run build`: Builds both frontend (vite) and backend (esbuild)
+- **Start Command**: `npm start` (runs production server)
 - **Port**: Uses `PORT` environment variable (default: 5000, Render uses 10000)
+
+**Important**: The build requires devDependencies (`vite`, `esbuild`, `typescript`, etc.) to compile the code, so they must be installed during the build phase.
 
 ## Step 4: Database Connection
 
@@ -89,9 +119,18 @@ The application uses Neon PostgreSQL with:
 ## Troubleshooting
 
 ### Build Fails
+
+**Error: "vite: not found" or "esbuild: not found"**
+- **Cause**: devDependencies are not being installed during build
+- **Solution**: Ensure build command is `npm ci --include=dev && npm run build`
+- **Alternative**: Set `NPM_CONFIG_PRODUCTION=false` environment variable in Render
+- The `render.yaml` file already includes this configuration
+
+**Other Build Issues**:
 - Check Node.js version (should be 20+)
 - Verify all dependencies in `package.json`
 - Check build logs for specific errors
+- Ensure `package-lock.json` is committed to repository
 
 ### Database Connection Fails
 - Verify `DATABASE_URL` is set correctly
@@ -116,8 +155,34 @@ The application uses Neon PostgreSQL with:
 |----------|----------|-------------|---------|
 | `NODE_ENV` | Yes | Environment mode | `production` |
 | `PORT` | Yes | Server port | `10000` |
-| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://...` |
-| `SESSION_SECRET` | Yes | Session encryption secret | Random 32+ character string |
+| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://neondb_owner:password@ep-xxxxx-xxxxx.region.aws.neon.tech/neondb?sslmode=require` |
+| `SESSION_SECRET` | Yes | Session encryption secret | Random 64 character hex string (use command below to generate) |
+| `NPM_CONFIG_PRODUCTION` | No* | Install devDependencies during build | `false` (only needed if not using `render.yaml`) |
+
+## Quick Reference: Environment Variables for Render
+
+Copy these to Render Dashboard → Environment (replace placeholders):
+
+```
+NODE_ENV=production
+PORT=10000
+DATABASE_URL=postgresql://[username]:[password]@[ep-xxxxx-xxxxx.region.aws.neon.tech]/[database]?sslmode=require
+SESSION_SECRET=[generate-using-command-below]
+NPM_CONFIG_PRODUCTION=false
+```
+
+**Note**: If you're using `render.yaml` (recommended), `NPM_CONFIG_PRODUCTION` is already configured. You only need to set it manually if not using `render.yaml`.
+
+**Generate SESSION_SECRET**:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**Get DATABASE_URL from Neon**:
+1. Go to https://console.neon.tech/
+2. Select your project
+3. Go to "Connection Details"
+4. Copy the connection string (it will look like: `postgresql://neondb_owner:password@ep-xxxxx-xxxxx.region.aws.neon.tech/neondb?sslmode=require`)
 
 ## Notes
 
@@ -125,5 +190,6 @@ The application uses Neon PostgreSQL with:
 - Static files are served from `dist/public`
 - API routes are served from `/api/*`
 - Sessions are stored in PostgreSQL (via `connect-pg-simple`)
+- See `render.env.example` file for detailed variable descriptions
 
 
