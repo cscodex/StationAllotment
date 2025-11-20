@@ -1808,11 +1808,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Round number will be auto-incremented by storage.createCounselingRound
       // startDate is now a timestamp (datetime)
+      // endDate is optional - can be set later when round is completed
       const round = await storage.createCounselingRound({
         academicYear,
         roundNumber: 0, // Will be auto-incremented
         roundName, // Required field
         startDate: new Date(startDate), // Store as timestamp
+        endDate: endDate ? new Date(endDate) : undefined, // Optional - can be set later
         isActive: false,
         isCompleted: false,
       });
@@ -2012,6 +2014,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           roundNumber: 0, // Will be auto-incremented
           roundName: round.roundName,
           startDate: new Date(round.startDate), // Store as timestamp
+          endDate: round.endDate ? new Date(round.endDate) : undefined, // Optional - can be set later
           isActive: false,
           isCompleted: false,
         };

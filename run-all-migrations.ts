@@ -110,6 +110,7 @@ async function runAllMigrations() {
     { name: "Counseling Rounds", file: "migrations/add_counseling_rounds.sql", path: path.join(__dirname, "migrations", "add_counseling_rounds.sql") },
     { name: "UDISE Code", file: "migrations/add_udise_code.sql", path: path.join(__dirname, "migrations", "add_udise_code.sql") },
     { name: "Update Counseling Rounds Constraints", file: "migrations/update_counseling_rounds_unique_constraint.sql", path: path.join(__dirname, "migrations", "update_counseling_rounds_unique_constraint.sql") },
+    { name: "Make end_date Nullable", file: "migrations/make_end_date_nullable.sql", path: path.join(__dirname, "migrations", "make_end_date_nullable.sql") },
   ];
 
   console.log("\n📋 Migration Plan:");
@@ -153,6 +154,7 @@ async function runAllMigrations() {
     console.log("   ✅ Counseling rounds table and columns added");
     console.log("   ✅ UDISE code columns added");
     console.log("   ✅ Unique constraints updated");
+    console.log("   ✅ end_date made nullable (optional)");
     console.log("\n🎉 Your database is ready for production!");
 
   } catch (error: any) {
