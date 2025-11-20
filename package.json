@@ -10,6 +10,7 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "db:migrate": "npx tsx run-all-migrations.ts",
+    "db:health": "npx tsx check-database-health.ts",
     "test:allocation": "npx tsx test-allocation.ts",
     "cleanup:sessions": "npx tsx cleanup-previous-sessions.ts"
   },
