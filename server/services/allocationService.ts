@@ -50,15 +50,25 @@ export class AllocationService {
     log(`   Excluding ${allStudents.length - students.length} already-allocated students`);
     log(`   Processing ${students.length} eligible students`);
     
-    log('📊 Fetching entrance results...');
-    const entranceResults = await this.storage.getStudentsEntranceResults(10000, 0);
-    // Filter entrance results by academic year if available
-    const filteredEntranceResults = entranceResults.filter(er => !er.academicYear || er.academicYear === academicYear);
-    log(`   Found ${filteredEntranceResults.length} entrance results for ${academicYear}`);
+    // Get the counseling round to extract roundName (counseling title)
+    const round = await this.storage.getCounselingRound(counselingRoundId);
+    if (!round) {
+      throw new Error(`Counseling round ${counselingRoundId} not found`);
+    }
+    const roundName = round.roundName;
     
-    log('📊 Fetching vacancies...');
-    const vacancies = await this.storage.getVacancies(academicYear);
-    log(`   Found ${vacancies.length} total vacancies for ${academicYear}`);
+    log(`📋 Fetching entrance results for counseling title: "${roundName}"...`);
+    const entranceResults = await this.storage.getStudentsEntranceResults(10000, 0);
+    // Filter entrance results by academic year and roundName (counseling title)
+    const filteredEntranceResults = entranceResults.filter(er => 
+      (!er.academicYear || er.academicYear === academicYear) &&
+      (!er.roundName || er.roundName === roundName)
+    );
+    log(`   Found ${filteredEntranceResults.length} entrance results for ${academicYear} / "${roundName}"`);
+    
+    log(`📊 Fetching vacancies for counseling title: "${roundName}"...`);
+    const vacancies = await this.storage.getVacancies(academicYear, roundName);
+    log(`   Found ${vacancies.length} total vacancies for ${academicYear} / "${roundName}"`);
 
     // Create vacancy map for district->stream->gender->category tracking
     // Key format: "district|stream|gender|category" -> Array of vacancies (school-level)
