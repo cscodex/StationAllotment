@@ -32,7 +32,14 @@
 
 2. **Run Database Migrations** (REQUIRED):
    
-   **Option 1: Run all migrations at once (Recommended)**:
+   ⚠️ **IMPORTANT**: You need to run migrations on the SAME database that Render uses. If you already deployed to Render, get the `DATABASE_URL` from Render's environment variables.
+   
+   **Step 1: Get Your Render Database URL**
+   - Go to Render Dashboard → Your Service → Environment
+   - Copy the `DATABASE_URL` value (or get it from Neon dashboard if you know which database Render uses)
+   - This is the database you need to migrate
+   
+   **Step 2: Run Migrations Locally Against Render Database**
    ```bash
    # Clone the repository locally (if not already)
    git clone https://github.com/cscodex/StationAllotment.git
@@ -41,14 +48,25 @@
    # Install dependencies
    npm install
    
-   # Set DATABASE_URL environment variable
-   export DATABASE_URL="your-neon-connection-string"
+   # Set DATABASE_URL to your RENDER database connection string
+   export DATABASE_URL="postgresql://[username]:[password]@[ep-xxxxx-xxxxx.region.aws.neon.tech]/[database]?sslmode=require"
+   
+   # Verify you're connecting to the right database
+   npx tsx check-database-health.ts
    
    # Run all migrations in correct order
    npm run db:migrate
    # OR
    npx tsx run-all-migrations.ts
    ```
+   
+   **After migrations complete**:
+   ```bash
+   # Verify migrations succeeded
+   npx tsx check-database-health.ts
+   ```
+   
+   You should see all tables listed as "EXISTS". Then restart your Render service.
    
    **Option 2: Run migrations individually**:
    ```bash
@@ -206,13 +224,31 @@ The application uses Neon PostgreSQL with:
 ### Application Crashes
 
 **Error: "relation 'counseling_rounds' does not exist" or "relation 'X' does not exist"**
-- **Cause**: Database migrations have not been run
+- **Cause**: Database migrations have not been run on the Render database
 - **Solution**: 
-  1. Stop the Render service
-  2. Run migrations using `npx tsx run-all-migrations.ts` locally (see Step 1)
-  3. Verify tables exist in Neon dashboard
-  4. Restart Render service
-- **Prevention**: Always run migrations BEFORE deploying the application
+  1. **Get Render's DATABASE_URL**:
+     - Go to Render Dashboard → Your Service → Environment
+     - Copy the `DATABASE_URL` value
+     - This is the database Render is using (may be different from your local database)
+  
+  2. **Run migrations on Render's database**:
+     ```bash
+     # Set DATABASE_URL to Render's database
+     export DATABASE_URL="[paste-render-database-url-here]"
+     
+     # Run migrations
+     npm run db:migrate
+     
+     # Verify
+     npx tsx check-database-health.ts
+     ```
+  
+  3. **Restart Render service**:
+     - Go to Render Dashboard → Your Service → Manual Deploy → Clear build cache & deploy
+     - Or just wait for auto-deploy after verifying migrations
+  
+- **Prevention**: Always run migrations on the production database BEFORE deploying the application
+- **Note**: If you have multiple databases (local dev, staging, production), make sure you're migrating the correct one!
 
 **Other Application Issues**:
 - Check runtime logs
