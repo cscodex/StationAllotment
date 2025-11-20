@@ -1,11 +1,27 @@
 # Render Deployment Guide
 
+## ⚠️ Important: Deployment Order
+
+**CRITICAL**: You MUST run database migrations BEFORE deploying to Render. The application will fail with database errors if tables don't exist.
+
+**Correct Order**:
+1. ✅ Create Neon database
+2. ✅ Run database migrations (Step 1)
+3. ✅ Verify database tables exist
+4. ✅ Deploy to Render
+5. ✅ Configure environment variables
+
+**If you see "relation does not exist" errors**: You skipped Step 1. Stop the deployment, run migrations, then redeploy.
+
 ## Prerequisites
 - Render account (https://render.com)
 - Neon PostgreSQL database (or any PostgreSQL database)
 - GitHub repository with your code
+- Local machine with Node.js 20+ (to run migrations)
 
 ## Step 1: Database Setup
+
+⚠️ **CRITICAL**: Database migrations MUST be run BEFORE deploying the application. The app will fail with "relation does not exist" errors if migrations are not run first.
 
 1. **Create Neon Database** (if not already done):
    - Go to https://console.neon.tech/
@@ -14,7 +30,27 @@
    - Format: `postgresql://[username]:[password]@[ep-xxxxx-xxxxx.region.aws.neon.tech]/[database]?sslmode=require`
    - Example: `postgresql://neondb_owner:AbCdEf123456@ep-cool-darkness-123456.us-east-2.aws.neon.tech/neondb?sslmode=require`
 
-2. **Run Database Migrations**:
+2. **Run Database Migrations** (REQUIRED):
+   
+   **Option 1: Run all migrations at once (Recommended)**:
+   ```bash
+   # Clone the repository locally (if not already)
+   git clone https://github.com/cscodex/StationAllotment.git
+   cd StationAllotment
+   
+   # Install dependencies
+   npm install
+   
+   # Set DATABASE_URL environment variable
+   export DATABASE_URL="your-neon-connection-string"
+   
+   # Run all migrations in correct order
+   npm run db:migrate
+   # OR
+   npx tsx run-all-migrations.ts
+   ```
+   
+   **Option 2: Run migrations individually**:
    ```bash
    # Set DATABASE_URL environment variable
    export DATABASE_URL="your-neon-connection-string"
@@ -25,11 +61,40 @@
    # Run counseling rounds migration
    npx tsx run-migration.ts migrations/add_counseling_rounds.sql
    
+   # Run UDISE code migration
+   npx tsx run-migration.ts migrations/add_udise_code.sql
+   
    # Run unique constraint update
    npx tsx run-migration.ts migrations/update_counseling_rounds_unique_constraint.sql
    ```
+   
+   **What gets created**:
+   - All base tables (users, students, vacancies, schools, etc.)
+   - Counseling rounds table
+   - Academic year columns
+   - UDISE code columns
+   - Indexes and constraints
+   
+   **Verify migrations succeeded**:
+   - You should see "✅ All migrations completed successfully!" message
+   - Check Neon dashboard to confirm tables exist
 
-## Step 2: Render Service Setup
+## Step 2: Verify Database is Ready
+
+Before proceeding to Render setup, verify your database has all tables:
+
+1. **Check in Neon Dashboard**:
+   - Go to your Neon project → SQL Editor
+   - Run: `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;`
+   - You should see tables like: `users`, `students`, `vacancies`, `schools`, `counseling_rounds`, etc.
+
+2. **Or test connection**:
+   ```bash
+   export DATABASE_URL="your-neon-connection-string"
+   npx tsx verify-migration.ts
+   ```
+
+## Step 3: Render Service Setup
 
 1. **Create New Web Service**:
    - Go to Render Dashboard
@@ -83,7 +148,7 @@
    - Never commit actual credentials to Git
    - The `render.env.example` file contains placeholders only
 
-## Step 3: Build Configuration
+## Step 4: Build Configuration
 
 The project uses:
 - **Build Command**: `npm ci --include=dev && npm run build`
@@ -94,14 +159,14 @@ The project uses:
 
 **Important**: The build requires devDependencies (`vite`, `esbuild`, `typescript`, etc.) to compile the code, so they must be installed during the build phase.
 
-## Step 4: Database Connection
+## Step 5: Database Connection
 
 The application uses Neon PostgreSQL with:
 - Connection pooling enabled
 - SSL required (`sslmode=require`)
 - Environment variable: `DATABASE_URL`
 
-## Step 5: Verify Deployment
+## Step 6: Verify Deployment
 
 1. **Check Build Logs**:
    - Ensure build completes successfully
@@ -139,10 +204,22 @@ The application uses Neon PostgreSQL with:
 - Verify connection string format
 
 ### Application Crashes
+
+**Error: "relation 'counseling_rounds' does not exist" or "relation 'X' does not exist"**
+- **Cause**: Database migrations have not been run
+- **Solution**: 
+  1. Stop the Render service
+  2. Run migrations using `npx tsx run-all-migrations.ts` locally (see Step 1)
+  3. Verify tables exist in Neon dashboard
+  4. Restart Render service
+- **Prevention**: Always run migrations BEFORE deploying the application
+
+**Other Application Issues**:
 - Check runtime logs
 - Verify all environment variables are set
 - Check database migrations are run
 - Verify `SESSION_SECRET` is set
+- Verify `DATABASE_URL` is correct and accessible
 
 ### Port Issues
 - Render uses port 10000 by default
