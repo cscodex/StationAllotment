@@ -84,6 +84,9 @@
    
    # Run unique constraint update
    npx tsx run-migration.ts migrations/update_counseling_rounds_unique_constraint.sql
+   
+   # Make end_date nullable (optional)
+   npx tsx run-migration.ts migrations/make_end_date_nullable.sql
    ```
    
    **What gets created**:

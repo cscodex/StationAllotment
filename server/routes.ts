@@ -1797,13 +1797,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Validate that startDate falls within the current session
-      const startDateObj = new Date(startDate);
+      // Validate and parse startDate
+      if (!startDate || startDate.trim() === '') {
+        return res.status(400).json({ message: "Start date is required" });
+      }
       
+      const startDateObj = new Date(startDate);
+      if (isNaN(startDateObj.getTime())) {
+        return res.status(400).json({ 
+          message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00)` 
+        });
+      }
+      
+      // Validate that startDate falls within the current session
       if (!isDateInSession(startDateObj, academicYear)) {
         return res.status(400).json({ 
           message: `Start date must fall within the current session (${academicYear})` 
         });
+      }
+
+      // Parse endDate if provided
+      let endDateObj: Date | undefined = undefined;
+      if (endDate && endDate.trim() !== '') {
+        endDateObj = new Date(endDate);
+        if (isNaN(endDateObj.getTime())) {
+          return res.status(400).json({ 
+            message: `Invalid end date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-30T18:00)` 
+          });
+        }
       }
 
       // Round number will be auto-incremented by storage.createCounselingRound
@@ -1813,8 +1834,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         academicYear,
         roundNumber: 0, // Will be auto-incremented
         roundName, // Required field
-        startDate: new Date(startDate), // Store as timestamp
-        endDate: endDate ? new Date(endDate) : undefined, // Optional - can be set later
+        startDate: startDateObj, // Store as timestamp
+        endDate: endDateObj, // Optional - can be set later
         isActive: false,
         isCompleted: false,
       });
@@ -1997,9 +2018,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        // Validate that startDate falls within the current session
-        const startDateObj = new Date(round.startDate);
+        // Validate and parse startDate
+        if (!round.startDate || round.startDate.trim() === '') {
+          return res.status(400).json({ 
+            message: `Start date is required for round "${round.roundName}"` 
+          });
+        }
         
+        const startDateObj = new Date(round.startDate);
+        if (isNaN(startDateObj.getTime())) {
+          return res.status(400).json({ 
+            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00)` 
+          });
+        }
+        
+        // Validate that startDate falls within the current session
         if (!isDateInSession(startDateObj, round.academicYear)) {
           return res.status(400).json({ 
             message: `Start date for round "${round.roundName}" must fall within the current session (${round.academicYear})` 
@@ -2009,12 +2042,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Convert datetime-local to timestamp
       const roundsToCreate = rounds.map(round => {
+        // Validate and parse startDate
+        if (!round.startDate || round.startDate.trim() === '') {
+          throw new Error(`Start date is required for round "${round.roundName}"`);
+        }
+        
+        const startDateObj = new Date(round.startDate);
+        if (isNaN(startDateObj.getTime())) {
+          throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm`);
+        }
+        
+        // Parse endDate if provided
+        let endDateObj: Date | undefined = undefined;
+        if (round.endDate && round.endDate.trim() !== '') {
+          endDateObj = new Date(round.endDate);
+          if (isNaN(endDateObj.getTime())) {
+            throw new Error(`Invalid end date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm`);
+          }
+        }
+        
         return {
           academicYear: round.academicYear,
           roundNumber: 0, // Will be auto-incremented
           roundName: round.roundName,
-          startDate: new Date(round.startDate), // Store as timestamp
-          endDate: round.endDate ? new Date(round.endDate) : undefined, // Optional - can be set later
+          startDate: startDateObj, // Store as timestamp
+          endDate: endDateObj, // Optional - can be set later
           isActive: false,
           isCompleted: false,
         };
