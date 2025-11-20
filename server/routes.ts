@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
@@ -12,6 +14,8 @@ import { FileService } from "./services/fileService";
 import { AllocationService } from "./services/allocationService";
 import { ExportService } from "./services/exportService";
 import { AuditService } from "./services/auditService";
+import { RoundActivationService } from "./services/roundActivationService";
+import { getCurrentSession, isCurrentSession, isPreviousSession, isDateInSession } from "./utils/sessionUtils";
 import fs from "fs/promises";
 
 // Cache for demo credentials (only load once at startup in development)
@@ -142,9 +146,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   cachedCredentials = await loadDemoCredentials();
 
   const fileService = new FileService(storage);
-  const allocationService = new AllocationService(storage);
   const exportService = new ExportService(storage);
   const auditService = new AuditService(storage);
+  const roundActivationService = new RoundActivationService(storage);
+  // AllocationService will be created per-request with userId for logging
+
+  // Set up periodic round activation check (every 5 minutes)
+  // This automatically activates rounds when their start date is reached
+  setInterval(async () => {
+    try {
+      await roundActivationService.processRounds();
+    } catch (error) {
+      console.error('Error in periodic round activation:', error);
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+
+  // Also run once at startup
+  roundActivationService.processRounds().catch(err => {
+    console.error('Error in initial round activation check:', err);
+  });
 
   // Auth routes
   app.post('/api/auth/login', async (req, res) => {
@@ -341,6 +361,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get user error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Database health check (Central Admin only)
+  app.get('/api/health/database', isCentralAdmin, async (req, res) => {
+    try {
+      const startTime = Date.now();
+      // Simple query to test database connectivity - use a lightweight query
+      await db.execute(sql`SELECT 1`);
+      const responseTime = Date.now() - startTime;
+      
+      res.json({
+        status: 'online',
+        responseTime,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      console.error("Database health check error:", error);
+      res.status(503).json({
+        status: 'offline',
+        error: error.message || 'Database connection failed',
+        timestamp: new Date().toISOString(),
+      });
     }
   });
 
@@ -674,18 +717,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.processStudentFile(req.file, req.user.id);
+      const { academicYear, counselingRoundId } = req.body;
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      const result = await fileService.processStudentFile(
+        req.file, 
+        req.session.userId, 
+        academicYear,
+        counselingRoundId || undefined
+      );
       
-      await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
+      await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
         filename: result.originalName,
         type: 'student_choices',
         status: result.status,
+        academicYear,
+        counselingRoundId: result.counselingRoundId,
       }, req.ip, req.get('User-Agent'));
 
       res.json(result);
     } catch (error) {
       console.error("Upload students file error:", error);
-      res.status(500).json({ message: "Failed to upload file" });
+      res.status(500).json({ message: "Failed to upload file", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -695,18 +750,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.processVacancyFile(req.file, req.user.id);
+      const { academicYear, counselingRoundId } = req.body;
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      const result = await fileService.processVacancyFile(
+        req.file, 
+        req.session.userId, 
+        academicYear,
+        counselingRoundId || undefined
+      );
       
-      await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
+      await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
         filename: result.originalName,
         type: 'vacancies',
         status: result.status,
+        academicYear,
+        counselingRoundId: result.counselingRoundId,
       }, req.ip, req.get('User-Agent'));
 
       res.json(result);
     } catch (error) {
       console.error("Upload vacancies file error:", error);
-      res.status(500).json({ message: "Failed to upload file" });
+      res.status(500).json({ message: "Failed to upload file", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -716,18 +783,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.processEntranceResultsFile(req.file, req.user.id);
+      const { academicYear, counselingRoundId } = req.body;
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      const result = await fileService.processEntranceResultsFile(
+        req.file, 
+        req.session.userId, 
+        academicYear,
+        counselingRoundId || undefined
+      );
       
-      await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
+      await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
         filename: result.originalName,
         type: 'entrance_results',
         status: result.status,
+        academicYear,
+        counselingRoundId: result.counselingRoundId,
       }, req.ip, req.get('User-Agent'));
 
       res.json(result);
     } catch (error) {
       console.error("Upload entrance results file error:", error);
-      res.status(500).json({ message: "Failed to upload file" });
+      res.status(500).json({ message: "Failed to upload file", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -955,6 +1034,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const preferences = req.body;
+      
+      // Get the student to find their academic year
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Get active counseling round for this academic year
+      let activeRound = null;
+      if (student.academicYear) {
+        activeRound = await storage.getActiveCounselingRound(student.academicYear);
+        if (activeRound) {
+          preferences.counselingRoundId = activeRound.id;
+          preferences.counselingRoundNumber = activeRound.roundNumber;
+        }
+      }
+      
+      // Update preferencesUpdatedAt timestamp
+      preferences.preferencesUpdatedAt = new Date();
       const user = await storage.getUser(req.session.userId);
       
       // Check if user can edit this student (exclusive lock check)
@@ -994,14 +1092,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         preferences.districtAdmin = 'Central_admin';
       }
 
-      const student = await storage.updateStudent(id, preferences);
+      const updatedStudent = await storage.updateStudent(id, preferences);
       
       await auditService.log(req.session.userId, 'student_preferences_update', 'students', id, {
         preferences,
         userDistrict: user?.district,
+        counselingRoundId: activeRound?.id,
+        counselingRoundNumber: activeRound?.roundNumber,
       }, req.ip, req.get('User-Agent'));
 
-      res.json(student);
+      res.json(updatedStudent);
     } catch (error) {
       console.error("Update student preferences error:", error);
       res.status(500).json({ message: "Failed to update preferences" });
@@ -1430,11 +1530,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.validateStudentFile(req.file);
+      const { academicYear } = req.body;
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      const result = await fileService.validateStudentFile(req.file, academicYear);
       res.json(result);
     } catch (error) {
       console.error("Validate students file error:", error);
-      res.status(500).json({ message: "Failed to validate file" });
+      res.status(500).json({ message: "Failed to validate file", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -1444,11 +1549,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.validateVacancyFile(req.file);
+      const { academicYear } = req.body;
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      const result = await fileService.validateVacancyFile(req.file, academicYear);
       res.json(result);
     } catch (error) {
       console.error("Validate vacancies file error:", error);
-      res.status(500).json({ message: "Failed to validate file" });
+      res.status(500).json({ message: "Failed to validate file", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -1458,11 +1568,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.validateEntranceResultsFile(req.file);
+      const { academicYear } = req.body;
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      const result = await fileService.validateEntranceResultsFile(req.file, academicYear);
       res.json(result);
     } catch (error) {
       console.error("Validate entrance results file error:", error);
-      res.status(500).json({ message: "Failed to validate file" });
+      res.status(500).json({ message: "Failed to validate file", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 
@@ -1554,22 +1669,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Deadline has passed. Cannot modify preferences." });
       }
 
+      // Get the student to find their academic year
+      const student = await storage.getStudent(studentId);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      // Get active counseling round for this academic year
+      let activeRound = null;
+      if (student.academicYear) {
+        activeRound = await storage.getActiveCounselingRound(student.academicYear);
+      }
+
       // Add counseling district and district admin info
       const preferencesWithDistrict = {
         ...preferences,
         counselingDistrict: req.user.district,
         districtAdmin: `${req.user.firstName} ${req.user.lastName}`.trim(),
+        counselingRoundId: activeRound?.id,
+        counselingRoundNumber: activeRound?.roundNumber,
+        preferencesUpdatedAt: new Date(),
       };
 
-      const student = await storage.updateStudentPreferences(studentId, preferencesWithDistrict);
+      const updatedStudent = await storage.updateStudentPreferences(studentId, preferencesWithDistrict);
       
       await auditService.log(req.user.id, 'student_preferences_set', 'students', studentId, {
         entranceResultId,
         preferences: preferencesWithDistrict,
         userDistrict: req.user.district,
+        counselingRoundId: activeRound?.id,
+        counselingRoundNumber: activeRound?.roundNumber,
       }, req.ip, req.get('User-Agent'));
 
-      res.json(student);
+      res.json(updatedStudent);
     } catch (error) {
       console.error("Update student preferences from entrance result error:", error);
       res.status(500).json({ message: "Failed to update student preferences" });
@@ -1602,6 +1734,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Get active counseling round for this academic year
+      let activeRound = null;
+      if (entranceResult.academicYear) {
+        activeRound = await storage.getActiveCounselingRound(entranceResult.academicYear);
+      }
+
       // Create student from entrance result
       const newStudent = await storage.createStudent({
         appNo: entranceResult.applicationNo,
@@ -1610,8 +1748,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         stream: stream || entranceResult.stream,
         gender: entranceResult.gender,
         category: entranceResult.category,
+        academicYear: entranceResult.academicYear,
         counselingDistrict: req.user.district,
         districtAdmin: `${req.user.firstName} ${req.user.lastName}`.trim(),
+        counselingRoundId: activeRound?.id,
+        counselingRoundNumber: activeRound?.roundNumber,
         ...preferences
       });
 
@@ -1628,10 +1769,402 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Vacancies routes
-  app.get('/api/vacancies', isAuthenticated, async (req, res) => {
+  // Counseling rounds routes
+  app.post('/api/counseling-rounds', isCentralAdmin, async (req: any, res) => {
     try {
-      const vacancies = await storage.getVacancies();
+      const { academicYear, roundName, startDate, endDate } = req.body;
+      
+      if (!academicYear || !roundName || !startDate) {
+        return res.status(400).json({ message: "Missing required fields: academicYear, roundName, startDate" });
+      }
+
+      // Validate academic year format
+      if (!/^\d{4}-\d{4}$/.test(academicYear)) {
+        return res.status(400).json({ message: "Invalid academic year format. Expected: YYYY-YYYY (e.g., 2024-2025)" });
+      }
+
+      // Validate that academic year is for current session only
+      if (!isCurrentSession(academicYear)) {
+        const currentSession = getCurrentSession();
+        if (isPreviousSession(academicYear)) {
+          return res.status(400).json({ 
+            message: `Cannot create counseling rounds for previous sessions. Current session is ${currentSession}.` 
+          });
+        } else {
+          return res.status(400).json({ 
+            message: `Cannot create counseling rounds for future sessions. Current session is ${currentSession}.` 
+          });
+        }
+      }
+
+      // Validate that startDate falls within the current session
+      const startDateObj = new Date(startDate);
+      
+      if (!isDateInSession(startDateObj, academicYear)) {
+        return res.status(400).json({ 
+          message: `Start date must fall within the current session (${academicYear})` 
+        });
+      }
+
+      // Round number will be auto-incremented by storage.createCounselingRound
+      // startDate is now a timestamp (datetime)
+      const round = await storage.createCounselingRound({
+        academicYear,
+        roundNumber: 0, // Will be auto-incremented
+        roundName, // Required field
+        startDate: new Date(startDate), // Store as timestamp
+        isActive: false,
+        isCompleted: false,
+      });
+
+      await auditService.log(req.session.userId, 'counseling_round_created', 'counseling_round', round.id, {
+        academicYear,
+        roundNumber: round.roundNumber,
+        roundName: round.roundName,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(round);
+    } catch (error) {
+      console.error("Create counseling round error:", error);
+      res.status(500).json({ message: "Failed to create counseling round" });
+    }
+  });
+
+  // Get current session endpoint
+  app.get('/api/session/current', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentSession = getCurrentSession();
+      res.json({ currentSession });
+    } catch (error) {
+      console.error("Get current session error:", error);
+      res.status(500).json({ message: "Failed to get current session" });
+    }
+  });
+
+  app.get('/api/counseling-rounds', isAuthenticated, async (req: any, res) => {
+    try {
+      const academicYear = req.query.academicYear as string | undefined;
+      const rounds = await storage.getCounselingRounds(academicYear);
+      res.json(rounds);
+    } catch (error) {
+      console.error("Get counseling rounds error:", error);
+      res.status(500).json({ message: "Failed to fetch counseling rounds" });
+    }
+  });
+
+  app.get('/api/counseling-rounds/active', isAuthenticated, async (req: any, res) => {
+    try {
+      const academicYear = req.query.academicYear as string;
+      if (!academicYear) {
+        return res.status(400).json({ message: "academicYear query parameter is required" });
+      }
+      const round = await storage.getActiveCounselingRound(academicYear);
+      res.json(round || null);
+    } catch (error) {
+      console.error("Get active counseling round error:", error);
+      res.status(500).json({ message: "Failed to fetch active counseling round" });
+    }
+  });
+
+  app.put('/api/counseling-rounds/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      // Remove fields that shouldn't be updated directly
+      delete updates.id;
+      delete updates.createdAt;
+      
+      // Only allow updating startDate
+      if (updates.startDate) {
+        const round = await storage.getCounselingRound(id);
+        if (!round) {
+          return res.status(404).json({ message: "Counseling round not found" });
+        }
+        
+        // Validate that new startDate falls within the session
+        const startDateObj = new Date(updates.startDate);
+        if (!isDateInSession(startDateObj, round.academicYear)) {
+          return res.status(400).json({ 
+            message: `Start date must fall within the current session (${round.academicYear})` 
+          });
+        }
+        
+        updates.startDate = new Date(updates.startDate);
+      } else {
+        // If not updating startDate, remove other fields that shouldn't be updated
+        delete updates.endDate;
+        delete updates.academicYear;
+        delete updates.roundNumber;
+        delete updates.roundName;
+      }
+
+      const updated = await storage.updateCounselingRound(id, updates);
+
+      await auditService.log(req.session.userId, 'counseling_round_updated', 'counseling_round', id, {
+        updates,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update counseling round error:", error);
+      res.status(500).json({ message: "Failed to update counseling round" });
+    }
+  });
+
+  app.post('/api/counseling-rounds/:id/activate', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+
+      if (round.isCompleted) {
+        return res.status(400).json({ message: "Cannot activate a completed counseling round" });
+      }
+
+      const activated = await storage.activateCounselingRound(id, round.academicYear);
+
+      await auditService.log(req.session.userId, 'counseling_round_activated', 'counseling_round', id, {
+        academicYear: round.academicYear,
+        roundNumber: round.roundNumber,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(activated);
+    } catch (error) {
+      console.error("Activate counseling round error:", error);
+      res.status(500).json({ message: "Failed to activate counseling round" });
+    }
+  });
+
+  app.post('/api/counseling-rounds/:id/complete', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+
+      const completed = await storage.completeCounselingRound(id);
+
+      await auditService.log(req.session.userId, 'counseling_round_completed', 'counseling_round', id, {
+        academicYear: round.academicYear,
+        roundNumber: round.roundNumber,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(completed);
+    } catch (error) {
+      console.error("Complete counseling round error:", error);
+      res.status(500).json({ message: "Failed to complete counseling round" });
+    }
+  });
+
+  app.post('/api/counseling-rounds/bulk', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { rounds } = req.body; // Array of { academicYear, roundName, startDate, endDate }
+      
+      if (!Array.isArray(rounds) || rounds.length === 0) {
+        return res.status(400).json({ message: "rounds array is required and must not be empty" });
+      }
+
+      const currentSession = getCurrentSession();
+
+      // Validate all rounds
+      for (const round of rounds) {
+        if (!round.academicYear || !round.roundName || !round.startDate) {
+          return res.status(400).json({ message: "All rounds must have academicYear, roundName, and startDate" });
+        }
+
+        if (!/^\d{4}-\d{4}$/.test(round.academicYear)) {
+          return res.status(400).json({ message: "Invalid academic year format. Expected: YYYY-YYYY (e.g., 2024-2025)" });
+        }
+
+        // Validate that academic year is for current session only
+        if (!isCurrentSession(round.academicYear)) {
+          if (isPreviousSession(round.academicYear)) {
+            return res.status(400).json({ 
+              message: `Cannot create counseling rounds for previous sessions. Current session is ${currentSession}.` 
+            });
+          } else {
+            return res.status(400).json({ 
+              message: `Cannot create counseling rounds for future sessions. Current session is ${currentSession}.` 
+            });
+          }
+        }
+
+        // Validate that startDate falls within the current session
+        const startDateObj = new Date(round.startDate);
+        
+        if (!isDateInSession(startDateObj, round.academicYear)) {
+          return res.status(400).json({ 
+            message: `Start date for round "${round.roundName}" must fall within the current session (${round.academicYear})` 
+          });
+        }
+      }
+
+      // Convert datetime-local to timestamp
+      const roundsToCreate = rounds.map(round => {
+        return {
+          academicYear: round.academicYear,
+          roundNumber: 0, // Will be auto-incremented
+          roundName: round.roundName,
+          startDate: new Date(round.startDate), // Store as timestamp
+          isActive: false,
+          isCompleted: false,
+        };
+      });
+
+      const createdRounds = await storage.bulkCreateCounselingRounds(roundsToCreate);
+
+      await auditService.log(req.session.userId, 'counseling_rounds_bulk_created', 'counseling_round', 'bulk', {
+        count: createdRounds.length,
+        rounds: createdRounds.map(r => ({ id: r.id, roundName: r.roundName, roundNumber: r.roundNumber })),
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(createdRounds);
+    } catch (error: any) {
+      console.error("Bulk create counseling rounds error:", error);
+      res.status(500).json({ message: error.message || "Failed to create counseling rounds" });
+    }
+  });
+
+  app.delete('/api/counseling-rounds/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+
+      // Prevent deletion of past rounds
+      const startDate = new Date(round.startDate);
+      const now = new Date();
+      if (startDate < now) {
+        return res.status(400).json({ 
+          message: "Cannot delete past counseling rounds. Only future rounds can be deleted." 
+        });
+      }
+
+      await storage.deleteCounselingRound(id);
+
+      await auditService.log(req.session.userId, 'counseling_round_deleted', 'counseling_round', id, {
+        academicYear: round.academicYear,
+        roundNumber: round.roundNumber,
+        roundName: round.roundName,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: "Counseling round deleted successfully" });
+    } catch (error: any) {
+      console.error("Delete counseling round error:", error);
+      res.status(400).json({ message: error.message || "Failed to delete counseling round" });
+    }
+  });
+
+  app.post('/api/counseling-rounds/:id/run-allocation', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+
+      // Validate that allocation can only be run for current session
+      if (!isCurrentSession(round.academicYear)) {
+        const currentSession = getCurrentSession();
+        if (isPreviousSession(round.academicYear)) {
+          return res.status(400).json({ 
+            message: `Cannot run allocation for previous sessions. Current session is ${currentSession}.` 
+          });
+        } else {
+          return res.status(400).json({ 
+            message: `Cannot run allocation for future sessions. Current session is ${currentSession}.` 
+          });
+        }
+      }
+
+      if (!round.isActive) {
+        return res.status(400).json({ message: "Cannot run allocation for an inactive round. Round will activate automatically when start date/time is reached." });
+      }
+
+      // Validate round order: Cannot run round N before round N-1 is completed
+      const allRounds = await storage.getCounselingRounds(round.academicYear);
+      const sameCounselingRounds = allRounds.filter(r => 
+        r.roundName === round.roundName && 
+        r.academicYear === round.academicYear
+      ).sort((a, b) => a.roundNumber - b.roundNumber);
+      
+      // Check if previous rounds exist and are completed
+      for (let i = 1; i < round.roundNumber; i++) {
+        const previousRound = sameCounselingRounds.find(r => r.roundNumber === i);
+        if (previousRound && !previousRound.isCompleted) {
+          return res.status(400).json({ 
+            message: `Cannot run Round ${round.roundNumber} before Round ${i} is completed. Please complete Round ${i} first.` 
+          });
+        }
+      }
+
+      // Create allocation service with audit logging
+      const allocationService = new AllocationService(storage, auditService, req.session.userId);
+      
+      const result = await allocationService.runAllocation(
+        round.academicYear,
+        round.roundNumber,
+        round.id
+      );
+
+      await auditService.log(req.session.userId, 'allocation_run_for_round', 'allocation', round.id, {
+        academicYear: round.academicYear,
+        roundNumber: round.roundNumber,
+        roundName: round.roundName,
+        result: {
+          totalStudents: result.totalStudents,
+          allottedStudents: result.allottedStudents,
+          notAllottedStudents: result.notAllottedStudents,
+        },
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Run allocation for round error:", error);
+      res.status(500).json({ message: error.message || "Failed to run allocation" });
+    }
+  });
+
+  // Round activation endpoint (can be called manually or by cron)
+  app.post('/api/counseling-rounds/auto-activate', isCentralAdmin, async (req: any, res) => {
+    try {
+      const result = await roundActivationService.processRounds();
+      
+      await auditService.log(req.session.userId, 'round_auto_activation_triggered', 'counseling_round', 'system', {
+        activated: result.activated.map(r => ({ id: r.id, roundName: r.roundName, roundNumber: r.roundNumber })),
+        completed: result.completed.map(r => ({ id: r.id, roundName: r.roundName, roundNumber: r.roundNumber })),
+        deactivated: result.deactivated,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({
+        success: true,
+        activated: result.activated.length,
+        completed: result.completed.length,
+        deactivated: result.deactivated,
+        activatedRounds: result.activated,
+        completedRounds: result.completed,
+      });
+    } catch (error: any) {
+      console.error("Auto-activate rounds error:", error);
+      res.status(500).json({ message: error.message || "Failed to auto-activate rounds" });
+    }
+  });
+
+  // Vacancies routes
+  app.get('/api/vacancies', isAuthenticated, async (req: any, res) => {
+    try {
+      const academicYear = req.query.academicYear as string | undefined;
+      const vacancies = await storage.getVacancies(academicYear);
       res.json(vacancies);
     } catch (error) {
       console.error("Get vacancies error:", error);
@@ -1642,15 +2175,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Allocation routes
   app.post('/api/allocation/run', isCentralAdmin, async (req: any, res) => {
     try {
-      // Check if allocation has already been run
-      const allocationRun = await storage.getSetting('allocation_completed');
-      if (allocationRun && allocationRun.value === 'true') {
-        return res.status(400).json({ message: "Allocation has already been completed" });
+      // Create allocation service with audit logging
+      const allocationService = new AllocationService(storage, auditService, req.session.userId);
+      
+      // Note: We allow re-running allocation after reset, so we don't check allocation_completed here
+      // The reset endpoint will clear the allocation_completed flag
+
+      const { academicYear, roundNumber } = req.body;
+
+      if (!academicYear || !roundNumber) {
+        return res.status(400).json({ message: "Missing required fields: academicYear and roundNumber" });
+      }
+
+      // Validate academic year format
+      if (!/^\d{4}-\d{4}$/.test(academicYear)) {
+        return res.status(400).json({ message: "Invalid academic year format. Expected: YYYY-YYYY (e.g., 2024-2025)" });
+      }
+
+      // Get the counseling round
+      const rounds = await storage.getCounselingRounds(academicYear);
+      const round = rounds.find(r => r.roundNumber === roundNumber);
+      
+      if (!round) {
+        return res.status(404).json({ message: `Counseling round ${roundNumber} not found for academic year ${academicYear}` });
+      }
+
+      if (!round.isActive) {
+        return res.status(400).json({ message: `Counseling round ${roundNumber} is not active. Please activate it first.` });
+      }
+
+      if (round.isCompleted) {
+        return res.status(400).json({ message: `Counseling round ${roundNumber} is already completed.` });
       }
 
       // Check if all districts with eligible students are finalized
       const allDistrictStatuses = await storage.getAllDistrictStatuses();
-      const studentsData = await storage.getStudents(10000, 0);
+      const studentsData = await storage.getStudents(10000, 0, academicYear);
       
       // Get list of districts that have students with district admin assignments and preferences
       const districtsWithEligibleStudents = new Set<string>();
@@ -1678,16 +2238,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const result = await allocationService.runAllocation();
+      const result = await allocationService.runAllocation(academicYear, roundNumber, round.id);
       
+      // Mark allocation as completed
       await storage.setSetting({
         key: 'allocation_completed',
         value: 'true',
         description: 'Indicates if the final allocation has been run'
       });
+      
+      await storage.setSetting({
+        key: 'allocation_completed_at',
+        value: new Date().toISOString(),
+        description: 'Timestamp when allocation was completed'
+      });
 
-      await auditService.log(req.user.id, 'allocation_run', 'allocation', 'system', {
-        result,
+      // Main audit log (detailed logs are already logged by AllocationService)
+      await auditService.log(req.session.userId, 'allocation_run', 'allocation', 'system', {
+        academicYear,
+        roundNumber,
+        totalStudents: result.totalStudents,
+        allottedStudents: result.allottedStudents,
+        notAllottedStudents: result.notAllottedStudents,
+        allocationsByDistrict: result.allocationsByDistrict,
+        logsCount: result.logs.length
       }, req.ip, req.get('User-Agent'));
 
       res.json(result);
@@ -1697,13 +2271,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reset allocation - clears all previous allocations
+  app.post('/api/allocation/reset', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { academicYear } = req.body;
+
+      if (!academicYear) {
+        return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      // Validate academic year format
+      if (!/^\d{4}-\d{4}$/.test(academicYear)) {
+        return res.status(400).json({ message: "Invalid academic year format. Expected: YYYY-YYYY (e.g., 2024-2025)" });
+      }
+
+      // Create allocation service with audit logging
+      const allocationService = new AllocationService(storage, auditService, req.session.userId);
+      
+      const result = await allocationService.resetAllocation(academicYear);
+      
+      // Clear allocation completed flag
+      await storage.setSetting({
+        key: 'allocation_completed',
+        value: 'false',
+        description: 'Indicates if the final allocation has been run'
+      });
+      
+      await storage.setSetting({
+        key: 'allocation_completed_at',
+        value: '',
+        description: 'Timestamp when allocation was completed'
+      });
+
+      // Main audit log
+      await auditService.log(req.session.userId, 'allocation_reset', 'allocation', 'system', {
+        clearedStudents: result.clearedStudents,
+        restoredVacancies: result.restoredVacancies,
+        logsCount: result.logs.length
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({
+        success: true,
+        message: 'Allocation reset completed successfully',
+        ...result
+      });
+    } catch (error) {
+      console.error("Reset allocation error:", error);
+      res.status(500).json({ message: "Failed to reset allocation", error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
   app.get('/api/allocation/status', isAuthenticated, async (req, res) => {
     try {
       const allocationCompleted = await storage.getSetting('allocation_completed');
+      const allocationCompletedAt = await storage.getSetting('allocation_completed_at');
       const deadline = await storage.getSetting('allocation_deadline');
       
       res.json({
         completed: allocationCompleted?.value === 'true',
+        completedAt: allocationCompletedAt?.value || null,
         deadline: deadline?.value,
       });
     } catch (error) {

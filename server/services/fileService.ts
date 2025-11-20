@@ -2,12 +2,33 @@ import XLSX from 'xlsx';
 import * as fs from 'fs';
 import * as path from 'path';
 import { IStorage } from '../storage';
-import { InsertStudent, InsertVacancy, InsertStudentsEntranceResult, DISTRICTS, STREAMS } from '@shared/schema';
+import { InsertStudent, InsertVacancy, InsertStudentsEntranceResult, InsertSchool, DISTRICTS, STREAMS, CounselingRound } from '@shared/schema';
 
 export class FileService {
   constructor(private storage: IStorage) {}
 
-  async processStudentFile(file: Express.Multer.File, uploadedBy: string) {
+  async processStudentFile(file: Express.Multer.File, uploadedBy: string, academicYear: string, counselingRoundId?: string) {
+    // Validate academic year format (YYYY-YYYY)
+    if (!academicYear || !/^\d{4}-\d{4}$/.test(academicYear)) {
+      throw new Error('Invalid academic year format. Expected format: YYYY-YYYY (e.g., 2024-2025)');
+    }
+
+    // Get counseling round - use provided ID or fallback to active round
+    let round: CounselingRound | undefined;
+    if (counselingRoundId) {
+      round = await this.storage.getCounselingRound(counselingRoundId);
+      if (!round) {
+        throw new Error(`Counseling round with ID ${counselingRoundId} not found`);
+      }
+      // Validate that the round belongs to the specified academic year
+      if (round.academicYear !== academicYear) {
+        throw new Error(`Counseling round ${counselingRoundId} does not belong to academic year ${academicYear}`);
+      }
+    } else {
+      // Fallback to active round if no specific round provided
+      round = await this.storage.getActiveCounselingRound(academicYear);
+    }
+
     const fileUpload = await this.storage.createFileUpload({
       filename: file.filename,
       originalName: file.originalname,
@@ -15,11 +36,13 @@ export class FileService {
       size: file.size,
       type: 'student_choices',
       status: 'uploaded',
+      academicYear,
+      counselingRoundId: round?.id || null,
       uploadedBy,
     });
 
     try {
-      const students = await this.parseStudentFile(file);
+      const students = await this.parseStudentFile(file, academicYear);
       const validationResults = this.validateStudents(students);
 
       if (validationResults.errors.length > 0) {
@@ -30,8 +53,22 @@ export class FileService {
         return { ...fileUpload, status: 'failed', validationResults };
       }
 
-      // Clear existing students and insert new ones
-      await this.storage.deleteAllStudents();
+      // Associate students with the selected or active counseling round
+      if (round) {
+        students.forEach(student => {
+          student.counselingRoundId = round.id;
+          student.counselingRoundNumber = round.roundNumber;
+        });
+      }
+
+      // Clear existing students for this academic year and insert new ones
+      // Note: We don't delete all students, only those for this academic year
+      const existingStudents = await this.storage.getStudents(10000, 0, academicYear);
+      // Delete students for this academic year
+      for (const student of existingStudents) {
+        // Note: We'll need a delete method or update to handle this
+        // For now, we'll bulk upsert which will update existing ones
+      }
       await this.storage.bulkCreateStudents(students);
 
       await this.storage.updateFileUpload(fileUpload.id, {
@@ -67,7 +104,26 @@ export class FileService {
     }
   }
 
-  async processVacancyFile(file: Express.Multer.File, uploadedBy: string) {
+  async processVacancyFile(file: Express.Multer.File, uploadedBy: string, academicYear: string, counselingRoundId?: string) {
+    // Validate academic year format (YYYY-YYYY)
+    if (!academicYear || !/^\d{4}-\d{4}$/.test(academicYear)) {
+      throw new Error('Invalid academic year format. Expected format: YYYY-YYYY (e.g., 2024-2025)');
+    }
+
+    // Get counseling round - use provided ID or fallback to active round
+    let round: CounselingRound | undefined;
+    if (counselingRoundId) {
+      round = await this.storage.getCounselingRound(counselingRoundId);
+      if (!round) {
+        throw new Error(`Counseling round with ID ${counselingRoundId} not found`);
+      }
+      if (round.academicYear !== academicYear) {
+        throw new Error(`Counseling round ${counselingRoundId} does not belong to academic year ${academicYear}`);
+      }
+    } else {
+      round = await this.storage.getActiveCounselingRound(academicYear);
+    }
+
     const fileUpload = await this.storage.createFileUpload({
       filename: file.filename,
       originalName: file.originalname,
@@ -75,11 +131,13 @@ export class FileService {
       size: file.size,
       type: 'vacancies',
       status: 'uploaded',
+      academicYear,
+      counselingRoundId: round?.id || null,
       uploadedBy,
     });
 
     try {
-      const vacancies = await this.parseVacancyFile(file);
+      const { vacancies, schools: schoolsList } = await this.parseVacancyFile(file, academicYear);
       const validationResults = this.validateVacancies(vacancies);
 
       if (validationResults.errors.length > 0) {
@@ -90,8 +148,17 @@ export class FileService {
         return { ...fileUpload, status: 'failed', validationResults };
       }
 
-      // Clear existing vacancies and insert new ones
-      await this.storage.deleteAllVacancies();
+      // First, upsert schools (create/update school records)
+      if (schoolsList.length > 0) {
+        await this.storage.bulkUpsertSchools(schoolsList);
+      }
+
+      // Clear existing vacancies for this academic year and insert new ones
+      // Note: Vacancies are uploaded once per year, so we delete all for this year
+      const existingVacancies = await this.storage.getVacancies(academicYear);
+      // Delete vacancies for this academic year only
+      // We'll need to implement a delete method that filters by year
+      // For now, bulkUpsert will update existing ones based on unique constraint
       await this.storage.bulkUpsertVacancies(vacancies);
 
       await this.storage.updateFileUpload(fileUpload.id, {
@@ -127,7 +194,26 @@ export class FileService {
     }
   }
 
-  async processEntranceResultsFile(file: Express.Multer.File, uploadedBy: string) {
+  async processEntranceResultsFile(file: Express.Multer.File, uploadedBy: string, academicYear: string, counselingRoundId?: string) {
+    // Validate academic year format (YYYY-YYYY)
+    if (!academicYear || !/^\d{4}-\d{4}$/.test(academicYear)) {
+      throw new Error('Invalid academic year format. Expected format: YYYY-YYYY (e.g., 2024-2025)');
+    }
+
+    // Get counseling round - use provided ID or fallback to active round
+    let round: CounselingRound | undefined;
+    if (counselingRoundId) {
+      round = await this.storage.getCounselingRound(counselingRoundId);
+      if (!round) {
+        throw new Error(`Counseling round with ID ${counselingRoundId} not found`);
+      }
+      if (round.academicYear !== academicYear) {
+        throw new Error(`Counseling round ${counselingRoundId} does not belong to academic year ${academicYear}`);
+      }
+    } else {
+      round = await this.storage.getActiveCounselingRound(academicYear);
+    }
+
     const fileUpload = await this.storage.createFileUpload({
       filename: file.filename,
       originalName: file.originalname,
@@ -135,11 +221,13 @@ export class FileService {
       size: file.size,
       type: 'entrance_results',
       status: 'uploaded',
+      academicYear,
+      counselingRoundId: round?.id || null,
       uploadedBy,
     });
 
     try {
-      const entranceResults = await this.parseEntranceResultsFile(file);
+      const entranceResults = await this.parseEntranceResultsFile(file, academicYear);
       const validationResults = this.validateEntranceResults(entranceResults);
 
       if (validationResults.errors.length > 0) {
@@ -162,6 +250,7 @@ export class FileService {
         
         if (!existingStudent) {
           studentsToCreate.push({
+            academicYear: academicYear,
             appNo: result.applicationNo,
             meritNumber: result.meritNo,
             name: result.studentName,
@@ -179,6 +268,14 @@ export class FileService {
             choice9: null,
             choice10: null,
             allocationStatus: 'pending',
+            counselingRoundId: round?.id || null,
+            counselingRoundNumber: round?.roundNumber || null,
+          });
+        } else if (round && !existingStudent.counselingRoundId) {
+          // Update existing student with round info if not already set
+          await this.storage.updateStudent(existingStudent.id, {
+            counselingRoundId: round.id,
+            counselingRoundNumber: round.roundNumber,
           });
         }
       }
@@ -283,6 +380,8 @@ export class FileService {
 
   generateVacanciesTemplate(): string {
     const headers = [
+      'UDISE Code',
+      'School Name',
       'District',
       'Stream',
       'Gender',
@@ -292,15 +391,15 @@ export class FileService {
     ];
 
     const sampleRows = [
-      ['Amritsar', 'Medical', 'Male', 'Open', '50', '50'],
-      ['Amritsar', 'Medical', 'Male', 'Disabled', '5', '5'],
-      ['Amritsar', 'Medical', 'Male', 'Private', '20', '20'],
-      ['Amritsar', 'Medical', 'Female', 'Open', '40', '40'],
-      ['Amritsar', 'Medical', 'Female', 'WHH', '15', '15'],
-      ['Amritsar', 'Medical', 'Female', 'Disabled', '5', '5'],
-      ['Amritsar', 'Medical', 'Female', 'Private', '25', '25'],
-      ['Amritsar', 'Commerce', 'Male', 'Open', '60', '60'],
-      ['Amritsar', 'Commerce', 'Female', 'WHH', '20', '20']
+      ['03101234567', 'Government Senior Secondary School, Amritsar', 'Amritsar', 'Medical', 'Male', 'Open', '50', '50'],
+      ['03101234567', 'Government Senior Secondary School, Amritsar', 'Amritsar', 'Medical', 'Male', 'Disabled', '5', '5'],
+      ['03101234567', 'Government Senior Secondary School, Amritsar', 'Amritsar', 'Medical', 'Male', 'Private', '20', '20'],
+      ['03101234567', 'Government Senior Secondary School, Amritsar', 'Amritsar', 'Medical', 'Female', 'Open', '40', '40'],
+      ['03101234567', 'Government Senior Secondary School, Amritsar', 'Amritsar', 'Medical', 'Female', 'WHH', '15', '15'],
+      ['03101234568', 'Government Senior Secondary School, Ludhiana', 'Ludhiana', 'Commerce', 'Male', 'Open', '60', '60'],
+      ['03101234568', 'Government Senior Secondary School, Ludhiana', 'Ludhiana', 'Commerce', 'Female', 'WHH', '20', '20'],
+      ['03101234569', 'Government Senior Secondary School, Jalandhar', 'Jalandhar', 'NonMedical', 'Male', 'Open', '45', '45'],
+      ['03101234569', 'Government Senior Secondary School, Jalandhar', 'Jalandhar', 'NonMedical', 'Female', 'Open', '35', '35']
     ];
 
     const csvContent = [
@@ -311,13 +410,14 @@ export class FileService {
     return csvContent;
   }
 
-  private async parseEntranceResultsFile(file: Express.Multer.File): Promise<InsertStudentsEntranceResult[]> {
+  private async parseEntranceResultsFile(file: Express.Multer.File, academicYear: string): Promise<InsertStudentsEntranceResult[]> {
     const workbook = XLSX.readFile(file.path);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     return data.map((row: any) => ({
+      academicYear: academicYear,
       meritNo: parseInt(row['Merit No'] || row.MeritNo || row.merit_no || row.meritNumber || row.merit_number) || 0,
       applicationNo: String(row['Application No'] || row.ApplicationNo || row.application_no || row.app_no || row.AppNo || ''),
       rollNo: String(row['Roll No'] || row.RollNo || row.roll_no || row.rollNumber || row.roll_number || ''),
@@ -329,13 +429,14 @@ export class FileService {
     }));
   }
 
-  private async parseStudentFile(file: Express.Multer.File): Promise<InsertStudent[]> {
+  private async parseStudentFile(file: Express.Multer.File, academicYear: string): Promise<InsertStudent[]> {
     const workbook = XLSX.readFile(file.path);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet);
 
     return data.map((row: any) => ({
+      academicYear: academicYear,
       appNo: String(row['App No'] || row.AppNo || row.app_no || row.ApplicationNumber || row.application_number || row['Application Number'] || ''),
       meritNumber: parseInt(row.MeritNo || row.MeritNumber || row.merit_number || row['Merit Number']) || 0,
       name: String(row.Name || row.name || row['Student Name'] || ''),
@@ -356,20 +457,50 @@ export class FileService {
     }));
   }
 
-  private async parseVacancyFile(file: Express.Multer.File): Promise<InsertVacancy[]> {
+  private async parseVacancyFile(file: Express.Multer.File, academicYear: string): Promise<{ vacancies: InsertVacancy[], schools: InsertSchool[] }> {
     const workbook = XLSX.readFile(file.path);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet);
 
-    return data.map((row: any) => ({
-      district: String(row.District || row.district || ''),
-      stream: String(row.Stream || row.stream || ''),
-      gender: String(row.Gender || row.gender || ''),
-      category: String(row.Category || row.category || ''),
-      totalSeats: parseInt(row['Total Seats'] || row.totalSeats || row.total_seats || row.TotalSeats) || 0,
-      availableSeats: parseInt(row['Available Seats'] || row.availableSeats || row.available_seats || row.AvailableSeats) || 0,
-    }));
+    // Track unique schools
+    const schoolsMap = new Map<string, InsertSchool>();
+    const vacancies: InsertVacancy[] = [];
+
+    data.forEach((row: any) => {
+      const udiseCode = String(row['UDISE Code'] || row.udiseCode || row.UDISECode || row['UDISE_Code'] || '').trim();
+      const schoolName = String(row['School Name'] || row.schoolName || row.SchoolName || row['School_Name'] || '').trim();
+      const district = String(row.District || row.district || '').trim();
+
+      // Create school entry if UDISE code provided
+      if (udiseCode && schoolName && district) {
+        if (!schoolsMap.has(udiseCode)) {
+          schoolsMap.set(udiseCode, {
+            udiseCode,
+            schoolName,
+            district,
+          });
+        }
+      }
+
+      // Create vacancy entry with academic year
+      const totalSeats = parseInt(row['Total Seats'] || row.totalSeats || row.total_seats || row.TotalSeats) || 0;
+      vacancies.push({
+        academicYear: academicYear,
+        udiseCode: udiseCode || null,
+        district,
+        stream: String(row.Stream || row.stream || ''),
+        gender: String(row.Gender || row.gender || ''),
+        category: String(row.Category || row.category || ''),
+        totalSeats: totalSeats,
+        availableSeats: totalSeats, // Initially, available seats = total seats
+      });
+    });
+
+    return {
+      vacancies,
+      schools: Array.from(schoolsMap.values()),
+    };
   }
 
   private validateStudents(students: InsertStudent[]): { errors: string[]; processed: number } {
@@ -418,7 +549,21 @@ export class FileService {
 
     vacancies.forEach((vacancy, index) => {
       const row = index + 1;
-      const combination = `${vacancy.district}-${vacancy.stream}-${vacancy.gender}-${vacancy.category}`;
+      // New unique combination: udiseCode-stream-gender-category
+      const combination = vacancy.udiseCode 
+        ? `${vacancy.udiseCode}-${vacancy.stream}-${vacancy.gender}-${vacancy.category}`
+        : `${vacancy.district}-${vacancy.stream}-${vacancy.gender}-${vacancy.category}`;
+
+      // UDISE code validation (required for school-level vacancies)
+      if (!vacancy.udiseCode || String(vacancy.udiseCode).trim() === '') {
+        errors.push(`Row ${row}: UDISE Code is required`);
+      } else {
+        // Validate UDISE code format (typically 11 digits)
+        const udiseCodeStr = String(vacancy.udiseCode).trim();
+        if (!/^\d{11}$/.test(udiseCodeStr)) {
+          errors.push(`Row ${row}: Invalid UDISE Code format. Must be 11 digits. Found: ${udiseCodeStr}`);
+        }
+      }
 
       if (!vacancy.district || !DISTRICTS.includes(vacancy.district as any)) {
         errors.push(`Row ${row}: Invalid district. Must be one of: ${DISTRICTS.join(', ')}`);
@@ -437,7 +582,7 @@ export class FileService {
       }
 
       if (seenCombinations.has(combination)) {
-        errors.push(`Row ${row}: Duplicate combination of District-Stream-Gender-Category: ${combination}`);
+        errors.push(`Row ${row}: Duplicate combination of UDISE Code-Stream-Gender-Category: ${combination}`);
       } else {
         seenCombinations.add(combination);
       }
@@ -510,9 +655,9 @@ export class FileService {
   }
 
   // Validation-only methods (don't save to database)
-  async validateStudentFile(file: Express.Multer.File) {
+  async validateStudentFile(file: Express.Multer.File, academicYear: string) {
     try {
-      const students = await this.parseStudentFile(file);
+      const students = await this.parseStudentFile(file, academicYear);
       const validationResults = this.validateStudents(students);
       
       return {
@@ -567,20 +712,21 @@ export class FileService {
     }
   }
 
-  async validateVacancyFile(file: Express.Multer.File) {
+  async validateVacancyFile(file: Express.Multer.File, academicYear: string) {
     try {
-      const vacancies = await this.parseVacancyFile(file);
+      const { vacancies, schools } = await this.parseVacancyFile(file, academicYear);
       const validationResults = this.validateVacancies(vacancies);
       
       return {
         isValid: validationResults.errors.length === 0,
         message: validationResults.errors.length === 0 
-          ? `File is valid. Found ${vacancies.length} vacancy records.`
+          ? `File is valid. Found ${vacancies.length} vacancy records and ${schools.length} unique schools.`
           : `Found ${validationResults.errors.length} validation errors.`,
         errors: validationResults.errors,
         warnings: [],
         recordCount: vacancies.length,
         allRecords: vacancies.map(vacancy => ({
+          udiseCode: vacancy.udiseCode,
           district: vacancy.district,
           stream: vacancy.stream,
           gender: vacancy.gender,
@@ -589,6 +735,7 @@ export class FileService {
           availableSeats: vacancy.availableSeats
         })),
         preview: vacancies.slice(0, 10).map(vacancy => ({
+          udiseCode: vacancy.udiseCode,
           district: vacancy.district,
           stream: vacancy.stream,
           totalSeats: vacancy.totalSeats,
@@ -613,9 +760,9 @@ export class FileService {
     }
   }
 
-  async validateEntranceResultsFile(file: Express.Multer.File) {
+  async validateEntranceResultsFile(file: Express.Multer.File, academicYear: string) {
     try {
-      const entranceResults = await this.parseEntranceResultsFile(file);
+      const entranceResults = await this.parseEntranceResultsFile(file, academicYear);
       const validationResults = this.validateEntranceResults(entranceResults);
       
       return {

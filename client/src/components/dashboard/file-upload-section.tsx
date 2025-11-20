@@ -1,24 +1,66 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
-import { Upload, FileSpreadsheet, Check, Eye, X, Download } from "lucide-react";
+import { Upload, FileSpreadsheet, Check, Eye, X, Download, Calendar, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DataPreviewModal } from "@/components/ui/data-preview-modal";
+import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import type { Student, Vacancy } from "@shared/schema";
+
+interface CounselingRound {
+  id: string;
+  academicYear: string;
+  roundNumber: number;
+  roundName: string | null;
+  isActive: boolean;
+  isCompleted: boolean;
+}
 
 export default function FileUploadSection() {
   const [isDragging, setIsDragging] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showValidationPreview, setShowValidationPreview] = useState(false);
   const [pendingFile, setPendingFile] = useState<{file: File, type: string, validationResults: any} | null>(null);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("");
+  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
+  const [selectedCounselingTitle, setSelectedCounselingTitle] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const studentFileRef = useRef<HTMLInputElement>(null);
   const vacancyFileRef = useRef<HTMLInputElement>(null);
   const entranceResultsFileRef = useRef<HTMLInputElement>(null);
+
+  // Get current session
+  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
+    queryKey: ["/api/session/current"],
+    enabled: true,
+  });
+  const currentSession = currentSessionData?.currentSession || "";
+
+  // Set default academic year to current session and lock it
+  useEffect(() => {
+    if (currentSession) {
+      setSelectedAcademicYear(currentSession);
+    }
+  }, [currentSession]);
+
+  // Fetch counseling rounds for selected academic year
+  const { data: rounds } = useQuery<CounselingRound[]>({
+    queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }],
+    enabled: !!selectedAcademicYear,
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      const res = await fetch(`/api/counseling-rounds?academicYear=${selectedAcademicYear}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   // Fetch student data for preview
   const { data: studentsData } = useQuery<Student[]>({
@@ -67,8 +109,15 @@ export default function FileUploadSection() {
 
   const uploadStudentsMutation = useMutation({
     mutationFn: async (file: File) => {
+      if (!selectedAcademicYear) {
+        throw new Error("Please select an academic year");
+      }
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('academicYear', selectedAcademicYear);
+      if (selectedRoundId) {
+        formData.append('counselingRoundId', selectedRoundId);
+      }
       const response = await fetch('/api/files/upload/students', {
         method: 'POST',
         body: formData,
@@ -102,8 +151,15 @@ export default function FileUploadSection() {
 
   const uploadVacanciesMutation = useMutation({
     mutationFn: async (file: File) => {
+      if (!selectedAcademicYear) {
+        throw new Error("Please select an academic year");
+      }
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('academicYear', selectedAcademicYear);
+      if (selectedRoundId) {
+        formData.append('counselingRoundId', selectedRoundId);
+      }
       const response = await fetch('/api/files/upload/vacancies', {
         method: 'POST',
         body: formData,
@@ -135,8 +191,15 @@ export default function FileUploadSection() {
 
   const uploadEntranceResultsMutation = useMutation({
     mutationFn: async (file: File) => {
+      if (!selectedAcademicYear) {
+        throw new Error("Please select an academic year");
+      }
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('academicYear', selectedAcademicYear);
+      if (selectedRoundId) {
+        formData.append('counselingRoundId', selectedRoundId);
+      }
       const response = await fetch('/api/files/upload/entrance-results', {
         method: 'POST',
         body: formData,
@@ -318,6 +381,143 @@ export default function FileUploadSection() {
       </CardHeader>
       
       <CardContent className="space-y-6">
+        {/* Show message if no rounds exist */}
+        {currentSession && selectedAcademicYear === currentSession && rounds && rounds.length === 0 && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-medium text-amber-900 mb-1">No Counseling Rounds Found</h4>
+                <p className="text-sm text-amber-800 mb-3">
+                  No counseling rounds have been created for {currentSession}. Please create counseling rounds before uploading files.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => window.location.href = '/counseling-rounds'}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Go to Counseling Rounds
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Academic Year Selector - Locked to Current Session */}
+        <div className="p-4 bg-muted rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <Calendar className="w-4 h-4" />
+            <label className="text-sm font-medium">Academic Year</label>
+            {currentSession && (
+              <Badge variant="outline" className="ml-auto">
+                Current Session
+              </Badge>
+            )}
+          </div>
+          {currentSession ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 p-2 bg-background border rounded-md">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{currentSession}</span>
+                <Badge variant="secondary" className="ml-auto">Locked</Badge>
+              </div>
+              <input type="hidden" value={currentSession} />
+            </div>
+          ) : (
+            <AcademicYearSelector
+              value={selectedAcademicYear}
+              onValueChange={(year) => {
+                setSelectedAcademicYear(year);
+                setSelectedRoundId(null);
+                setSelectedCounselingTitle(null);
+              }}
+              showLabel={false}
+              className="max-w-xs"
+            />
+          )}
+          {currentSession && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Files will be associated with the selected counseling round for {currentSession} (or active round if none selected)
+            </p>
+          )}
+          {!currentSession && (
+            <p className="text-xs text-amber-600 mt-2">
+              Waiting for current session information...
+            </p>
+          )}
+        </div>
+
+        {/* Counseling Round Selector */}
+        {selectedAcademicYear && rounds && rounds.length > 0 && (
+          <div className="p-4 bg-muted rounded-lg">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Counseling Title (Optional)</Label>
+                <Select
+                  value={selectedCounselingTitle || undefined}
+                  onValueChange={(value) => {
+                    if (value === "none") {
+                      setSelectedCounselingTitle(null);
+                    } else {
+                      setSelectedCounselingTitle(value);
+                    }
+                    setSelectedRoundId(null);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select counseling title (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (Use Active Round)</SelectItem>
+                    {Array.from(new Set(rounds.map(r => r.roundName).filter(Boolean))).map((title) => (
+                      <SelectItem key={title} value={title || "unknown"}>
+                        {title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedCounselingTitle && (
+                <div className="space-y-2">
+                  <Label>Round Number (Optional)</Label>
+                  <Select
+                    value={selectedRoundId || undefined}
+                    onValueChange={(value) => {
+                      if (value === "none") {
+                        setSelectedRoundId(null);
+                      } else {
+                        setSelectedRoundId(value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select round number (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None (Use Active Round)</SelectItem>
+                      {rounds
+                        .filter(r => r.roundName === selectedCounselingTitle)
+                        .sort((a, b) => a.roundNumber - b.roundNumber)
+                        .map((round) => (
+                          <SelectItem key={round.id} value={round.id}>
+                            Round {round.roundNumber}
+                            {round.isActive && !round.isCompleted && " (Active)"}
+                            {round.isCompleted && " (Completed)"}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    If not selected, file will be associated with the active round for this academic year
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Entrance Results Upload */}
         <div>
           <div className="flex items-center justify-between mb-3">

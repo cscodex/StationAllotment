@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataPagination } from "@/components/ui/data-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +23,8 @@ export default function Students() {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(50);
+  const [academicYear, setAcademicYear] = useState<string>("");
+  const [roundNumber, setRoundNumber] = useState<number | undefined>(undefined);
   const [selectedStudent, setSelectedStudent] = useState<StudentsEntranceResult | Student | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [editingEntranceResult, setEditingEntranceResult] = useState<string | null>(null);
@@ -39,9 +42,9 @@ export default function Students() {
     enabled: isDistrictAdmin || isCentralAdmin,
   });
 
-  // Fetch student records for central admin second tab
+  // Fetch student records for central admin second tab (with year/round filtering)
   const { data: studentsData, isLoading: isLoadingStudents } = useQuery<{students: Student[], total: number}>({
-    queryKey: ["/api/students", { limit, offset: page * limit }],
+    queryKey: ["/api/students", { limit, offset: page * limit, academicYear, roundNumber }],
     enabled: isCentralAdmin,
   });
 

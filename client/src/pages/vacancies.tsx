@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Building2, Users, TrendingUp, Clock, Filter, Eye, TableIcon } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { DISTRICTS, SCHOOL_DISTRICTS, COUNSELING_DISTRICTS, STREAMS, getCategoriesForGender } from "@shared/schema";
 import type { Vacancy } from "@shared/schema";
 
@@ -16,9 +17,10 @@ export default function Vacancies() {
   const [selectedDistrict, setSelectedDistrict] = useState<string>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [viewMode, setViewMode] = useState<string>("table"); // 'table' | 'summary'
+  const [academicYear, setAcademicYear] = useState<string>("");
 
   const { data: vacancies } = useQuery<Vacancy[]>({
-    queryKey: ["/api/vacancies"],
+    queryKey: ["/api/vacancies", academicYear],
   });
 
   // Get unique districts that actually have vacancy data
@@ -117,6 +119,11 @@ export default function Vacancies() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-4">
+                <AcademicYearSelector
+                  value={academicYear}
+                  onValueChange={setAcademicYear}
+                  className="max-w-xs"
+                />
                 <div className="flex items-center space-x-2">
                   <label className="text-sm font-medium">District:</label>
                   <Select value={selectedDistrict} onValueChange={setSelectedDistrict}>

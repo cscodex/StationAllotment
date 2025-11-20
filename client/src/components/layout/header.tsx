@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useQuery } from "@tanstack/react-query";
-import { Menu, Bell, Clock, Users, CheckCircle, XCircle, Eye, Lock, Unlock } from "lucide-react";
+import { Menu, Bell, Clock, Users, CheckCircle, XCircle, Eye, Lock, Unlock, Database } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import type { DistrictStatus, Student } from "@shared/schema";
@@ -36,6 +36,19 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
   const { data: unlockRequests } = useQuery({
     queryKey: ["/api/unlock-requests"],
     enabled: user?.role === 'central_admin',
+  });
+
+  // Fetch database health status (Central Admin only)
+  const { data: dbHealth, isLoading: dbHealthLoading } = useQuery<{
+    status: 'online' | 'offline';
+    responseTime?: number;
+    error?: string;
+    timestamp: string;
+  }>({
+    queryKey: ["/api/health/database"],
+    enabled: user?.role === 'central_admin',
+    refetchInterval: 30000, // Refetch every 30 seconds
+    retry: 1,
   });
 
   const pendingUnlockRequests = Array.isArray(unlockRequests) 
@@ -94,6 +107,87 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
                 {daysLeft > 0 ? `${daysLeft} days left` : "Deadline passed"}
               </span>
             </Badge>
+          )}
+
+          {user?.role === 'central_admin' && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="flex items-center space-x-2" 
+                  data-testid="button-database-status"
+                >
+                  <Database className={`w-4 h-4 ${dbHealth?.status === 'online' ? 'text-green-600' : dbHealth?.status === 'offline' ? 'text-red-600' : 'text-gray-400'}`} />
+                  {dbHealthLoading ? (
+                    <span className="text-muted-foreground">Checking...</span>
+                  ) : (
+                    <>
+                      <span className={dbHealth?.status === 'online' ? 'text-green-600' : dbHealth?.status === 'offline' ? 'text-red-600' : 'text-muted-foreground'}>
+                        {dbHealth?.status === 'online' ? 'Online' : dbHealth?.status === 'offline' ? 'Offline' : 'Unknown'}
+                      </span>
+                      {dbHealth?.status === 'online' && dbHealth.responseTime && (
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {dbHealth.responseTime}ms
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80" align="end">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-semibold">Database Status</h4>
+                    <Badge 
+                      variant={dbHealth?.status === 'online' ? "default" : "destructive"}
+                      className="flex items-center space-x-1"
+                    >
+                      {dbHealth?.status === 'online' ? (
+                        <CheckCircle className="w-3 h-3" />
+                      ) : (
+                        <XCircle className="w-3 h-3" />
+                      )}
+                      <span>{dbHealth?.status === 'online' ? 'Online' : 'Offline'}</span>
+                    </Badge>
+                  </div>
+                  
+                  {dbHealth?.status === 'online' ? (
+                    <div className="space-y-2">
+                      {dbHealth.responseTime && (
+                        <div className="p-3 bg-green-50 dark:bg-green-950/20 border-l-4 border-green-500 rounded">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-green-800 dark:text-green-200">
+                              Response Time
+                            </span>
+                            <span className="text-sm font-bold text-green-600">
+                              {dbHealth.responseTime}ms
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground">
+                        Last checked: {dbHealth.timestamp ? new Date(dbHealth.timestamp).toLocaleTimeString() : 'N/A'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-red-50 dark:bg-red-950/20 border-l-4 border-red-500 rounded">
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-1">
+                        Database Connection Failed
+                      </p>
+                      {dbHealth?.error && (
+                        <p className="text-xs text-red-600 dark:text-red-400">
+                          {dbHealth.error}
+                        </p>
+                      )}
+                      <div className="text-xs text-muted-foreground mt-2">
+                        Last checked: {dbHealth?.timestamp ? new Date(dbHealth.timestamp).toLocaleTimeString() : 'N/A'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           )}
 
           {user?.role === 'central_admin' && studentsData && (

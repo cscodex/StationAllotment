@@ -13,6 +13,8 @@ import Vacancies from "@/pages/vacancies";
 import Allocation from "@/pages/allocation";
 import ExportResults from "@/pages/export-results";
 import AuditLog from "@/pages/audit-log";
+import CounselingRounds from "@/pages/counseling-rounds";
+import TestCases from "@/pages/test-cases";
 import DistrictAdmin from "@/pages/district-admin";
 import DistrictAdminList from "@/pages/district-admin-list";
 import StudentDetails from "@/pages/student-details";
@@ -50,6 +52,8 @@ function Router() {
         <Route path="/export-results" component={ExportResults} />
         <Route path="/reports" component={Reports} />
         <Route path="/audit-log" component={AuditLog} />
+        <Route path="/counseling-rounds" component={CounselingRounds} />
+        <Route path="/test-cases" component={TestCases} />
         <Route path="/district-admin" component={DistrictAdmin} />
         <Route path="/district-admin-list" component={DistrictAdminList} />
         <Route path="/manage-district-admins" component={ManageDistrictAdmins} />

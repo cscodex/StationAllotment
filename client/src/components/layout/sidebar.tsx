@@ -15,6 +15,7 @@ import {
   UserCog,
   User,
   LogOut,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -36,12 +37,14 @@ const navigation = [
     items: [
       { name: "Student Preferences", href: "/district-admin", icon: UserCog, roles: ["district_admin"] },
       { name: "Student Preference Management", href: "/student-preference-management", icon: UserCog, roles: ["central_admin"] },
+      { name: "Counseling Rounds", href: "/counseling-rounds", icon: Calendar, roles: ["central_admin"] },
       { name: "Run Allocation", href: "/allocation", icon: Settings, roles: ["central_admin"] },
       { name: "District Analysis", href: "/district-analysis", icon: BarChart3, roles: ["central_admin"] },
       { name: "Reports", href: "/reports", icon: BarChart3, roles: ["central_admin", "district_admin"] },
       { name: "Export Results", href: "/export-results", icon: Download, roles: ["central_admin"] },
       { name: "Audit Log", href: "/audit-log", icon: History, roles: ["central_admin"] },
       { name: "Manage Admins", href: "/manage-district-admins", icon: Users, roles: ["central_admin"] },
+      { name: "Test Cases", href: "/test-cases", icon: ClipboardCheck, roles: ["central_admin"] },
     ],
   },
 ];

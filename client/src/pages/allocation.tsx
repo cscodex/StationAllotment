@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AllocationModal from "@/components/modals/allocation-modal";
+import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { 
   Settings, 
   Play, 
@@ -17,12 +21,30 @@ import {
   Users, 
   MapPin,
   BarChart3,
-  Shield
+  Shield,
+  Rocket,
+  Calendar,
+  Filter
 } from "lucide-react";
 import type { DistrictStatus } from "@shared/schema";
+import { format } from "date-fns";
+
+interface CounselingRound {
+  id: string;
+  academicYear: string;
+  roundNumber: number;
+  roundName: string | null;
+  startDate: string;
+  isActive: boolean;
+  isCompleted: boolean;
+}
 
 export default function Allocation() {
   const [showAllocationModal, setShowAllocationModal] = useState(false);
+  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("");
+  const [selectedRoundNumber, setSelectedRoundNumber] = useState<number | null>(null);
+  const [selectedCounselingTitle, setSelectedCounselingTitle] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -42,9 +64,14 @@ export default function Allocation() {
     queryKey: ["/api/students"],
   });
 
-  const { data: vacancies } = useQuery<any[]>({
+  const { data: allVacancies } = useQuery<any[]>({
     queryKey: ["/api/vacancies"],
   });
+
+  // Filter vacancies by academic year
+  const vacancies = selectedAcademicYear
+    ? allVacancies?.filter((v: any) => v.academicYear === selectedAcademicYear) || []
+    : allVacancies || [];
 
   const { data: entranceResultsResponse } = useQuery<any>({
     queryKey: ["/api/students-entrance-results"],
@@ -54,6 +81,35 @@ export default function Allocation() {
   const { data: districtStatuses } = useQuery<DistrictStatus[]>({
     queryKey: ["/api/district-status"],
   });
+
+  // Fetch counseling rounds for selected academic year
+  const { data: rounds } = useQuery<CounselingRound[]>({
+    queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }],
+    enabled: !!selectedAcademicYear,
+    queryFn: async () => {
+      if (!selectedAcademicYear) return [];
+      const res = await fetch(`/api/counseling-rounds?academicYear=${selectedAcademicYear}`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  // Get selected round details
+  const selectedRound = rounds?.find(r => r.id === selectedRoundId) || null;
+
+  // Get current session
+  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
+    queryKey: ["/api/session/current"],
+    enabled: true,
+  });
+  const currentSession = currentSessionData?.currentSession || "";
+
+  // Set default academic year to current session
+  useEffect(() => {
+    if (currentSession && !selectedAcademicYear) {
+      setSelectedAcademicYear(currentSession);
+    }
+  }, [currentSession, selectedAcademicYear]);
 
   // Finalize allocation mutation
   const finalizeAllocationMutation = useMutation({
@@ -79,13 +135,52 @@ export default function Allocation() {
     },
   });
 
+  // Reset allocation mutation
+  const resetAllocationMutation = useMutation({
+    mutationFn: async (academicYear: string) => {
+      return await apiRequest("POST", "/api/allocation/reset", { academicYear });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
+      toast({
+        title: "Allocation Reset",
+        description: "Allocation has been reset successfully. You can now run a new allocation.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Reset Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
   const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
   const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
 
   // Handle different API response formats
-  const students = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
-  const entranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
+  const allStudents = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
+  const allEntranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
+
+  // Filter students by selected round
+  const students = selectedRoundId 
+    ? allStudents.filter((s: any) => 
+        s.counselingRoundId === selectedRoundId || 
+        (s.academicYear === selectedAcademicYear && 
+         s.counselingRoundNumber === selectedRound?.roundNumber &&
+         s.counselingRoundId === selectedRoundId)
+      )
+    : allStudents;
+
+  // Filter entrance results by academic year
+  const entranceResults = selectedAcademicYear
+    ? allEntranceResults.filter((er: any) => er.academicYear === selectedAcademicYear)
+    : allEntranceResults;
 
   // Minimum data requirements for allocation
   const hasEntranceResults = entranceResults && entranceResults.length > 0;
@@ -262,9 +357,116 @@ export default function Allocation() {
       />
 
       <main className="flex-1 p-6 overflow-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Allocation Controls */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6">
+          {/* Filters Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Filter className="w-5 h-5 mr-2" />
+                Filter by Counseling Round
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Select academic year, counseling title, and round number to view allocation status
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Academic Year</Label>
+                  <AcademicYearSelector
+                    value={selectedAcademicYear}
+                    onValueChange={(year) => {
+                      setSelectedAcademicYear(year);
+                      setSelectedRoundId(null);
+                      setSelectedRoundNumber(null);
+                      setSelectedCounselingTitle(null);
+                    }}
+                    showLabel={false}
+                  />
+                </div>
+                
+                {selectedAcademicYear && rounds && rounds.length > 0 && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Counseling Title</Label>
+                      <Select
+                        value={selectedCounselingTitle || ""}
+                        onValueChange={(value) => {
+                          setSelectedCounselingTitle(value);
+                          setSelectedRoundId(null);
+                          setSelectedRoundNumber(null);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select counseling" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from(new Set(rounds.map(r => r.roundName).filter(Boolean))).map((title) => (
+                            <SelectItem key={title} value={title || ""}>
+                              {title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedCounselingTitle && (
+                      <div className="space-y-2">
+                        <Label>Round Number</Label>
+                        <Select
+                          value={selectedRoundId || ""}
+                          onValueChange={(value) => {
+                            const round = rounds.find(r => r.id === value);
+                            setSelectedRoundId(value);
+                            setSelectedRoundNumber(round?.roundNumber || null);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select round" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {rounds
+                              .filter(r => r.roundName === selectedCounselingTitle)
+                              .sort((a, b) => a.roundNumber - b.roundNumber)
+                              .map((round) => (
+                                <SelectItem key={round.id} value={round.id}>
+                                  Round {round.roundNumber}
+                                  {round.isActive && !round.isCompleted && " (Active)"}
+                                  {round.isCompleted && " (Completed)"}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {selectedRound && (
+                <div className="mt-4 p-4 bg-muted rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">
+                        {selectedRound.roundName} - Round {selectedRound.roundNumber}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Academic Year: {selectedRound.academicYear} • 
+                        Start: {format(new Date(selectedRound.startDate), "MMM dd, yyyy HH:mm")}
+                      </p>
+                    </div>
+                    <Badge variant={selectedRound.isActive ? "default" : "secondary"}>
+                      {selectedRound.isActive ? "Active" : selectedRound.isCompleted ? "Completed" : "Inactive"}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Allocation Controls */}
+            <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -277,7 +479,7 @@ export default function Allocation() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {allocationStatus?.completed ? (
-                  <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200 space-y-4">
                     <Check className="w-12 h-12 text-green-500 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-green-800 mb-2">
                       Allocation Completed
@@ -286,11 +488,62 @@ export default function Allocation() {
                       The seat allocation process has been completed successfully. 
                       You can now export the results.
                     </p>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button 
+                          variant="destructive"
+                          disabled={resetAllocationMutation.isPending}
+                          data-testid="button-reset-allocation"
+                        >
+                          {resetAllocationMutation.isPending ? "Resetting..." : "Reset Allocation"}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Reset Allocation</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This will clear all student allocations and restore vacancy seats for the selected academic year.
+                            This action cannot be undone. Are you sure you want to proceed?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              // Get current academic year from allocation status or prompt user
+                              const academicYear = prompt("Enter academic year (e.g., 2024-2025):");
+                              if (academicYear && /^\d{4}-\d{4}$/.test(academicYear)) {
+                                resetAllocationMutation.mutate(academicYear);
+                              } else if (academicYear) {
+                                toast({
+                                  title: "Invalid Format",
+                                  description: "Academic year must be in format YYYY-YYYY (e.g., 2024-2025)",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Reset
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 ) : (
                   <>
+                    {selectedRound && (
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm font-medium text-blue-900">
+                          Showing pre-condition status for: <strong>{selectedRound.roundName}</strong> - Round {selectedRound.roundNumber}
+                        </p>
+                      </div>
+                    )}
                     <div className="space-y-4">
-                      <h3 className="font-semibold">Pre-flight Checks</h3>
+                      <h3 className="font-semibold">
+                        Pre-flight Checks
+                        {selectedRound && ` (${selectedRound.roundName} - Round ${selectedRound.roundNumber})`}
+                      </h3>
                       {preflightChecks.map((check, index) => (
                         <div key={index} className="flex items-start space-x-3 p-3 border border-border rounded-lg">
                           <check.icon className={`w-5 h-5 mt-0.5 ${check.color}`} />
@@ -499,10 +752,17 @@ export default function Allocation() {
           </div>
         </div>
 
-        <AllocationModal 
-          open={showAllocationModal} 
-          onOpenChange={setShowAllocationModal} 
-        />
+        {showAllocationModal && (
+          <AllocationModal 
+            open={showAllocationModal} 
+            onOpenChange={(open: boolean) => {
+              setShowAllocationModal(open);
+              if (!open) setSelectedRoundId(null);
+            }}
+            roundId={selectedRoundId}
+          />
+        )}
+        </div>
       </main>
     </div>
   );

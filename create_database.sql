@@ -94,9 +94,30 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Counseling rounds table
+CREATE TABLE IF NOT EXISTS counseling_rounds (
+    id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+    academic_year VARCHAR NOT NULL,
+    round_number INTEGER NOT NULL,
+    round_name VARCHAR NOT NULL, -- Counseling title (e.g., 'First Counseling', 'Second Counseling')
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    is_active BOOLEAN DEFAULT FALSE,
+    is_completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(academic_year, round_name, round_number) -- Multiple counselings, each with multiple rounds
+);
+
+-- Create indexes for counseling rounds
+CREATE INDEX IF NOT EXISTS idx_counseling_rounds_academic_year ON counseling_rounds(academic_year);
+CREATE INDEX IF NOT EXISTS idx_counseling_rounds_round_name ON counseling_rounds(round_name);
+CREATE INDEX IF NOT EXISTS idx_counseling_rounds_active ON counseling_rounds(is_active);
+
 -- Students entrance results table
 CREATE TABLE IF NOT EXISTS students_entrance_result (
     id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+    academic_year VARCHAR, -- Link to academic year
     merit_no INTEGER NOT NULL UNIQUE,
     application_no VARCHAR NOT NULL UNIQUE,
     roll_no VARCHAR NOT NULL UNIQUE,
@@ -109,9 +130,26 @@ CREATE TABLE IF NOT EXISTS students_entrance_result (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Create index for academic year on entrance results
+CREATE INDEX IF NOT EXISTS idx_students_entrance_result_academic_year ON students_entrance_result(academic_year);
+
+-- Schools table for UDISE code and school name mapping
+-- Must be created before students and vacancies tables that reference it
+CREATE TABLE IF NOT EXISTS schools (
+    udise_code VARCHAR PRIMARY KEY,
+    school_name VARCHAR NOT NULL,
+    district VARCHAR NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create index on district for faster lookups
+CREATE INDEX IF NOT EXISTS idx_schools_district ON schools(district);
+
 -- Students table
 CREATE TABLE IF NOT EXISTS students (
     id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+    academic_year VARCHAR, -- Which year the student belongs to
     app_no VARCHAR NOT NULL UNIQUE, -- Application number as first data column
     merit_number INTEGER NOT NULL UNIQUE,
     name VARCHAR NOT NULL,
@@ -132,6 +170,10 @@ CREATE TABLE IF NOT EXISTS students (
     district_admin VARCHAR, -- Name of the district admin who set preferences
     allotted_district VARCHAR,
     allotted_stream VARCHAR,
+    allotted_school_udise VARCHAR REFERENCES schools(udise_code) ON DELETE SET NULL ON UPDATE CASCADE, -- UDISE code of allocated school
+    counseling_round_id VARCHAR REFERENCES counseling_rounds(id) ON DELETE SET NULL ON UPDATE CASCADE, -- Round when allocated
+    counseling_round_number INTEGER, -- Round number for quick lookup
+    preferences_updated_at TIMESTAMP, -- When preferences were last updated
     allocation_status VARCHAR DEFAULT 'pending', -- 'pending' | 'allotted' | 'not_allotted'
     is_locked BOOLEAN DEFAULT FALSE, -- Whether preferences are locked for editing
     locked_by VARCHAR, -- User ID of the admin who has exclusive edit lock
@@ -141,9 +183,16 @@ CREATE TABLE IF NOT EXISTS students (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_students_allotted_school_udise ON students(allotted_school_udise);
+CREATE INDEX IF NOT EXISTS idx_students_academic_year ON students(academic_year);
+CREATE INDEX IF NOT EXISTS idx_students_counseling_round_id ON students(counseling_round_id);
+CREATE INDEX IF NOT EXISTS idx_students_counseling_round_number ON students(counseling_round_number);
+
 -- Vacancies table
 CREATE TABLE IF NOT EXISTS vacancies (
     id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+    udise_code VARCHAR REFERENCES schools(udise_code) ON DELETE RESTRICT ON UPDATE CASCADE,
     district VARCHAR NOT NULL,
     stream VARCHAR NOT NULL, -- 'Medical' | 'Commerce' | 'NonMedical'
     gender VARCHAR NOT NULL, -- 'Male' | 'Female' | 'Other'
@@ -152,8 +201,12 @@ CREATE TABLE IF NOT EXISTS vacancies (
     available_seats INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(district, stream, gender, category)
+    UNIQUE(udise_code, stream, gender, category)
 );
+
+-- Create indexes for faster lookups
+CREATE INDEX IF NOT EXISTS idx_vacancies_udise_code ON vacancies(udise_code);
+CREATE INDEX IF NOT EXISTS idx_vacancies_district ON vacancies(district);
 
 -- District status table for tracking finalization
 CREATE TABLE IF NOT EXISTS district_status (

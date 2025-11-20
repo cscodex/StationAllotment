@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Header from "@/components/layout/header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Download, FileText, Users, MapPin, TrendingUp } from "lucide-react";
 import type { Student, Vacancy } from "@shared/schema";
 
@@ -16,13 +18,14 @@ interface AllocationStats {
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("station-allotments");
+  const [academicYear, setAcademicYear] = useState<string>("");
 
   const { data: students, isLoading: studentsLoading } = useQuery<Student[]>({
-    queryKey: ["/api/students", { allocated: true }],
+    queryKey: ["/api/students", { allocated: true, academicYear }],
   });
 
   const { data: vacancies, isLoading: vacanciesLoading } = useQuery<Vacancy[]>({
-    queryKey: ["/api/vacancies"],
+    queryKey: ["/api/vacancies", academicYear],
   });
 
   const { data: allocationStats, isLoading: statsLoading } = useQuery<AllocationStats>({
@@ -34,7 +37,10 @@ export default function Reports() {
 
   // Group allotted students by district and stream
   const allotmentsByDistrict = allottedStudents.reduce((acc, student) => {
-    if (!student.allottedDistrict) return acc;
+    if (!student.allottedDistrict || !student.stream) return acc;
+    
+    // Normalize stream value (handle "Non-Medical" vs "NonMedical")
+    const normalizedStream = student.stream === 'Non-Medical' ? 'NonMedical' : student.stream;
     
     if (!acc[student.allottedDistrict]) {
       acc[student.allottedDistrict] = {
@@ -43,19 +49,33 @@ export default function Reports() {
         NonMedical: []
       };
     }
-    acc[student.allottedDistrict][student.stream as keyof typeof acc[string]].push(student);
+    
+    // Safety check: only push if the stream key exists
+    const streamKey = normalizedStream as keyof typeof acc[string];
+    if (acc[student.allottedDistrict][streamKey]) {
+      acc[student.allottedDistrict][streamKey].push(student);
+    }
     return acc;
   }, {} as Record<string, Record<string, Student[]>>);
 
   // Group vacancies by district and stream for calculations
   const vacancySummaryByDistrict = vacancies?.reduce((acc, vacancy) => {
     const { district, stream } = vacancy;
+    if (!district || !stream) return acc;
+    
+    // Normalize stream value (handle "Non-Medical" vs "NonMedical")
+    const normalizedStream = stream === 'Non-Medical' ? 'NonMedical' : stream;
+    
     if (!acc[district]) {
       acc[district] = { Medical: { total: 0, available: 0 }, Commerce: { total: 0, available: 0 }, NonMedical: { total: 0, available: 0 } };
     }
     
-    acc[district][stream as keyof typeof acc[string]].total += vacancy.totalSeats || 0;
-    acc[district][stream as keyof typeof acc[string]].available += vacancy.availableSeats || 0;
+    // Safety check: only update if the stream key exists
+    const streamKey = normalizedStream as keyof typeof acc[string];
+    if (acc[district][streamKey]) {
+      acc[district][streamKey].total += vacancy.totalSeats || 0;
+      acc[district][streamKey].available += vacancy.availableSeats || 0;
+    }
     return acc;
   }, {} as Record<string, Record<string, { total: number, available: number }>>);
 
@@ -160,15 +180,36 @@ export default function Reports() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Reports</h1>
-          <p className="text-muted-foreground">
-            View allocation results and remaining vacancies
-          </p>
-        </div>
-        <Button onClick={exportToCSV} data-testid="button-export-csv">
+    <div className="flex-1 flex flex-col">
+      <Header 
+        title="Reports" 
+        breadcrumbs={[
+          { name: "Home" },
+          { name: "Reports" }
+        ]}
+      />
+      <main className="flex-1 p-6 overflow-auto">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AcademicYearSelector
+                value={academicYear}
+                onValueChange={setAcademicYear}
+                className="max-w-xs"
+              />
+            </CardContent>
+          </Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">Reports</h1>
+              <p className="text-muted-foreground">
+                View allocation results and remaining vacancies
+              </p>
+            </div>
+            <Button onClick={exportToCSV} data-testid="button-export-csv">
           <Download className="w-4 h-4 mr-2" />
           Export CSV
         </Button>
@@ -378,6 +419,8 @@ export default function Reports() {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
+      </main>
     </div>
   );
 }
