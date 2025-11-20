@@ -1905,15 +1905,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Counseling round not found" });
         }
         
-        // Validate that new startDate falls within the session
+        // Validate and parse startDate
+        if (!updates.startDate || updates.startDate.trim() === '') {
+          return res.status(400).json({ message: "Start date cannot be empty" });
+        }
+        
         const startDateObj = new Date(updates.startDate);
+        if (isNaN(startDateObj.getTime())) {
+          return res.status(400).json({ 
+            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00)` 
+          });
+        }
+        
+        // Validate that new startDate falls within the session
         if (!isDateInSession(startDateObj, round.academicYear)) {
           return res.status(400).json({ 
             message: `Start date must fall within the current session (${round.academicYear})` 
           });
         }
         
-        updates.startDate = new Date(updates.startDate);
+        updates.startDate = startDateObj;
       } else {
         // If not updating startDate, remove other fields that shouldn't be updated
         delete updates.endDate;
