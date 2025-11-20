@@ -153,11 +153,18 @@ export class FileService {
         await this.storage.bulkUpsertSchools(schoolsList);
       }
 
-      // Clear existing vacancies for this academic year and insert new ones
-      // Note: Vacancies are uploaded once per year, so we delete all for this year
-      const existingVacancies = await this.storage.getVacancies(academicYear);
-      // Delete vacancies for this academic year only
-      // We'll need to implement a delete method that filters by year
+      // Set roundName on all vacancies (shared across all rounds of the same counseling title)
+      const roundName = round?.roundName || null;
+      if (roundName) {
+        vacancies.forEach(vacancy => {
+          vacancy.roundName = roundName;
+        });
+      }
+
+      // Clear existing vacancies for this academic year and roundName, then insert new ones
+      // Note: Vacancies are uploaded once per counseling title, shared across all rounds
+      const existingVacancies = await this.storage.getVacancies(academicYear, roundName);
+      // Delete vacancies for this academic year and roundName only
       // For now, bulkUpsert will update existing ones based on unique constraint
       await this.storage.bulkUpsertVacancies(vacancies);
 
@@ -238,7 +245,16 @@ export class FileService {
         return { ...fileUpload, status: 'failed', validationResults };
       }
 
+      // Set roundName on all entrance results (shared across all rounds of the same counseling title)
+      const roundName = round?.roundName || null;
+      if (roundName) {
+        entranceResults.forEach(result => {
+          result.roundName = roundName;
+        });
+      }
+
       // Insert entrance results (don't clear existing ones, allow additions)
+      // Note: Entrance results are uploaded once per counseling title, shared across all rounds
       await this.storage.bulkCreateStudentsEntranceResults(entranceResults);
 
       // Auto-create student records from entrance results with common fields

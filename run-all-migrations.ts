@@ -111,6 +111,7 @@ async function runAllMigrations() {
     { name: "UDISE Code", file: "migrations/add_udise_code.sql", path: path.join(__dirname, "migrations", "add_udise_code.sql") },
     { name: "Update Counseling Rounds Constraints", file: "migrations/update_counseling_rounds_unique_constraint.sql", path: path.join(__dirname, "migrations", "update_counseling_rounds_unique_constraint.sql") },
     { name: "Make end_date Nullable", file: "migrations/make_end_date_nullable.sql", path: path.join(__dirname, "migrations", "make_end_date_nullable.sql") },
+    { name: "Add roundName to Shared Data", file: "migrations/add_round_name_to_shared_data.sql", path: path.join(__dirname, "migrations", "add_round_name_to_shared_data.sql") },
   ];
 
   console.log("\n📋 Migration Plan:");

@@ -66,6 +66,7 @@ export const counselingRounds = pgTable("counseling_rounds", {
 export const studentsEntranceResult = pgTable("students_entrance_result", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year"), // Link to academic year
+  roundName: varchar("round_name"), // Link to counseling title (roundName) - shared across all rounds
   meritNo: integer("merit_no").notNull().unique(),
   applicationNo: varchar("application_no").notNull().unique(),
   rollNo: varchar("roll_no").notNull().unique(),
@@ -78,6 +79,7 @@ export const studentsEntranceResult = pgTable("students_entrance_result", {
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("idx_students_entrance_result_academic_year").on(table.academicYear),
+  index("idx_students_entrance_result_round_name").on(table.roundName),
 ]);
 
 // Schools table for UDISE code and school name mapping
@@ -137,6 +139,7 @@ export const students = pgTable("students", {
 export const vacancies = pgTable("vacancies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year"), // Academic year for this vacancy
+  roundName: varchar("round_name"), // Link to counseling title (roundName) - shared across all rounds
   udiseCode: varchar("udise_code").references(() => schools.udiseCode, { onDelete: 'restrict', onUpdate: 'cascade' }), // UDISE code of the school (nullable initially for migration)
   district: varchar("district").notNull(),
   stream: varchar("stream").notNull(), // 'Medical' | 'Commerce' | 'NonMedical'
@@ -147,10 +150,11 @@ export const vacancies = pgTable("vacancies", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  unique().on(table.academicYear, table.udiseCode, table.stream, table.gender, table.category), // Unique per year/school/stream/gender/category
+  unique().on(table.academicYear, table.roundName, table.udiseCode, table.stream, table.gender, table.category), // Unique per year/roundName/school/stream/gender/category
   index("idx_vacancies_udise_code").on(table.udiseCode),
   index("idx_vacancies_district").on(table.district),
   index("idx_vacancies_academic_year").on(table.academicYear),
+  index("idx_vacancies_round_name").on(table.roundName),
 ]);
 
 // District status table for tracking finalization

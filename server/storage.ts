@@ -97,11 +97,12 @@ export interface IStorage {
   getStudentsByCounselingRound(counselingRoundId: string): Promise<Student[]>;
 
   // Vacancy operations
-  getVacancies(academicYear?: string): Promise<Vacancy[]>;
-  getVacancyByDistrict(district: string, academicYear?: string): Promise<Vacancy | undefined>;
-  getVacanciesByUdiseCode(udiseCode: string, academicYear?: string): Promise<Vacancy[]>;
-  getVacanciesByYear(academicYear: string): Promise<Vacancy[]>;
+  getVacancies(academicYear?: string, roundName?: string): Promise<Vacancy[]>;
+  getVacancyByDistrict(district: string, academicYear?: string, roundName?: string): Promise<Vacancy | undefined>;
+  getVacanciesByUdiseCode(udiseCode: string, academicYear?: string, roundName?: string): Promise<Vacancy[]>;
+  getVacanciesByYear(academicYear: string, roundName?: string): Promise<Vacancy[]>;
   createVacancy(vacancy: InsertVacancy): Promise<Vacancy>;
+  checkIfAllSeatsFilled(academicYear: string, roundName: string): Promise<boolean>;
   updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy>;
   bulkUpsertVacancies(vacancies: InsertVacancy[]): Promise<Vacancy[]>;
   deleteAllVacancies(): Promise<void>;
@@ -543,29 +544,60 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Vacancy operations
-  async getVacancies(academicYear?: string): Promise<Vacancy[]> {
+  async getVacancies(academicYear?: string, roundName?: string): Promise<Vacancy[]> {
+    const conditions = [];
     if (academicYear) {
+      conditions.push(eq(vacancies.academicYear, academicYear));
+    }
+    if (roundName) {
+      conditions.push(eq(vacancies.roundName, roundName));
+    }
+    
+    if (conditions.length > 0) {
       return db.select().from(vacancies)
-        .where(eq(vacancies.academicYear, academicYear))
+        .where(and(...conditions))
         .orderBy(asc(vacancies.district));
     }
     return db.select().from(vacancies).orderBy(asc(vacancies.district));
   }
 
-  async getVacancyByDistrict(district: string, academicYear?: string): Promise<Vacancy | undefined> {
+  async getVacancyByDistrict(district: string, academicYear?: string, roundName?: string): Promise<Vacancy | undefined> {
     const conditions = [eq(vacancies.district, district)];
     if (academicYear) {
       conditions.push(eq(vacancies.academicYear, academicYear));
+    }
+    if (roundName) {
+      conditions.push(eq(vacancies.roundName, roundName));
     }
     const [vacancy] = await db.select().from(vacancies)
       .where(and(...conditions));
     return vacancy;
   }
 
-  async getVacanciesByYear(academicYear: string): Promise<Vacancy[]> {
+  async getVacanciesByYear(academicYear: string, roundName?: string): Promise<Vacancy[]> {
+    const conditions = [eq(vacancies.academicYear, academicYear)];
+    if (roundName) {
+      conditions.push(eq(vacancies.roundName, roundName));
+    }
     return db.select().from(vacancies)
-      .where(eq(vacancies.academicYear, academicYear))
+      .where(and(...conditions))
       .orderBy(asc(vacancies.district));
+  }
+
+  async checkIfAllSeatsFilled(academicYear: string, roundName: string): Promise<boolean> {
+    // Get all vacancies for this academic year and round name
+    const allVacancies = await this.getVacancies(academicYear, roundName);
+    
+    if (allVacancies.length === 0) {
+      // No vacancies means seats are "filled" (nothing to fill)
+      return true;
+    }
+    
+    // Check if any vacancy has available seats
+    const hasAvailableSeats = allVacancies.some(v => (v.availableSeats || 0) > 0);
+    
+    // If no vacancies have available seats, all seats are filled
+    return !hasAvailableSeats;
   }
 
   async createVacancy(vacancy: InsertVacancy): Promise<Vacancy> {
@@ -664,10 +696,13 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getVacanciesByUdiseCode(udiseCode: string, academicYear?: string): Promise<Vacancy[]> {
+  async getVacanciesByUdiseCode(udiseCode: string, academicYear?: string, roundName?: string): Promise<Vacancy[]> {
     const conditions = [eq(vacancies.udiseCode, udiseCode)];
     if (academicYear) {
       conditions.push(eq(vacancies.academicYear, academicYear));
+    }
+    if (roundName) {
+      conditions.push(eq(vacancies.roundName, roundName));
     }
     if (conditions.length > 0) {
       return db.select().from(vacancies)

@@ -1816,6 +1816,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Check if all seats are filled for this counseling title
+      const allSeatsFilled = await storage.checkIfAllSeatsFilled(academicYear, roundName);
+      if (allSeatsFilled) {
+        return res.status(400).json({ 
+          message: `Cannot create new rounds for "${roundName}". All seats are currently filled. Please wait for seats to become available or create a new counseling title.` 
+        });
+      }
+
       // Parse endDate if provided
       let endDateObj: Date | undefined = undefined;
       if (endDate && endDate.trim() !== '') {
@@ -2027,6 +2035,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `Cannot create counseling rounds for future sessions. Current session is ${currentSession}.` 
             });
           }
+        }
+
+        // Check if all seats are filled for this counseling title
+        const allSeatsFilled = await storage.checkIfAllSeatsFilled(round.academicYear, round.roundName);
+        if (allSeatsFilled) {
+          return res.status(400).json({ 
+            message: `Cannot create new rounds for "${round.roundName}". All seats are currently filled. Please wait for seats to become available or create a new counseling title.` 
+          });
         }
 
         // Validate and parse startDate
