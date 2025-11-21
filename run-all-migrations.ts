@@ -108,6 +108,7 @@ async function runAllMigrations() {
   const migrations = [
     { name: "Initial Database Schema", file: "create_database.sql", path: path.join(__dirname, "create_database.sql") },
     { name: "Counseling Rounds", file: "migrations/add_counseling_rounds.sql", path: path.join(__dirname, "migrations", "add_counseling_rounds.sql") },
+    { name: "Add File Uploads Columns", file: "migrations/add_file_uploads_columns.sql", path: path.join(__dirname, "migrations", "add_file_uploads_columns.sql") },
     { name: "UDISE Code", file: "migrations/add_udise_code.sql", path: path.join(__dirname, "migrations", "add_udise_code.sql") },
     { name: "Update Counseling Rounds Constraints", file: "migrations/update_counseling_rounds_unique_constraint.sql", path: path.join(__dirname, "migrations", "update_counseling_rounds_unique_constraint.sql") },
     { name: "Make end_date Nullable", file: "migrations/make_end_date_nullable.sql", path: path.join(__dirname, "migrations", "make_end_date_nullable.sql") },
