@@ -1932,15 +1932,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rounds = await storage.getCounselingRounds(academicYear);
       
       // Serialize dates properly to ensure they're valid ISO strings
-      const serializedRounds = rounds.map(round => ({
-        ...round,
-        startDate: round.startDate instanceof Date 
-          ? round.startDate.toISOString() 
-          : (round.startDate ? new Date(round.startDate).toISOString() : null),
-        endDate: round.endDate ? (round.endDate instanceof Date ? round.endDate.toISOString().split('T')[0] : String(round.endDate)) : null,
-        createdAt: round.createdAt instanceof Date ? round.createdAt.toISOString() : round.createdAt,
-        updatedAt: round.updatedAt instanceof Date ? round.updatedAt.toISOString() : round.updatedAt,
-      }));
+      const serializedRounds = rounds.map(round => {
+        const startDate = round.startDate as any;
+        const endDate = round.endDate as any;
+        const createdAt = round.createdAt as any;
+        const updatedAt = round.updatedAt as any;
+        
+        return {
+          ...round,
+          startDate: startDate instanceof Date 
+            ? startDate.toISOString() 
+            : (startDate ? new Date(startDate).toISOString() : null),
+          endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
+          createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
+          updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
+        };
+      });
       
       res.json(serializedRounds);
     } catch (error) {
@@ -2051,12 +2058,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updated = await storage.updateCounselingRound(id, updates);
+      
+      // Serialize dates properly in response
+      const startDate = updated.startDate as any;
+      const endDate = updated.endDate as any;
+      const createdAt = updated.createdAt as any;
+      const updatedAt = updated.updatedAt as any;
+      
+      const serializedRound = {
+        ...updated,
+        startDate: startDate instanceof Date 
+          ? startDate.toISOString() 
+          : (startDate ? new Date(startDate).toISOString() : null),
+        endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
+        createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
+        updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
+      };
 
       await auditService.log(req.session.userId, 'counseling_round_updated', 'counseling_round', id, {
         updates,
       }, req.ip, req.get('User-Agent'));
 
-      res.json(updated);
+      res.json(serializedRound);
     } catch (error) {
       console.error("Update counseling round error:", error);
       res.status(500).json({ message: "Failed to update counseling round" });
