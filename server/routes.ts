@@ -1930,7 +1930,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const academicYear = req.query.academicYear as string | undefined;
       const rounds = await storage.getCounselingRounds(academicYear);
-      res.json(rounds);
+      
+      // Serialize dates properly to ensure they're valid ISO strings
+      const serializedRounds = rounds.map(round => ({
+        ...round,
+        startDate: round.startDate instanceof Date 
+          ? round.startDate.toISOString() 
+          : (round.startDate ? new Date(round.startDate).toISOString() : null),
+        endDate: round.endDate ? (round.endDate instanceof Date ? round.endDate.toISOString().split('T')[0] : String(round.endDate)) : null,
+        createdAt: round.createdAt instanceof Date ? round.createdAt.toISOString() : round.createdAt,
+        updatedAt: round.updatedAt instanceof Date ? round.updatedAt.toISOString() : round.updatedAt,
+      }));
+      
+      res.json(serializedRounds);
     } catch (error) {
       console.error("Get counseling rounds error:", error);
       res.status(500).json({ message: "Failed to fetch counseling rounds" });
