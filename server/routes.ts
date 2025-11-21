@@ -1824,15 +1824,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Parse endDate if provided
-      let endDateObj: Date | undefined = undefined;
+      // Parse endDate if provided (convert to date string format YYYY-MM-DD)
+      let endDateStr: string | undefined = undefined;
       if (endDate && endDate.trim() !== '') {
-        endDateObj = new Date(endDate);
+        const endDateObj = new Date(endDate);
         if (isNaN(endDateObj.getTime())) {
           return res.status(400).json({ 
             message: `Invalid end date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-30T18:00)` 
           });
         }
+        // Convert Date to date string (YYYY-MM-DD) for the date column
+        endDateStr = endDateObj.toISOString().split('T')[0];
       }
 
       // Round number will be auto-incremented by storage.createCounselingRound
@@ -1843,7 +1845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         roundNumber: 0, // Will be auto-incremented
         roundName, // Required field
         startDate: startDateObj, // Store as timestamp
-        endDate: endDateObj, // Optional - can be set later
+        endDate: endDateStr, // Optional - date string format YYYY-MM-DD
         isActive: false,
         isCompleted: false,
       });
@@ -2079,13 +2081,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm`);
         }
         
-        // Parse endDate if provided
-        let endDateObj: Date | undefined = undefined;
+        // Parse endDate if provided (convert to date string format YYYY-MM-DD)
+        let endDateStr: string | undefined = undefined;
         if (round.endDate && round.endDate.trim() !== '') {
-          endDateObj = new Date(round.endDate);
+          const endDateObj = new Date(round.endDate);
           if (isNaN(endDateObj.getTime())) {
             throw new Error(`Invalid end date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm`);
           }
+          // Convert Date to date string (YYYY-MM-DD) for the date column
+          endDateStr = endDateObj.toISOString().split('T')[0];
         }
         
         return {
@@ -2093,7 +2097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           roundNumber: 0, // Will be auto-incremented
           roundName: round.roundName,
           startDate: startDateObj, // Store as timestamp
-          endDate: endDateObj, // Optional - can be set later
+          endDate: endDateStr, // Optional - date string format YYYY-MM-DD
           isActive: false,
           isCompleted: false,
         };
