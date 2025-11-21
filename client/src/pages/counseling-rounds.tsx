@@ -349,16 +349,33 @@ export default function CounselingRounds() {
   };
 
   const handleEdit = (round: CounselingRound) => {
+    // Check if startDate exists and is valid
+    if (!round.startDate || round.startDate === 'null' || round.startDate === null) {
+      console.error('No startDate in round:', round);
+      toast({
+        title: "Error",
+        description: "This round has no start date. Please delete and recreate it with a valid date.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Convert startDate to datetime-local format
     // Handle invalid dates that might default to 1970
     const startDate = new Date(round.startDate);
     
     // Check if date is valid (not 1970 epoch)
     if (isNaN(startDate.getTime()) || startDate.getFullYear() < 2000) {
-      console.error('Invalid date received:', round.startDate, 'Parsed as:', startDate);
+      console.error('Invalid date received:', {
+        roundId: round.id,
+        startDate: round.startDate,
+        parsed: startDate.toISOString(),
+        timestamp: startDate.getTime(),
+        year: startDate.getFullYear()
+      });
       toast({
         title: "Error",
-        description: "Invalid date detected. Please contact support.",
+        description: `Invalid date detected (${round.startDate}). Please delete this round and recreate it with a valid date.`,
         variant: "destructive",
       });
       return;
