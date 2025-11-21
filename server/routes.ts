@@ -1946,33 +1946,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const createdAt = round.createdAt as any;
         const updatedAt = round.updatedAt as any;
         
-        // Handle startDate - if null, log warning but return null
+        // Handle startDate - Drizzle may return Date objects or strings
         let serializedStartDate: string | null = null;
-        if (startDate) {
+        if (startDate != null) {
           try {
             if (startDate instanceof Date) {
               serializedStartDate = startDate.toISOString();
-            } else {
+            } else if (typeof startDate === 'string') {
+              // If it's already a string, check if it's valid
               const dateObj = new Date(startDate);
               if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
                 serializedStartDate = dateObj.toISOString();
               } else {
-                console.warn('⚠️ Invalid startDate in database:', { roundId: round.id, startDate });
+                console.warn('⚠️ Invalid startDate string:', { roundId: round.id, startDate });
+              }
+            } else {
+              // Try to convert to Date
+              const dateObj = new Date(startDate);
+              if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
+                serializedStartDate = dateObj.toISOString();
+              } else {
+                console.warn('⚠️ Could not parse startDate:', { roundId: round.id, startDate, type: typeof startDate });
               }
             }
           } catch (error) {
-            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, error });
+            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate, error });
           }
-        } else {
-          console.warn('⚠️ Null startDate in database for round:', round.id);
         }
         
         return {
           ...round,
           startDate: serializedStartDate,
           endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
-          createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
-          updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
+          createdAt: createdAt instanceof Date ? createdAt.toISOString() : (createdAt || null),
+          updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : (updatedAt || null),
         };
       });
       
