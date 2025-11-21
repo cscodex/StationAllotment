@@ -384,13 +384,28 @@ export class DatabaseStorage implements IStorage {
 
   // Counseling round operations
   async getCounselingRounds(academicYear?: string): Promise<CounselingRound[]> {
+    let rounds: CounselingRound[];
     if (academicYear) {
-      return db.select().from(counselingRounds)
+      rounds = await db.select().from(counselingRounds)
         .where(eq(counselingRounds.academicYear, academicYear))
         .orderBy(asc(counselingRounds.roundName), asc(counselingRounds.roundNumber));
+    } else {
+      rounds = await db.select().from(counselingRounds)
+        .orderBy(desc(counselingRounds.academicYear), asc(counselingRounds.roundName), asc(counselingRounds.roundNumber));
     }
-    return db.select().from(counselingRounds)
-      .orderBy(desc(counselingRounds.academicYear), asc(counselingRounds.roundName), asc(counselingRounds.roundNumber));
+    
+    // Debug: Log what Drizzle returns
+    if (rounds.length > 0) {
+      console.log('🔍 Drizzle returned rounds:', rounds.map(r => ({
+        id: r.id,
+        startDate: r.startDate,
+        startDateType: typeof r.startDate,
+        startDateIsDate: r.startDate instanceof Date,
+        startDateValue: r.startDate instanceof Date ? r.startDate.toISOString() : String(r.startDate)
+      })));
+    }
+    
+    return rounds;
   }
 
   async getCounselingRound(id: string): Promise<CounselingRound | undefined> {
