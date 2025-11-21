@@ -435,10 +435,31 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // Debug logging
+    console.log('💾 Storing counseling round:', {
+      academicYear: round.academicYear,
+      roundName: round.roundName,
+      startDate: round.startDate,
+      startDateType: typeof round.startDate,
+      startDateValue: round.startDate instanceof Date ? round.startDate.toISOString() : round.startDate,
+      endDate: round.endDate,
+      endDateType: typeof round.endDate
+    });
+    
     const [created] = await db
       .insert(counselingRounds)
       .values({ ...round, roundNumber: finalRoundNumber, updatedAt: new Date() })
       .returning();
+    
+    // Debug logging after creation
+    console.log('✅ Created counseling round:', {
+      id: created.id,
+      startDate: created.startDate,
+      startDateType: typeof created.startDate,
+      startDateValue: created.startDate instanceof Date ? created.startDate.toISOString() : String(created.startDate),
+      endDate: created.endDate
+    });
+    
     return created;
   }
 

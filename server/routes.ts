@@ -1774,6 +1774,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { academicYear, roundName, startDate, endDate } = req.body;
       
+      // Debug logging
+      console.log('📅 Received date data:', {
+        startDate,
+        endDate,
+        startDateType: typeof startDate,
+        startDateLength: startDate?.length,
+        rawBody: JSON.stringify(req.body)
+      });
+      
       if (!academicYear || !roundName || !startDate) {
         return res.status(400).json({ message: "Missing required fields: academicYear, roundName, startDate" });
       }
@@ -1802,10 +1811,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Start date is required" });
       }
       
-      const startDateObj = new Date(startDate);
-      if (isNaN(startDateObj.getTime())) {
+      // Validate date string format first
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(startDate)) {
         return res.status(400).json({ 
-          message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00)` 
+          message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${startDate}` 
+        });
+      }
+      
+      // Parse date - datetime-local sends dates without timezone, so we need to treat it as local time
+      // Create date by parsing the string and ensuring it's treated as local time
+      const [datePart, timePart] = startDate.split('T');
+      if (!datePart || !timePart) {
+        return res.status(400).json({ 
+          message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm. Received: ${startDate}` 
+        });
+      }
+      
+      // Parse as local date/time (datetime-local input doesn't include timezone)
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hours, minutes] = timePart.split(':').map(Number);
+      
+      // Create date in local timezone
+      const startDateObj = new Date(year, month - 1, day, hours, minutes);
+      const timestamp = startDateObj.getTime();
+      
+      // Debug logging
+      console.log('📅 Parsed date:', {
+        original: startDate,
+        datePart,
+        timePart,
+        year, month, day, hours, minutes,
+        parsed: startDateObj.toISOString(),
+        localString: startDateObj.toString(),
+        timestamp,
+        yearCheck: startDateObj.getFullYear(),
+        isValid: !isNaN(timestamp),
+        isAfter2000: startDateObj.getFullYear() >= 2000
+      });
+      
+      if (isNaN(timestamp) || startDateObj.getFullYear() < 2000) {
+        console.error('❌ Invalid date detected:', {
+          startDate,
+          parsed: startDateObj.toISOString(),
+          timestamp,
+          year: startDateObj.getFullYear()
+        });
+        return res.status(400).json({ 
+          message: `Invalid start date. Please provide a valid date after year 2000. Received: ${startDate}, Parsed: ${startDateObj.toISOString()}` 
         });
       }
       
@@ -2054,10 +2106,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        const startDateObj = new Date(round.startDate);
-        if (isNaN(startDateObj.getTime())) {
+        // Validate date string format first
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(round.startDate)) {
           return res.status(400).json({ 
-            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00)` 
+            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${round.startDate}` 
+          });
+        }
+        
+        // Parse date - datetime-local sends dates without timezone, treat as local time
+        const [datePart, timePart] = round.startDate.split('T');
+        if (!datePart || !timePart) {
+          return res.status(400).json({ 
+            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm. Received: ${round.startDate}` 
+          });
+        }
+        
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        const startDateObj = new Date(year, month - 1, day, hours, minutes);
+        
+        if (isNaN(startDateObj.getTime()) || startDateObj.getFullYear() < 2000) {
+          return res.status(400).json({ 
+            message: `Invalid start date for round "${round.roundName}". Please provide a valid date after year 2000. Received: ${round.startDate}` 
           });
         }
         
@@ -2076,9 +2146,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error(`Start date is required for round "${round.roundName}"`);
         }
         
-        const startDateObj = new Date(round.startDate);
-        if (isNaN(startDateObj.getTime())) {
-          throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm`);
+        // Validate date string format first
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(round.startDate)) {
+          throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${round.startDate}`);
+        }
+        
+        // Parse date - datetime-local sends dates without timezone, treat as local time
+        const [datePart, timePart] = round.startDate.split('T');
+        if (!datePart || !timePart) {
+          throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm. Received: ${round.startDate}`);
+        }
+        
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        const startDateObj = new Date(year, month - 1, day, hours, minutes);
+        
+        if (isNaN(startDateObj.getTime()) || startDateObj.getFullYear() < 2000) {
+          throw new Error(`Invalid start date for round "${round.roundName}". Please provide a valid date after year 2000. Received: ${round.startDate}`);
         }
         
         // Parse endDate if provided (convert to date string format YYYY-MM-DD)
