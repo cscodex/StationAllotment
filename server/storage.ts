@@ -624,9 +624,9 @@ export class DatabaseStorage implements IStorage {
     // Get all vacancies for this academic year and round name
     const allVacancies = await this.getVacancies(academicYear, roundName);
     
+    // If no vacancies exist, allow creating rounds (vacancies can be uploaded later)
     if (allVacancies.length === 0) {
-      // No vacancies means seats are "filled" (nothing to fill)
-      return true;
+      return false;
     }
     
     // Check if any vacancy has available seats
