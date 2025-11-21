@@ -350,7 +350,20 @@ export default function CounselingRounds() {
 
   const handleEdit = (round: CounselingRound) => {
     // Convert startDate to datetime-local format
+    // Handle invalid dates that might default to 1970
     const startDate = new Date(round.startDate);
+    
+    // Check if date is valid (not 1970 epoch)
+    if (isNaN(startDate.getTime()) || startDate.getFullYear() < 2000) {
+      console.error('Invalid date received:', round.startDate, 'Parsed as:', startDate);
+      toast({
+        title: "Error",
+        description: "Invalid date detected. Please contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     const year = startDate.getFullYear();
     const month = String(startDate.getMonth() + 1).padStart(2, '0');
     const day = String(startDate.getDate()).padStart(2, '0');

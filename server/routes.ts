@@ -1972,10 +1972,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Start date cannot be empty" });
         }
         
-        const startDateObj = new Date(updates.startDate);
-        if (isNaN(startDateObj.getTime())) {
+        // Debug logging
+        console.log('📅 Update - Received date:', {
+          startDate: updates.startDate,
+          startDateType: typeof updates.startDate,
+          startDateLength: updates.startDate?.length
+        });
+        
+        // Validate date string format first
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(updates.startDate)) {
           return res.status(400).json({ 
-            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00)` 
+            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${updates.startDate}` 
+          });
+        }
+        
+        // Parse date - datetime-local sends dates without timezone, treat as local time
+        const [datePart, timePart] = updates.startDate.split('T');
+        if (!datePart || !timePart) {
+          return res.status(400).json({ 
+            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm. Received: ${updates.startDate}` 
+          });
+        }
+        
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        const startDateObj = new Date(year, month - 1, day, hours, minutes);
+        
+        // Debug logging
+        console.log('📅 Update - Parsed date:', {
+          original: updates.startDate,
+          datePart,
+          timePart,
+          year, month, day, hours, minutes,
+          parsed: startDateObj.toISOString(),
+          localString: startDateObj.toString(),
+          timestamp: startDateObj.getTime(),
+          yearCheck: startDateObj.getFullYear()
+        });
+        
+        if (isNaN(startDateObj.getTime()) || startDateObj.getFullYear() < 2000) {
+          console.error('❌ Update - Invalid date detected:', {
+            startDate: updates.startDate,
+            parsed: startDateObj.toISOString(),
+            timestamp: startDateObj.getTime(),
+            year: startDateObj.getFullYear()
+          });
+          return res.status(400).json({ 
+            message: `Invalid start date. Please provide a valid date after year 2000. Received: ${updates.startDate}` 
           });
         }
         
