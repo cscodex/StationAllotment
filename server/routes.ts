@@ -1889,6 +1889,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         endDateStr = endDateObj.toISOString().split('T')[0];
       }
 
+      // Final validation - ensure startDateObj is valid before storing
+      if (!startDateObj || isNaN(startDateObj.getTime())) {
+        console.error('❌ Attempted to create round with invalid startDate:', startDateObj);
+        return res.status(400).json({ 
+          message: "Invalid start date. Cannot create round with null or invalid date." 
+        });
+      }
+      
       // Round number will be auto-incremented by storage.createCounselingRound
       // startDate is now a timestamp (datetime)
       // endDate is optional - can be set later when round is completed
@@ -1896,7 +1904,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         academicYear,
         roundNumber: 0, // Will be auto-incremented
         roundName, // Required field
-        startDate: startDateObj, // Store as timestamp
+        startDate: startDateObj, // Store as timestamp - MUST be valid Date object
         endDate: endDateStr, // Optional - date string format YYYY-MM-DD
         isActive: false,
         isCompleted: false,
@@ -1938,11 +1946,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const createdAt = round.createdAt as any;
         const updatedAt = round.updatedAt as any;
         
+        // Handle startDate - if null, log warning but return null
+        let serializedStartDate: string | null = null;
+        if (startDate) {
+          try {
+            if (startDate instanceof Date) {
+              serializedStartDate = startDate.toISOString();
+            } else {
+              const dateObj = new Date(startDate);
+              if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
+                serializedStartDate = dateObj.toISOString();
+              } else {
+                console.warn('⚠️ Invalid startDate in database:', { roundId: round.id, startDate });
+              }
+            }
+          } catch (error) {
+            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, error });
+          }
+        } else {
+          console.warn('⚠️ Null startDate in database for round:', round.id);
+        }
+        
         return {
           ...round,
-          startDate: startDate instanceof Date 
-            ? startDate.toISOString() 
-            : (startDate ? new Date(startDate).toISOString() : null),
+          startDate: serializedStartDate,
           endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
           createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
           updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
