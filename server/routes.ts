@@ -1945,8 +1945,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const academicYear = req.query.academicYear as string | undefined;
       console.log('📋 Fetching counseling rounds for academic year:', academicYear);
-      const rounds = await storage.getCounselingRounds(academicYear);
-      console.log(`📋 Found ${rounds.length} rounds from database`);
+      
+      let rounds;
+      try {
+        rounds = await storage.getCounselingRounds(academicYear);
+        console.log(`📋 Found ${rounds.length} rounds from database`);
+      } catch (dbError) {
+        console.error('❌ Error fetching rounds from database:', dbError);
+        throw dbError;
+      }
+      
+      // Helper function to safely serialize a date
+      const safeSerializeDate = (date: any, fieldName: string): string | null => {
+        if (date == null || date === 'null' || date === '' || date === undefined) {
+          return null;
+        }
+        
+        try {
+          let dateObj: Date | null = null;
+          
+          if (date instanceof Date) {
+            const timeValue = date.getTime();
+            if (!isNaN(timeValue)) {
+              dateObj = date;
+            }
+          } else if (typeof date === 'string') {
+            const trimmed = date.trim();
+            if (trimmed && trimmed.length > 0) {
+              const parsed = new Date(trimmed);
+              if (!isNaN(parsed.getTime())) {
+                dateObj = parsed;
+              }
+            }
+          } else if (typeof date === 'number' && date > 0 && date < Number.MAX_SAFE_INTEGER) {
+            const parsed = new Date(date);
+            if (!isNaN(parsed.getTime())) {
+              dateObj = parsed;
+            }
+          }
+          
+          if (dateObj && !isNaN(dateObj.getTime())) {
+            try {
+              return dateObj.toISOString();
+            } catch (isoError) {
+              console.warn(`⚠️ Error calling toISOString() on ${fieldName}:`, isoError);
+              return String(date);
+            }
+          }
+          
+          return String(date);
+    } catch (error) {
+          console.error(`❌ Error serializing ${fieldName}:`, error);
+          return String(date);
+        }
+      };
+      
+      // Helper function to safely serialize a date as date-only (YYYY-MM-DD)
+      const safeSerializeDateOnly = (date: any, fieldName: string): string | null => {
+        const iso = safeSerializeDate(date, fieldName);
+        if (iso) {
+          return iso.split('T')[0];
+        }
+        return null;
+      };
       
       // Serialize dates properly to ensure they're valid ISO strings
       // Wrap in try-catch to ensure rounds are returned even if date serialization fails
@@ -1975,178 +2036,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updatedAtType: typeof updatedAt
           });
           
-          // Handle startDate - Drizzle may return Date objects or strings
-          // Always try to serialize the date, even if it seems null/undefined
-          let serializedStartDate: string | null = null;
+          // Use helper functions to safely serialize all dates
+          const serializedStartDate = safeSerializeDate(startDate, 'startDate');
+          const serializedEndDate = safeSerializeDateOnly(endDate, 'endDate');
+          const serializedCreatedAt = safeSerializeDate(createdAt, 'createdAt');
+          const serializedUpdatedAt = safeSerializeDate(updatedAt, 'updatedAt');
           
-          console.log(`  Processing startDate:`, { value: startDate, type: typeof startDate, isDate: startDate instanceof Date });
-          
-          // Check if startDate exists in any form
-          if (startDate != null && startDate !== 'null' && startDate !== '' && startDate !== undefined) {
-            try {
-              let dateObj: Date | null = null;
-              
-              if (startDate instanceof Date) {
-                console.log(`    startDate is Date object`);
-                // Already a Date object - validate it
-                const timeValue = startDate.getTime();
-                if (!isNaN(timeValue)) {
-                  dateObj = startDate;
-                  try {
-                    console.log(`    Valid Date object: ${dateObj.toISOString()}`);
-                  } catch (e) {
-                    console.log(`    Valid Date object (toISOString failed):`, dateObj);
-                  }
-                } else {
-                  console.warn(`    Invalid Date object (NaN):`, startDate);
-                }
-              } else if (typeof startDate === 'string') {
-                console.log(`    startDate is string: "${startDate}"`);
-                // Validate string is not empty and looks like a date
-                const trimmed = startDate.trim();
-                if (trimmed && trimmed.length > 0) {
-                  try {
-                    const parsed = new Date(trimmed);
-                    const timeValue = parsed.getTime();
-                    if (!isNaN(timeValue)) {
-                      dateObj = parsed;
-                      try {
-                        console.log(`    Parsed string to valid Date: ${dateObj.toISOString()}`);
-                      } catch (e) {
-                        console.log(`    Parsed string to valid Date (toISOString failed):`, dateObj);
-                      }
-                    } else {
-                      console.warn(`    Parsed string to invalid Date (NaN):`, trimmed);
-                    }
-                  } catch (parseError) {
-                    console.error(`    Error parsing string to Date:`, parseError);
-                  }
-                } else {
-                  console.warn(`    Empty or whitespace-only string`);
-                }
-              } else if (typeof startDate === 'number') {
-                console.log(`    startDate is number: ${startDate}`);
-                // Might be a timestamp - validate it's reasonable
-                if (startDate > 0 && startDate < Number.MAX_SAFE_INTEGER) {
-                  try {
-                    const parsed = new Date(startDate);
-                    const timeValue = parsed.getTime();
-                    if (!isNaN(timeValue)) {
-                      dateObj = parsed;
-                      try {
-                        console.log(`    Parsed number to valid Date: ${dateObj.toISOString()}`);
-                      } catch (e) {
-                        console.log(`    Parsed number to valid Date (toISOString failed):`, dateObj);
-                      }
-                    } else {
-                      console.warn(`    Parsed number to invalid Date (NaN):`, startDate);
-                    }
-                  } catch (parseError) {
-                    console.error(`    Error parsing number to Date:`, parseError);
-                  }
-                } else {
-                  console.warn(`    Invalid number range:`, startDate);
-                }
-              } else {
-                console.warn(`    Unknown startDate type:`, typeof startDate, startDate);
-              }
-              
-              // Only serialize if we have a valid date object
-              if (dateObj && !isNaN(dateObj.getTime())) {
-                try {
-                  serializedStartDate = dateObj.toISOString();
-                  console.log(`    ✅ Serialized startDate: ${serializedStartDate}`);
-                } catch (isoError) {
-                  console.error('    ❌ Error converting date to ISO:', isoError);
-                }
-              } else {
-                console.warn(`    ⚠️ No valid date object created for startDate`);
-              }
-            } catch (error) {
-              console.error('    ❌ Exception during startDate serialization:', error);
-            }
-          } else {
-            console.warn(`  ⚠️ startDate is null/empty/undefined`);
-          }
-          
-          // Safely serialize endDate
-          let serializedEndDate: string | null = null;
-          if (endDate != null && endDate !== 'null' && endDate !== '' && endDate !== undefined) {
-            try {
-              if (endDate instanceof Date) {
-                const timeValue = endDate.getTime();
-                if (!isNaN(timeValue)) {
-                  serializedEndDate = endDate.toISOString().split('T')[0];
-                }
-              } else if (typeof endDate === 'string' && endDate.trim().length > 0) {
-                const parsed = new Date(endDate);
-                if (!isNaN(parsed.getTime())) {
-                  serializedEndDate = parsed.toISOString().split('T')[0];
-                } else {
-                  serializedEndDate = String(endDate);
-                }
-              } else {
-                serializedEndDate = String(endDate);
-              }
-            } catch (e) {
-              console.error(`    ❌ Error serializing endDate:`, e);
-              serializedEndDate = String(endDate);
-            }
-          }
-          
-          // Safely serialize createdAt
-          let serializedCreatedAt: string | null = null;
-          if (createdAt != null) {
-            try {
-              if (createdAt instanceof Date) {
-                const timeValue = createdAt.getTime();
-                if (!isNaN(timeValue)) {
-                  serializedCreatedAt = createdAt.toISOString();
-                } else {
-                  serializedCreatedAt = String(createdAt);
-                }
-              } else if (typeof createdAt === 'string') {
-                const parsed = new Date(createdAt);
-                if (!isNaN(parsed.getTime())) {
-                  serializedCreatedAt = parsed.toISOString();
-                } else {
-                  serializedCreatedAt = String(createdAt);
-                }
-              } else {
-                serializedCreatedAt = String(createdAt);
-              }
-            } catch (e) {
-              console.error(`    ❌ Error serializing createdAt:`, e);
-              serializedCreatedAt = String(createdAt);
-            }
-          }
-          
-          // Safely serialize updatedAt
-          let serializedUpdatedAt: string | null = null;
-          if (updatedAt != null) {
-            try {
-              if (updatedAt instanceof Date) {
-                const timeValue = updatedAt.getTime();
-                if (!isNaN(timeValue)) {
-                  serializedUpdatedAt = updatedAt.toISOString();
-                } else {
-                  serializedUpdatedAt = String(updatedAt);
-                }
-              } else if (typeof updatedAt === 'string') {
-                const parsed = new Date(updatedAt);
-                if (!isNaN(parsed.getTime())) {
-                  serializedUpdatedAt = parsed.toISOString();
-                } else {
-                  serializedUpdatedAt = String(updatedAt);
-                }
-              } else {
-                serializedUpdatedAt = String(updatedAt);
-              }
-            } catch (e) {
-              console.error(`    ❌ Error serializing updatedAt:`, e);
-              serializedUpdatedAt = String(updatedAt);
-            }
-          }
+          console.log(`  Serialized dates:`, {
+            startDate: serializedStartDate,
+            endDate: serializedEndDate,
+            createdAt: serializedCreatedAt,
+            updatedAt: serializedUpdatedAt
+          });
           
           const result = {
             ...round,
