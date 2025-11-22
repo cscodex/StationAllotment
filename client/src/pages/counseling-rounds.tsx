@@ -491,8 +491,18 @@ export default function CounselingRounds() {
                             {round.roundNumber}
                           </TableCell>
                           <TableCell>
-                            {round.startDate ? (
-                              format(new Date(round.startDate), "MMM dd, yyyy HH:mm")
+                            {round.startDate && round.startDate !== 'null' ? (
+                              (() => {
+                                try {
+                                  const date = new Date(round.startDate);
+                                  if (!isNaN(date.getTime())) {
+                                    return format(date, "MMM dd, yyyy HH:mm");
+                                  }
+                                } catch (e) {
+                                  console.error('Error formatting date:', round.startDate, e);
+                                }
+                                return <span className="text-muted-foreground italic">Invalid date</span>;
+                              })()
                             ) : (
                               <span className="text-muted-foreground italic">No date set</span>
                             )}

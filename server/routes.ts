@@ -1949,26 +1949,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updatedAt = round.updatedAt as any;
         
         // Handle startDate - Drizzle may return Date objects or strings
+        // Always try to serialize the date, even if it seems null/undefined
         let serializedStartDate: string | null = null;
-        if (startDate != null && startDate !== 'null' && startDate !== '') {
+        
+        // Check if startDate exists in any form
+        if (startDate != null && startDate !== 'null' && startDate !== '' && startDate !== undefined) {
           try {
             let dateObj: Date;
             if (startDate instanceof Date) {
               dateObj = startDate;
+            } else if (typeof startDate === 'string') {
+              // Try parsing as ISO string or other formats
+              dateObj = new Date(startDate);
+            } else if (typeof startDate === 'number') {
+              // Might be a timestamp
+              dateObj = new Date(startDate);
             } else {
+              // Try to convert anyway
               dateObj = new Date(startDate as any);
             }
             
-            if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
+            // Check if date is valid
+            if (!isNaN(dateObj.getTime())) {
+              // Accept any valid date, not just after 2000 (for debugging)
               serializedStartDate = dateObj.toISOString();
             } else {
-              // Invalid date - log but don't fail
               console.warn('⚠️ Invalid startDate for round:', { roundId: round.id, startDate, type: typeof startDate });
             }
           } catch (error) {
-            // Error parsing - log but don't fail, return null
-            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate });
+            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate, error });
           }
+        } else {
+          // Log when startDate is actually null/empty
+          console.warn('⚠️ startDate is null/empty for round:', { roundId: round.id, startDate, type: typeof startDate });
         }
         
         return {
