@@ -1942,62 +1942,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`📋 Found ${rounds.length} rounds from database`);
       
       // Serialize dates properly to ensure they're valid ISO strings
+      // Wrap in try-catch to ensure rounds are returned even if date serialization fails
       const serializedRounds = rounds.map(round => {
-        const startDate = round.startDate as any;
-        const endDate = round.endDate as any;
-        const createdAt = round.createdAt as any;
-        const updatedAt = round.updatedAt as any;
-        
-        // Handle startDate - Drizzle may return Date objects or strings
-        // Always try to serialize the date, even if it seems null/undefined
-        let serializedStartDate: string | null = null;
-        
-        // Check if startDate exists in any form
-        if (startDate != null && startDate !== 'null' && startDate !== '' && startDate !== undefined) {
-          try {
-            let dateObj: Date;
-            if (startDate instanceof Date) {
-              dateObj = startDate;
-            } else if (typeof startDate === 'string') {
-              // Try parsing as ISO string or other formats
-              dateObj = new Date(startDate);
-            } else if (typeof startDate === 'number') {
-              // Might be a timestamp
-              dateObj = new Date(startDate);
-            } else {
-              // Try to convert anyway
-              dateObj = new Date(startDate as any);
+        try {
+          const startDate = round.startDate as any;
+          const endDate = round.endDate as any;
+          const createdAt = round.createdAt as any;
+          const updatedAt = round.updatedAt as any;
+          
+          // Handle startDate - Drizzle may return Date objects or strings
+          // Always try to serialize the date, even if it seems null/undefined
+          let serializedStartDate: string | null = null;
+          
+          // Check if startDate exists in any form
+          if (startDate != null && startDate !== 'null' && startDate !== '' && startDate !== undefined) {
+            try {
+              let dateObj: Date;
+              if (startDate instanceof Date) {
+                dateObj = startDate;
+              } else if (typeof startDate === 'string') {
+                // Try parsing as ISO string or other formats
+                dateObj = new Date(startDate);
+              } else if (typeof startDate === 'number') {
+                // Might be a timestamp
+                dateObj = new Date(startDate);
+              } else {
+                // Try to convert anyway
+                dateObj = new Date(startDate as any);
+              }
+              
+              // Check if date is valid
+              if (!isNaN(dateObj.getTime())) {
+                // Accept any valid date, not just after 2000 (for debugging)
+                serializedStartDate = dateObj.toISOString();
+              } else {
+                console.warn('⚠️ Invalid startDate for round:', { roundId: round.id, startDate, type: typeof startDate });
+              }
+            } catch (error) {
+              console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate, error });
             }
-            
-            // Check if date is valid
-            if (!isNaN(dateObj.getTime())) {
-              // Accept any valid date, not just after 2000 (for debugging)
-              serializedStartDate = dateObj.toISOString();
-            } else {
-              console.warn('⚠️ Invalid startDate for round:', { roundId: round.id, startDate, type: typeof startDate });
-            }
-          } catch (error) {
-            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate, error });
+          } else {
+            // Log when startDate is actually null/empty
+            console.warn('⚠️ startDate is null/empty for round:', { roundId: round.id, startDate, type: typeof startDate });
           }
-        } else {
-          // Log when startDate is actually null/empty
-          console.warn('⚠️ startDate is null/empty for round:', { roundId: round.id, startDate, type: typeof startDate });
+          
+          return {
+            ...round,
+            startDate: serializedStartDate,
+            endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
+            createdAt: createdAt instanceof Date ? createdAt.toISOString() : (createdAt || null),
+            updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : (updatedAt || null),
+          };
+        } catch (error) {
+          console.error('❌ Error serializing round:', { roundId: round.id, error });
+          // Return round with original dates if serialization fails
+          return {
+            ...round,
+            startDate: round.startDate ? String(round.startDate) : null,
+            endDate: round.endDate ? String(round.endDate) : null,
+            createdAt: round.createdAt ? String(round.createdAt) : null,
+            updatedAt: round.updatedAt ? String(round.updatedAt) : null,
+          };
         }
-        
-        return {
-          ...round,
-          startDate: serializedStartDate,
-          endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
-          createdAt: createdAt instanceof Date ? createdAt.toISOString() : (createdAt || null),
-          updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : (updatedAt || null),
-        };
       });
       
       console.log(`✅ Serialized ${serializedRounds.length} rounds, sending to client`);
       res.json(serializedRounds);
     } catch (error) {
-      console.error("Get counseling rounds error:", error);
-      res.status(500).json({ message: "Failed to fetch counseling rounds" });
+      console.error("❌ Get counseling rounds error:", error);
+      if (error instanceof Error) {
+        console.error("Error details:", error.message, error.stack);
+      }
+      res.status(500).json({ 
+        message: "Failed to fetch counseling rounds", 
+        error: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 

@@ -97,7 +97,7 @@ export default function CounselingRounds() {
   }, [roundRows.length, form]);
 
   // Fetch counseling rounds
-  const { data: rounds, isLoading, refetch } = useQuery<CounselingRound[]>({
+  const { data: rounds, isLoading, error, refetch } = useQuery<CounselingRound[]>({
     queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }],
     queryFn: async ({ queryKey }) => {
       if (!selectedAcademicYear) return [];
@@ -106,7 +106,15 @@ export default function CounselingRounds() {
       if (!res.ok) {
         const errorText = await res.text();
         console.error("Failed to fetch rounds:", res.status, errorText);
-        throw new Error(`Failed to fetch: ${res.statusText}`);
+        let errorMessage = `Failed to fetch: ${res.statusText}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch (e) {
+          // If parsing fails, use the text as is
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
       const data = await res.json();
       console.log(`Fetched ${data.length} rounds for ${selectedAcademicYear}:`, data);
@@ -115,6 +123,7 @@ export default function CounselingRounds() {
     enabled: !!selectedAcademicYear,
     staleTime: 0,
     refetchOnWindowFocus: true,
+    retry: 1,
   });
 
   // Bulk create rounds mutation
@@ -470,6 +479,14 @@ export default function CounselingRounds() {
               <CardContent>
                 {isLoading ? (
                   <p className="text-muted-foreground">Loading...</p>
+                ) : error ? (
+                  <div className="text-red-600 p-4 border border-red-300 rounded bg-red-50">
+                    <p className="font-semibold mb-2">Error loading rounds:</p>
+                    <p className="text-sm mb-3">{error instanceof Error ? error.message : String(error)}</p>
+                    <Button onClick={() => refetch()} className="mt-2" size="sm" variant="outline">
+                      Retry
+                    </Button>
+                  </div>
                 ) : rounds && rounds.length > 0 ? (
                   <Table>
                     <TableHeader>
