@@ -1957,24 +1957,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Check if startDate exists in any form
           if (startDate != null && startDate !== 'null' && startDate !== '' && startDate !== undefined) {
             try {
-              let dateObj: Date;
+              let dateObj: Date | null = null;
+              
               if (startDate instanceof Date) {
-                dateObj = startDate;
+                // Already a Date object
+                if (!isNaN(startDate.getTime())) {
+                  dateObj = startDate;
+                }
               } else if (typeof startDate === 'string') {
-                // Try parsing as ISO string or other formats
-                dateObj = new Date(startDate);
+                // Validate string is not empty and looks like a date
+                const trimmed = startDate.trim();
+                if (trimmed && trimmed.length > 0) {
+                  const parsed = new Date(trimmed);
+                  if (!isNaN(parsed.getTime())) {
+                    dateObj = parsed;
+                  }
+                }
               } else if (typeof startDate === 'number') {
-                // Might be a timestamp
-                dateObj = new Date(startDate);
-              } else {
-                // Try to convert anyway
-                dateObj = new Date(startDate as any);
+                // Might be a timestamp - validate it's reasonable
+                if (startDate > 0 && startDate < Number.MAX_SAFE_INTEGER) {
+                  const parsed = new Date(startDate);
+                  if (!isNaN(parsed.getTime())) {
+                    dateObj = parsed;
+                  }
+                }
               }
               
-              // Check if date is valid
-              if (!isNaN(dateObj.getTime())) {
-                // Accept any valid date, not just after 2000 (for debugging)
-                serializedStartDate = dateObj.toISOString();
+              // Only serialize if we have a valid date object
+              if (dateObj && !isNaN(dateObj.getTime())) {
+                try {
+                  serializedStartDate = dateObj.toISOString();
+                } catch (isoError) {
+                  console.warn('⚠️ Error converting date to ISO:', { roundId: round.id, startDate, error: isoError });
+                }
               } else {
                 console.warn('⚠️ Invalid startDate for round:', { roundId: round.id, startDate, type: typeof startDate });
               }
@@ -1986,12 +2001,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.warn('⚠️ startDate is null/empty for round:', { roundId: round.id, startDate, type: typeof startDate });
           }
           
+          // Safely serialize endDate
+          let serializedEndDate: string | null = null;
+          if (endDate != null && endDate !== 'null' && endDate !== '' && endDate !== undefined) {
+            try {
+              if (endDate instanceof Date && !isNaN(endDate.getTime())) {
+                serializedEndDate = endDate.toISOString().split('T')[0];
+              } else if (typeof endDate === 'string' && endDate.trim().length > 0) {
+                const parsed = new Date(endDate);
+                if (!isNaN(parsed.getTime())) {
+                  serializedEndDate = parsed.toISOString().split('T')[0];
+                } else {
+                  serializedEndDate = String(endDate);
+                }
+              } else {
+                serializedEndDate = String(endDate);
+              }
+            } catch (e) {
+              serializedEndDate = String(endDate);
+            }
+          }
+          
+          // Safely serialize createdAt
+          let serializedCreatedAt: string | null = null;
+          if (createdAt != null) {
+            try {
+              if (createdAt instanceof Date && !isNaN(createdAt.getTime())) {
+                serializedCreatedAt = createdAt.toISOString();
+              } else if (typeof createdAt === 'string') {
+                const parsed = new Date(createdAt);
+                if (!isNaN(parsed.getTime())) {
+                  serializedCreatedAt = parsed.toISOString();
+                } else {
+                  serializedCreatedAt = String(createdAt);
+                }
+              } else {
+                serializedCreatedAt = String(createdAt);
+              }
+            } catch (e) {
+              serializedCreatedAt = String(createdAt);
+            }
+          }
+          
+          // Safely serialize updatedAt
+          let serializedUpdatedAt: string | null = null;
+          if (updatedAt != null) {
+            try {
+              if (updatedAt instanceof Date && !isNaN(updatedAt.getTime())) {
+                serializedUpdatedAt = updatedAt.toISOString();
+              } else if (typeof updatedAt === 'string') {
+                const parsed = new Date(updatedAt);
+                if (!isNaN(parsed.getTime())) {
+                  serializedUpdatedAt = parsed.toISOString();
+                } else {
+                  serializedUpdatedAt = String(updatedAt);
+                }
+              } else {
+                serializedUpdatedAt = String(updatedAt);
+              }
+            } catch (e) {
+              serializedUpdatedAt = String(updatedAt);
+            }
+          }
+          
           return {
             ...round,
             startDate: serializedStartDate,
-            endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
-            createdAt: createdAt instanceof Date ? createdAt.toISOString() : (createdAt || null),
-            updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : (updatedAt || null),
+            endDate: serializedEndDate,
+            createdAt: serializedCreatedAt,
+            updatedAt: serializedUpdatedAt,
           };
         } catch (error) {
           console.error('❌ Error serializing round:', { roundId: round.id, error });
