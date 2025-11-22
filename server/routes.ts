@@ -1937,7 +1937,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/counseling-rounds', isAuthenticated, async (req: any, res) => {
     try {
       const academicYear = req.query.academicYear as string | undefined;
+      console.log('📋 Fetching counseling rounds for academic year:', academicYear);
       const rounds = await storage.getCounselingRounds(academicYear);
+      console.log(`📋 Found ${rounds.length} rounds from database`);
       
       // Serialize dates properly to ensure they're valid ISO strings
       const serializedRounds = rounds.map(round => {
@@ -2002,6 +2004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
       
+      console.log(`✅ Serialized ${serializedRounds.length} rounds, sending to client`);
       res.json(serializedRounds);
     } catch (error) {
       console.error("Get counseling rounds error:", error);
