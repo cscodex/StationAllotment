@@ -396,13 +396,30 @@ export class DatabaseStorage implements IStorage {
     
     // Debug: Log what Drizzle returns
     if (rounds.length > 0) {
-      console.log('🔍 Drizzle returned rounds:', rounds.map(r => ({
-        id: r.id,
-        startDate: r.startDate,
-        startDateType: typeof r.startDate,
-        startDateIsDate: r.startDate instanceof Date,
-        startDateValue: r.startDate instanceof Date ? r.startDate.toISOString() : String(r.startDate)
-      })));
+      console.log('🔍 Drizzle returned rounds:', rounds.map(r => {
+        let startDateValue: string;
+        try {
+          if (r.startDate instanceof Date) {
+            if (!isNaN(r.startDate.getTime())) {
+              startDateValue = r.startDate.toISOString();
+            } else {
+              startDateValue = 'Invalid Date (NaN)';
+            }
+          } else {
+            startDateValue = String(r.startDate);
+          }
+        } catch (e) {
+          startDateValue = `Error: ${String(e)}`;
+        }
+        
+        return {
+          id: r.id,
+          startDate: r.startDate,
+          startDateType: typeof r.startDate,
+          startDateIsDate: r.startDate instanceof Date,
+          startDateValue: startDateValue
+        };
+      }));
     }
     
     return rounds;
