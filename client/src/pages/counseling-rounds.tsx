@@ -491,7 +491,11 @@ export default function CounselingRounds() {
                             {round.roundNumber}
                           </TableCell>
                           <TableCell>
-                            {format(new Date(round.startDate), "MMM dd, yyyy HH:mm")}
+                            {round.startDate ? (
+                              format(new Date(round.startDate), "MMM dd, yyyy HH:mm")
+                            ) : (
+                              <span className="text-muted-foreground italic">No date set</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {round.isCompleted ? (
