@@ -1985,7 +1985,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const timeValue = startDate.getTime();
                 if (!isNaN(timeValue)) {
                   dateObj = startDate;
-                  console.log(`    Valid Date object: ${dateObj.toISOString()}`);
+                  try {
+                    console.log(`    Valid Date object: ${dateObj.toISOString()}`);
+                  } catch (e) {
+                    console.log(`    Valid Date object (toISOString failed):`, dateObj);
+                  }
                 } else {
                   console.warn(`    Invalid Date object (NaN):`, startDate);
                 }
@@ -1999,7 +2003,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const timeValue = parsed.getTime();
                     if (!isNaN(timeValue)) {
                       dateObj = parsed;
-                      console.log(`    Parsed string to valid Date: ${dateObj.toISOString()}`);
+                      try {
+                        console.log(`    Parsed string to valid Date: ${dateObj.toISOString()}`);
+                      } catch (e) {
+                        console.log(`    Parsed string to valid Date (toISOString failed):`, dateObj);
+                      }
                     } else {
                       console.warn(`    Parsed string to invalid Date (NaN):`, trimmed);
                     }
@@ -2018,7 +2026,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const timeValue = parsed.getTime();
                     if (!isNaN(timeValue)) {
                       dateObj = parsed;
-                      console.log(`    Parsed number to valid Date: ${dateObj.toISOString()}`);
+                      try {
+                        console.log(`    Parsed number to valid Date: ${dateObj.toISOString()}`);
+                      } catch (e) {
+                        console.log(`    Parsed number to valid Date (toISOString failed):`, dateObj);
+                      }
                     } else {
                       console.warn(`    Parsed number to invalid Date (NaN):`, startDate);
                     }
