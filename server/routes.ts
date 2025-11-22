@@ -2332,12 +2332,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Safely serialize endDate
+      let serializedEndDate: string | null = null;
+      if (endDate) {
+        try {
+          if (endDate instanceof Date && !isNaN(endDate.getTime())) {
+            serializedEndDate = endDate.toISOString().split('T')[0];
+          } else {
+            serializedEndDate = String(endDate);
+          }
+        } catch (e) {
+          serializedEndDate = String(endDate);
+        }
+      }
+      
+      // Safely serialize createdAt
+      let serializedCreatedAt: string | null = null;
+      if (createdAt) {
+        try {
+          if (createdAt instanceof Date && !isNaN(createdAt.getTime())) {
+            serializedCreatedAt = createdAt.toISOString();
+          } else if (typeof createdAt === 'string') {
+            serializedCreatedAt = createdAt;
+          } else {
+            serializedCreatedAt = String(createdAt);
+          }
+        } catch (e) {
+          serializedCreatedAt = String(createdAt);
+        }
+      }
+      
+      // Safely serialize updatedAt
+      let serializedUpdatedAt: string | null = null;
+      if (updatedAt) {
+        try {
+          if (updatedAt instanceof Date && !isNaN(updatedAt.getTime())) {
+            serializedUpdatedAt = updatedAt.toISOString();
+          } else if (typeof updatedAt === 'string') {
+            serializedUpdatedAt = updatedAt;
+          } else {
+            serializedUpdatedAt = String(updatedAt);
+          }
+        } catch (e) {
+          serializedUpdatedAt = String(updatedAt);
+        }
+      }
+      
       const serializedRound = {
         ...updated,
         startDate: serializedStartDate,
-        endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
-        createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
-        updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
+        endDate: serializedEndDate,
+        createdAt: serializedCreatedAt,
+        updatedAt: serializedUpdatedAt,
       };
 
       await auditService.log(req.session.userId, 'counseling_round_updated', 'counseling_round', id, {
