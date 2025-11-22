@@ -1949,51 +1949,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updatedAt = round.updatedAt as any;
         
         // Handle startDate - Drizzle may return Date objects or strings
-        // Log what we're receiving for debugging
-        console.log('🔍 Serializing startDate:', { 
-          roundId: round.id, 
-          startDate, 
-          type: typeof startDate, 
-          isDate: startDate instanceof Date,
-          isString: typeof startDate === 'string',
-          value: startDate
-        });
-        
         let serializedStartDate: string | null = null;
         if (startDate != null && startDate !== 'null' && startDate !== '') {
           try {
+            let dateObj: Date;
             if (startDate instanceof Date) {
-              if (!isNaN(startDate.getTime()) && startDate.getFullYear() >= 2000) {
-                serializedStartDate = startDate.toISOString();
-              } else {
-                console.warn('⚠️ Invalid Date object:', { roundId: round.id, startDate: startDate.toISOString() });
-              }
-            } else if (typeof startDate === 'string') {
-              // If it's already a string, check if it's valid
-              // Handle case where it might be a valid ISO string or timestamp
-              const dateObj = new Date(startDate);
-              if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
-                serializedStartDate = dateObj.toISOString();
-              } else {
-                console.warn('⚠️ Invalid startDate string:', { roundId: round.id, startDate, parsed: dateObj.toISOString() });
-              }
+              dateObj = startDate;
             } else {
-              // Try to convert to Date (might be a number timestamp or other type)
-              const dateObj = new Date(startDate as any);
-              if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
-                serializedStartDate = dateObj.toISOString();
-              } else {
-                console.warn('⚠️ Could not parse startDate:', { roundId: round.id, startDate, type: typeof startDate, parsed: dateObj.toISOString() });
-              }
+              dateObj = new Date(startDate as any);
+            }
+            
+            if (!isNaN(dateObj.getTime()) && dateObj.getFullYear() >= 2000) {
+              serializedStartDate = dateObj.toISOString();
+            } else {
+              // Invalid date - log but don't fail
+              console.warn('⚠️ Invalid startDate for round:', { roundId: round.id, startDate, type: typeof startDate });
             }
           } catch (error) {
-            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate, error });
+            // Error parsing - log but don't fail, return null
+            console.error('❌ Error serializing startDate:', { roundId: round.id, startDate, type: typeof startDate });
           }
-        } else {
-          console.warn('⚠️ Null or empty startDate for round:', { roundId: round.id, startDate, type: typeof startDate });
         }
-        
-        console.log('✅ Serialized startDate:', { roundId: round.id, serializedStartDate });
         
         return {
           ...round,
