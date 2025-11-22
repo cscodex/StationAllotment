@@ -1835,13 +1835,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDateObj = new Date(year, month - 1, day, hours, minutes);
       const timestamp = startDateObj.getTime();
       
-      // Debug logging
+      // Debug logging - safely get ISO string
+      let parsedISO: string;
+      try {
+        parsedISO = !isNaN(timestamp) ? startDateObj.toISOString() : 'Invalid Date';
+      } catch (e) {
+        parsedISO = 'Invalid Date';
+      }
+      
       console.log('📅 Parsed date:', {
         original: startDate,
         datePart,
         timePart,
         year, month, day, hours, minutes,
-        parsed: startDateObj.toISOString(),
+        parsed: parsedISO,
         localString: startDateObj.toString(),
         timestamp,
         yearCheck: startDateObj.getFullYear(),
@@ -1852,12 +1859,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(timestamp) || startDateObj.getFullYear() < 2000) {
         console.error('❌ Invalid date detected:', {
           startDate,
-          parsed: startDateObj.toISOString(),
+          parsed: parsedISO,
           timestamp,
           year: startDateObj.getFullYear()
         });
         return res.status(400).json({ 
-          message: `Invalid start date. Please provide a valid date after year 2000. Received: ${startDate}, Parsed: ${startDateObj.toISOString()}` 
+          message: `Invalid start date. Please provide a valid date after year 2000. Received: ${startDate}, Parsed: ${parsedISO}` 
         });
       }
       
@@ -2246,23 +2253,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const [hours, minutes] = timePart.split(':').map(Number);
         const startDateObj = new Date(year, month - 1, day, hours, minutes);
         
-        // Debug logging
+        // Debug logging - safely get ISO string
+        const updateTimestamp = startDateObj.getTime();
+        let updateParsedISO: string;
+        try {
+          updateParsedISO = !isNaN(updateTimestamp) ? startDateObj.toISOString() : 'Invalid Date';
+        } catch (e) {
+          updateParsedISO = 'Invalid Date';
+        }
+        
         console.log('📅 Update - Parsed date:', {
           original: updates.startDate,
           datePart,
           timePart,
           year, month, day, hours, minutes,
-          parsed: startDateObj.toISOString(),
+          parsed: updateParsedISO,
           localString: startDateObj.toString(),
-          timestamp: startDateObj.getTime(),
+          timestamp: updateTimestamp,
           yearCheck: startDateObj.getFullYear()
         });
         
-        if (isNaN(startDateObj.getTime()) || startDateObj.getFullYear() < 2000) {
+        if (isNaN(updateTimestamp) || startDateObj.getFullYear() < 2000) {
           console.error('❌ Update - Invalid date detected:', {
             startDate: updates.startDate,
-            parsed: startDateObj.toISOString(),
-            timestamp: startDateObj.getTime(),
+            parsed: updateParsedISO,
+            timestamp: updateTimestamp,
             year: startDateObj.getFullYear()
           });
           return res.status(400).json({ 
@@ -2294,11 +2309,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const createdAt = updated.createdAt as any;
       const updatedAt = updated.updatedAt as any;
       
+      // Safely serialize startDate
+      let serializedStartDate: string | null = null;
+      if (startDate instanceof Date) {
+        try {
+          if (!isNaN(startDate.getTime())) {
+            serializedStartDate = startDate.toISOString();
+          }
+        } catch (e) {
+          serializedStartDate = String(startDate);
+        }
+      } else if (startDate) {
+        try {
+          const parsed = new Date(startDate);
+          if (!isNaN(parsed.getTime())) {
+            serializedStartDate = parsed.toISOString();
+          } else {
+            serializedStartDate = String(startDate);
+          }
+        } catch (e) {
+          serializedStartDate = String(startDate);
+        }
+      }
+      
       const serializedRound = {
         ...updated,
-        startDate: startDate instanceof Date 
-          ? startDate.toISOString() 
-          : (startDate ? new Date(startDate).toISOString() : null),
+        startDate: serializedStartDate,
         endDate: endDate ? (endDate instanceof Date ? endDate.toISOString().split('T')[0] : String(endDate)) : null,
         createdAt: createdAt instanceof Date ? createdAt.toISOString() : createdAt,
         updatedAt: updatedAt instanceof Date ? updatedAt.toISOString() : updatedAt,
