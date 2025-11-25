@@ -361,6 +361,70 @@ export default function FileUploadSection() {
     },
   });
 
+  const downloadEntranceResultsTestDataMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/files/test-data/entrance-results', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to download test data');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'entrance_results_test_data.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Test data downloaded",
+        description: "Entrance results test data has been downloaded successfully. You can now upload this file to test the system.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const downloadStudentChoicesTestDataMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/files/test-data/student-choices', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to download test data');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'student_choices_test_data.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Test data downloaded",
+        description: "Student choices test data has been downloaded successfully. You can now upload this file to test the system.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -544,6 +608,16 @@ export default function FileUploadSection() {
                 <Download className="w-4 h-4 mr-2" />
                 {downloadEntranceResultsTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
               </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => downloadEntranceResultsTestDataMutation.mutate()}
+                disabled={downloadEntranceResultsTestDataMutation.isPending}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadEntranceResultsTestDataMutation.isPending ? 'Downloading...' : 'Download Test Data'}
+              </Button>
             </div>
           </div>
           <div 
@@ -604,6 +678,16 @@ export default function FileUploadSection() {
               >
                 <Download className="w-4 h-4 mr-2" />
                 {downloadStudentChoicesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => downloadStudentChoicesTestDataMutation.mutate()}
+                disabled={downloadStudentChoicesTestDataMutation.isPending}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadStudentChoicesTestDataMutation.isPending ? 'Downloading...' : 'Download Test Data'}
               </Button>
             </div>
           </div>
@@ -940,7 +1024,7 @@ export default function FileUploadSection() {
                   <TableCell className="font-medium">Gender</TableCell>
                   <TableCell>String</TableCell>
                   <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be: Male, Female, or Other</TableCell>
+                  <TableCell>Must be: Male or Female</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Category</TableCell>
@@ -991,7 +1075,7 @@ export default function FileUploadSection() {
                   <TableCell className="font-medium">Gender</TableCell>
                   <TableCell>String</TableCell>
                   <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be: Male, Female, or Other</TableCell>
+                  <TableCell>Must be: Male or Female</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Category</TableCell>
@@ -1054,7 +1138,7 @@ export default function FileUploadSection() {
                   <TableCell className="font-medium">Gender</TableCell>
                   <TableCell>String</TableCell>
                   <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be: Male, Female, or Other</TableCell>
+                  <TableCell>Must be: Male or Female</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Category</TableCell>

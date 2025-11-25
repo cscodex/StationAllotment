@@ -445,14 +445,12 @@ export class FileService {
     ];
 
     const streams = ['Medical', 'Commerce', 'NonMedical'];
-    const genders = ['Male', 'Female', 'Other'];
+    const genders = ['Male', 'Female'];
     
     // Male categories
     const maleCategories = ['Open', 'Disabled', 'Private'];
     // Female categories
     const femaleCategories = ['Open', 'WHH', 'Disabled', 'Private'];
-    // Other gender categories (same as male)
-    const otherCategories = ['Open', 'Disabled', 'Private'];
 
     const rows: string[][] = [];
     let udiseCounter = 31010000001; // Starting UDISE code
@@ -465,8 +463,7 @@ export class FileService {
         const streamUdise = baseUdise + (streamIndex * 100);
         
         genders.forEach((gender) => {
-          const categories = gender === 'Female' ? femaleCategories : 
-                           gender === 'Other' ? otherCategories : maleCategories;
+          const categories = gender === 'Female' ? femaleCategories : maleCategories;
           
           categories.forEach((category, categoryIndex) => {
             const udiseCode = String(streamUdise + categoryIndex);
@@ -494,6 +491,159 @@ export class FileService {
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  generateEntranceResultsTestData(): string {
+    const headers = [
+      'Merit No',
+      'Application No', 
+      'Roll No',
+      'Student Name',
+      'Marks',
+      'Gender',
+      'Category',
+      'Stream'
+    ];
+
+    const rows: string[][] = [];
+    const streams = ['Medical', 'Commerce', 'NonMedical'];
+    const genders = ['Male', 'Female'];
+    const maleCategories = ['Open', 'Disabled', 'Private'];
+    const femaleCategories = ['Open', 'WHH', 'Disabled', 'Private'];
+    
+    let meritNo = 1;
+    const firstNames = ['Aman', 'Priya', 'Rahul', 'Kavita', 'Sandeep', 'Neha', 'Vikram', 'Anjali', 'Rohit', 'Pooja'];
+    const lastNames = ['Singh', 'Kaur', 'Sharma', 'Kumar', 'Verma', 'Gupta', 'Malhotra', 'Chopra', 'Bedi', 'Sood'];
+    
+    // Generate 100 sample records
+    for (let i = 0; i < 100; i++) {
+      const stream = streams[i % streams.length];
+      const gender = genders[i % genders.length];
+      const categories = gender === 'Female' ? femaleCategories : maleCategories;
+      const category = categories[i % categories.length];
+      
+      const firstName = firstNames[i % firstNames.length];
+      const lastName = lastNames[Math.floor(i / 10) % lastNames.length];
+      const studentName = `${firstName} ${lastName}`;
+      
+      // Generate marks between 400-500
+      const marks = 400 + (i % 100);
+      
+      // Generate application number
+      const appNo = `APP2024${String(meritNo).padStart(4, '0')}`;
+      
+      // Generate roll number
+      const rollNo = `ROLL${String(meritNo).padStart(4, '0')}`;
+      
+      rows.push([
+        String(meritNo),
+        appNo,
+        rollNo,
+        studentName,
+        String(marks),
+        gender,
+        category,
+        stream
+      ]);
+      
+      meritNo++;
+    }
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  generateStudentChoicesTestData(): string {
+    const headers = [
+      'App No',
+      'Merit Number',
+      'Name',
+      'Gender',
+      'Category',
+      'Stream',
+      'Choice 1',
+      'Choice 2',
+      'Choice 3',
+      'Choice 4',
+      'Choice 5',
+      'Choice 6',
+      'Choice 7',
+      'Choice 8',
+      'Choice 9',
+      'Choice 10'
+    ];
+
+    const rows: string[][] = [];
+    const streams = ['Medical', 'Commerce', 'NonMedical'];
+    const genders = ['Male', 'Female'];
+    const maleCategories = ['Open', 'Disabled', 'Private'];
+    const femaleCategories = ['Open', 'WHH', 'Disabled', 'Private'];
+    const districts = [
+      'Amritsar', 'Barnala', 'Bathinda', 'Faridkot', 'Fatehgarh Sahib',
+      'Fazilka', 'Ferozepur', 'Gurdaspur', 'Hoshiarpur', 'Jalandhar',
+      'Kapurthala', 'Ludhiana', 'Mansa', 'Moga', 'Muktsar',
+      'Nawanshahr', 'Pathankot', 'Patiala', 'Rupnagar', 'SAS Nagar',
+      'Sangrur', 'Tarn Taran', 'Talwara'
+    ];
+    
+    const firstNames = ['Aman', 'Priya', 'Rahul', 'Kavita', 'Sandeep', 'Neha', 'Vikram', 'Anjali', 'Rohit', 'Pooja'];
+    const lastNames = ['Singh', 'Kaur', 'Sharma', 'Kumar', 'Verma', 'Gupta', 'Malhotra', 'Chopra', 'Bedi', 'Sood'];
+    
+    let meritNo = 1;
+    
+    // Generate 100 sample records
+    for (let i = 0; i < 100; i++) {
+      const stream = streams[i % streams.length];
+      const gender = genders[i % genders.length];
+      const categories = gender === 'Female' ? femaleCategories : maleCategories;
+      const category = categories[i % categories.length];
+      
+      const firstName = firstNames[i % firstNames.length];
+      const lastName = lastNames[Math.floor(i / 10) % lastNames.length];
+      const studentName = `${firstName} ${lastName}`;
+      
+      // Generate application number
+      const appNo = `APP2024${String(meritNo).padStart(4, '0')}`;
+      
+      // Generate choices (3-10 choices per student)
+      const numChoices = 3 + (i % 8); // 3 to 10 choices
+      const choices: string[] = [];
+      
+      // Shuffle districts for variety
+      const shuffledDistricts = [...districts].sort(() => Math.random() - 0.5);
+      
+      for (let j = 0; j < numChoices; j++) {
+        choices.push(shuffledDistricts[j % shuffledDistricts.length]);
+      }
+      
+      // Pad remaining choices with empty strings
+      while (choices.length < 10) {
+        choices.push('');
+      }
+      
+      rows.push([
+        appNo,
+        String(meritNo),
+        studentName,
+        gender,
+        category,
+        stream,
+        ...choices
+      ]);
+      
+      meritNo++;
+    }
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => cell ? `"${cell}"` : '').join(','))
     ].join('\n');
 
     return csvContent;
@@ -662,8 +812,8 @@ export class FileService {
         errors.push(`Row ${row}: Invalid stream. Must be one of: ${STREAMS.join(', ')}`);
       }
 
-      if (!vacancy.gender || !['Male', 'Female', 'Other'].includes(vacancy.gender)) {
-        errors.push(`Row ${row}: Invalid gender. Must be one of: Male, Female, Other`);
+      if (!vacancy.gender || !['Male', 'Female'].includes(vacancy.gender)) {
+        errors.push(`Row ${row}: Invalid gender. Must be one of: Male, Female`);
       }
 
       if (!vacancy.category || !['Open', 'WHH', 'Disabled', 'Private'].includes(vacancy.category)) {

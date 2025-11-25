@@ -717,16 +717,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const { academicYear, counselingRoundId } = req.body;
+      const { academicYear, counselingRoundId, roundName } = req.body;
       if (!academicYear) {
         return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      // If roundName is provided but counselingRoundId is not, find the round
+      let resolvedCounselingRoundId = counselingRoundId;
+      if (!resolvedCounselingRoundId && roundName) {
+        const rounds = await storage.getCounselingRounds(academicYear);
+        // Find active round for this roundName, or first round if no active round
+        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive) 
+          || rounds.find(r => r.roundName === roundName);
+        if (matchingRound) {
+          resolvedCounselingRoundId = matchingRound.id;
+        }
       }
 
       const result = await fileService.processStudentFile(
         req.file, 
         req.session.userId, 
         academicYear,
-        counselingRoundId || undefined
+        resolvedCounselingRoundId || undefined
       );
       
       await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
@@ -750,16 +762,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const { academicYear, counselingRoundId } = req.body;
+      const { academicYear, counselingRoundId, roundName } = req.body;
       if (!academicYear) {
         return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      // If roundName is provided but counselingRoundId is not, find the round
+      let resolvedCounselingRoundId = counselingRoundId;
+      if (!resolvedCounselingRoundId && roundName) {
+        const rounds = await storage.getCounselingRounds(academicYear);
+        // Find active round for this roundName, or first round if no active round
+        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive) 
+          || rounds.find(r => r.roundName === roundName);
+        if (matchingRound) {
+          resolvedCounselingRoundId = matchingRound.id;
+        }
       }
 
       const result = await fileService.processVacancyFile(
         req.file, 
         req.session.userId, 
         academicYear,
-        counselingRoundId || undefined
+        resolvedCounselingRoundId || undefined
       );
       
       await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
@@ -783,16 +807,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const { academicYear, counselingRoundId } = req.body;
+      const { academicYear, counselingRoundId, roundName } = req.body;
       if (!academicYear) {
         return res.status(400).json({ message: "Missing required field: academicYear" });
+      }
+
+      // If roundName is provided but counselingRoundId is not, find the round
+      let resolvedCounselingRoundId = counselingRoundId;
+      if (!resolvedCounselingRoundId && roundName) {
+        const rounds = await storage.getCounselingRounds(academicYear);
+        // Find active round for this roundName, or first round if no active round
+        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive) 
+          || rounds.find(r => r.roundName === roundName);
+        if (matchingRound) {
+          resolvedCounselingRoundId = matchingRound.id;
+        }
       }
 
       const result = await fileService.processEntranceResultsFile(
         req.file, 
         req.session.userId, 
         academicYear,
-        counselingRoundId || undefined
+        resolvedCounselingRoundId || undefined
       );
       
       await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
@@ -874,6 +910,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(csvContent);
     } catch (error) {
       console.error("Download vacancies test data error:", error);
+      res.status(500).json({ message: "Failed to download test data" });
+    }
+  });
+
+  app.get('/api/files/test-data/entrance-results', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvContent = fileService.generateEntranceResultsTestData();
+      
+      await auditService.log(req.user.id, 'test_data_download', 'files', 'entrance_results_test_data', {
+        type: 'entrance_results',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=entrance_results_test_data.csv');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Download entrance results test data error:", error);
+      res.status(500).json({ message: "Failed to download test data" });
+    }
+  });
+
+  app.get('/api/files/test-data/student-choices', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvContent = fileService.generateStudentChoicesTestData();
+      
+      await auditService.log(req.user.id, 'test_data_download', 'files', 'student_choices_test_data', {
+        type: 'student_choices',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=student_choices_test_data.csv');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Download student choices test data error:", error);
       res.status(500).json({ message: "Failed to download test data" });
     }
   });

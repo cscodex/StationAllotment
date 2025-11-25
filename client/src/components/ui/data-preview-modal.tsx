@@ -92,6 +92,7 @@ export function DataPreviewModal({
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b bg-muted/50">
+            <th className="p-2 text-left font-medium">UDISE Code</th>
             <th className="p-2 text-left font-medium">District</th>
             <th className="p-2 text-left font-medium">Stream</th>
             <th className="p-2 text-left font-medium">Gender</th>
@@ -103,6 +104,7 @@ export function DataPreviewModal({
         <tbody>
           {records.map((record, index) => (
             <tr key={index} className="border-b hover:bg-muted/20">
+              <td className="p-2 font-mono text-xs">{record.udiseCode || '-'}</td>
               <td className="p-2 font-medium">{record.district || '-'}</td>
               <td className="p-2">
                 <Badge variant="outline">{record.stream || '-'}</Badge>
@@ -124,7 +126,7 @@ export function DataPreviewModal({
         <thead>
           <tr className="border-b bg-muted/50">
             <th className="p-2 text-left font-medium">Merit No</th>
-            <th className="p-2 text-left font-medium">App No</th>
+            <th className="p-2 text-left font-medium">Application No</th>
             <th className="p-2 text-left font-medium">Roll No</th>
             <th className="p-2 text-left font-medium">Student Name</th>
             <th className="p-2 text-center font-medium">Marks</th>
