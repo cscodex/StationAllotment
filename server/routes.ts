@@ -861,6 +861,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/files/test-data/vacancies', isCentralAdmin, async (req: any, res) => {
+    try {
+      const csvContent = fileService.generateVacanciesTestData();
+      
+      await auditService.log(req.user.id, 'test_data_download', 'files', 'vacancies_test_data', {
+        type: 'vacancies',
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=vacancies_test_data.csv');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Download vacancies test data error:", error);
+      res.status(500).json({ message: "Failed to download test data" });
+    }
+  });
+
   app.get('/api/files', isAuthenticated, async (req, res) => {
     try {
       const files = await storage.getFileUploads(50);
@@ -1770,21 +1787,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Counseling rounds routes
-  app.post('/api/counseling-rounds', isCentralAdmin, async (req: any, res) => {
+  // Create counseling title (auto-creates first round)
+  app.post('/api/counseling-titles', isCentralAdmin, async (req: any, res) => {
     try {
-      const { academicYear, roundName, startDate, endDate } = req.body;
+      const { academicYear, roundName } = req.body;
       
-      // Debug logging
-      console.log('📅 Received date data:', {
-        startDate,
-        endDate,
-        startDateType: typeof startDate,
-        startDateLength: startDate?.length,
-        rawBody: JSON.stringify(req.body)
-      });
-      
-      if (!academicYear || !roundName || !startDate) {
-        return res.status(400).json({ message: "Missing required fields: academicYear, roundName, startDate" });
+      if (!academicYear || !roundName) {
+        return res.status(400).json({ message: "Missing required fields: academicYear, roundName" });
       }
 
       // Validate academic year format
@@ -1797,133 +1806,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const currentSession = getCurrentSession();
         if (isPreviousSession(academicYear)) {
           return res.status(400).json({ 
-            message: `Cannot create counseling rounds for previous sessions. Current session is ${currentSession}.` 
+            message: `Cannot create counseling titles for previous sessions. Current session is ${currentSession}.` 
           });
         } else {
           return res.status(400).json({ 
-            message: `Cannot create counseling rounds for future sessions. Current session is ${currentSession}.` 
+            message: `Cannot create counseling titles for future sessions. Current session is ${currentSession}.` 
           });
         }
       }
 
-      // Validate and parse startDate
-      if (!startDate || startDate.trim() === '') {
-        return res.status(400).json({ message: "Start date is required" });
-      }
-      
-      // Validate date string format first
-      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(startDate)) {
+      // Check if counseling title already exists
+      const titleExists = await storage.counselingTitleExists(academicYear, roundName);
+      if (titleExists) {
         return res.status(400).json({ 
-          message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${startDate}` 
-        });
-      }
-      
-      // Parse date - datetime-local sends dates without timezone, so we need to treat it as local time
-      // Create date by parsing the string and ensuring it's treated as local time
-      const [datePart, timePart] = startDate.split('T');
-      if (!datePart || !timePart) {
-        return res.status(400).json({ 
-          message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm. Received: ${startDate}` 
-        });
-      }
-      
-      // Parse as local date/time (datetime-local input doesn't include timezone)
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hours, minutes] = timePart.split(':').map(Number);
-      
-      // Create date in local timezone
-      const startDateObj = new Date(year, month - 1, day, hours, minutes);
-      const timestamp = startDateObj.getTime();
-      
-      // Debug logging - safely get ISO string
-      let parsedISO: string;
-      try {
-        parsedISO = !isNaN(timestamp) ? startDateObj.toISOString() : 'Invalid Date';
-      } catch (e) {
-        parsedISO = 'Invalid Date';
-      }
-      
-      console.log('📅 Parsed date:', {
-        original: startDate,
-        datePart,
-        timePart,
-        year, month, day, hours, minutes,
-        parsed: parsedISO,
-        localString: startDateObj.toString(),
-        timestamp,
-        yearCheck: startDateObj.getFullYear(),
-        isValid: !isNaN(timestamp),
-        isAfter2000: startDateObj.getFullYear() >= 2000
-      });
-      
-      if (isNaN(timestamp) || startDateObj.getFullYear() < 2000) {
-        console.error('❌ Invalid date detected:', {
-          startDate,
-          parsed: parsedISO,
-          timestamp,
-          year: startDateObj.getFullYear()
-        });
-        return res.status(400).json({ 
-          message: `Invalid start date. Please provide a valid date after year 2000. Received: ${startDate}, Parsed: ${parsedISO}` 
-        });
-      }
-      
-      // Validate that startDate falls within the current session
-      if (!isDateInSession(startDateObj, academicYear)) {
-        return res.status(400).json({ 
-          message: `Start date must fall within the current session (${academicYear})` 
+          message: `Counseling title "${roundName}" already exists for ${academicYear}. Please use a different name or edit the existing title.` 
         });
       }
 
-      // Check if all seats are filled for this counseling title
-      const allSeatsFilled = await storage.checkIfAllSeatsFilled(academicYear, roundName);
-      if (allSeatsFilled) {
-        return res.status(400).json({ 
-          message: `Cannot create new rounds for "${roundName}". All seats are currently filled. Please wait for seats to become available or create a new counseling title.` 
-        });
-      }
-
-      // Parse endDate if provided (convert to date string format YYYY-MM-DD)
-      let endDateStr: string | undefined = undefined;
-      if (endDate && endDate.trim() !== '') {
-        const endDateObj = new Date(endDate);
-        if (isNaN(endDateObj.getTime())) {
-          return res.status(400).json({ 
-            message: `Invalid end date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-30T18:00)` 
-          });
+      // Check prerequisites before creating first round
+      const prerequisites = await storage.getPrerequisitesStatus(academicYear, roundName);
+      
+      if (!prerequisites.allPrerequisitesMet) {
+        const missingPrerequisites: string[] = [];
+        if (!prerequisites.hasVacancyData) {
+          missingPrerequisites.push(`Vacancy data (${prerequisites.totalAvailableSeats} available seats)`);
         }
-        // Convert Date to date string (YYYY-MM-DD) for the date column
-        endDateStr = endDateObj.toISOString().split('T')[0];
-      }
-
-      // Final validation - ensure startDateObj is valid before storing
-      if (!startDateObj || isNaN(startDateObj.getTime())) {
-        console.error('❌ Attempted to create round with invalid startDate:', startDateObj);
+        if (!prerequisites.hasEntranceResults) {
+          missingPrerequisites.push(`Entrance results (${prerequisites.entranceResultsCount} found)`);
+        }
+        if (!prerequisites.hasStudentChoices) {
+          missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students with choices)`);
+        }
+        
         return res.status(400).json({ 
-          message: "Invalid start date. Cannot create round with null or invalid date." 
+          message: `Cannot create counseling title. Prerequisites not met: ${missingPrerequisites.join(', ')}. Please upload the required data first.` 
         });
       }
 
-      // Round number will be auto-incremented by storage.createCounselingRound
-      // startDate is now a timestamp (datetime)
-      // endDate is optional - can be set later when round is completed
-      const round = await storage.createCounselingRound({
+      // Auto-create first round with default datetime (current time)
+      const defaultStartDate = new Date();
+      
+      const firstRound = await storage.createCounselingRound({
         academicYear,
-        roundNumber: 0, // Will be auto-incremented
-        roundName, // Required field
-        startDate: startDateObj, // Store as timestamp - MUST be valid Date object
-        endDate: endDateStr, // Optional - date string format YYYY-MM-DD
+        roundNumber: 1,
+        roundName,
+        startDate: defaultStartDate, // Default to current time, admin can edit later
+        endDate: undefined,
         isActive: false,
         isCompleted: false,
       });
 
-      await auditService.log(req.session.userId, 'counseling_round_created', 'counseling_round', round.id, {
+      await auditService.log(req.session.userId, 'counseling_title_created', 'counseling_round', firstRound.id, {
         academicYear,
-        roundNumber: round.roundNumber,
-        roundName: round.roundName,
+        roundName,
+        roundNumber: 1,
+        autoCreated: true,
       }, req.ip, req.get('User-Agent'));
 
-      res.json(round);
+      res.json({
+        title: roundName,
+        academicYear,
+        firstRound,
+        message: `Counseling title "${roundName}" created successfully. Round 1 has been auto-created with default start date/time. You can edit the start date/time if needed.`
+      });
     } catch (error) {
       console.error("Create counseling round error:", error);
       res.status(500).json({ message: "Failed to create counseling round" });
@@ -2193,6 +2138,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // Validate that startDate is not in the past
+        const now = new Date();
+        if (startDateObj < now) {
+          return res.status(400).json({ 
+            message: `Start date cannot be set to a past date. Current time: ${now.toLocaleString()}` 
+          });
+        }
+        
+        // If round is currently active and new startDate is in the future, deactivate it
+        if (round.isActive && !round.isCompleted && startDateObj > now) {
+          updates.isActive = false;
+          console.log(`🔄 Deactivating round ${round.id} because start date was moved to future: ${startDateObj.toISOString()}`);
+        }
+        
+        // Database column is TIMESTAMP type (datetime), so store as Date object
         updates.startDate = startDateObj;
       } else {
         // If not updating startDate, remove other fields that shouldn't be updated
@@ -2325,6 +2285,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Suspend/unsuspend subsequent rounds for a counseling title
+  app.post('/api/counseling-titles/:academicYear/:roundName/suspend', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { academicYear, roundName } = req.params;
+      const { suspend } = req.body; // boolean: true to suspend, false to unsuspend
+      
+      // Decode URL parameters
+      const decodedAcademicYear = decodeURIComponent(academicYear);
+      const decodedRoundName = decodeURIComponent(roundName);
+      
+      if (typeof suspend !== 'boolean') {
+        return res.status(400).json({ message: "suspend parameter must be a boolean (true/false)" });
+      }
+
+      const updated = await storage.toggleSuspendCounseling(decodedAcademicYear, decodedRoundName, suspend);
+
+      await auditService.log(req.session.userId, suspend ? 'counseling_suspended' : 'counseling_unsuspended', 'counseling_round', 'bulk', {
+        academicYear: decodedAcademicYear,
+        roundName: decodedRoundName,
+        suspend,
+        affectedRounds: updated.length,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({
+        success: true,
+        suspend,
+        message: suspend 
+          ? `Subsequent rounds for "${decodedRoundName}" have been suspended. No new rounds will be auto-created.`
+          : `Subsequent rounds for "${decodedRoundName}" have been unsuspended. New rounds will be auto-created when conditions are met.`,
+        affectedRounds: updated.length,
+      });
+    } catch (error: any) {
+      console.error("Suspend/unsuspend counseling error:", error);
+      res.status(500).json({ message: error.message || "Failed to suspend/unsuspend counseling" });
+    }
+  });
+
   app.post('/api/counseling-rounds/:id/complete', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
@@ -2341,7 +2338,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         roundNumber: round.roundNumber,
       }, req.ip, req.get('User-Agent'));
 
-      res.json(completed);
+      // Auto-create next round if seats are available and not suspended
+      const nextRound = await storage.autoCreateNextRound(
+        round.academicYear, 
+        round.roundName, 
+        new Date() // Default start date (current time, admin can edit)
+      );
+
+      if (nextRound) {
+        await auditService.log(req.session.userId, 'counseling_round_auto_created', 'counseling_round', nextRound.id, {
+          academicYear: round.academicYear,
+          roundName: round.roundName,
+          roundNumber: nextRound.roundNumber,
+          autoCreated: true,
+        }, req.ip, req.get('User-Agent'));
+      }
+
+      res.json({
+        completed,
+        nextRound: nextRound || null,
+        message: nextRound 
+          ? `Round ${round.roundNumber} completed. Round ${nextRound.roundNumber} has been auto-created.`
+          : `Round ${round.roundNumber} completed.${completed.isSuspended ? ' Next round creation is suspended.' : ' No next round created (no vacancies available or suspended).'}`
+      });
     } catch (error) {
       console.error("Complete counseling round error:", error);
       res.status(500).json({ message: "Failed to complete counseling round" });
@@ -2354,6 +2373,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!Array.isArray(rounds) || rounds.length === 0) {
         return res.status(400).json({ message: "rounds array is required and must not be empty" });
+      }
+
+      // Group rounds by counseling title (roundName) and academic year
+      const roundsByCounseling = new Map<string, typeof rounds>();
+      rounds.forEach((round) => {
+        if (!round.academicYear || !round.roundName) {
+          return res.status(400).json({ message: "All rounds must have academicYear and roundName" });
+        }
+        const key = `${round.academicYear}|${round.roundName}`;
+        if (!roundsByCounseling.has(key)) {
+          roundsByCounseling.set(key, []);
+        }
+        roundsByCounseling.get(key)!.push(round);
+      });
+
+      // Validate prerequisites and round order for each counseling title
+      for (const [key, counselingRounds] of Array.from(roundsByCounseling.entries())) {
+        const [academicYear, roundName] = key.split('|');
+        
+        // Get existing rounds for this counseling title
+        const existingRounds = await storage.getCounselingRounds(academicYear);
+        const sameCounselingRounds = existingRounds.filter(r => 
+          r.roundName === roundName && 
+          r.academicYear === academicYear
+        ).sort((a, b) => a.roundNumber - b.roundNumber);
+        
+        const nextRoundNumber = sameCounselingRounds.length > 0 
+          ? Math.max(...sameCounselingRounds.map(r => r.roundNumber)) + 1 
+          : 1;
+        
+        // For first round: Check prerequisites
+        if (nextRoundNumber === 1) {
+          const prerequisites = await storage.getPrerequisitesStatus(academicYear, roundName);
+          
+          if (!prerequisites.allPrerequisitesMet) {
+            const missingPrerequisites: string[] = [];
+            if (!prerequisites.hasVacancyData) {
+              missingPrerequisites.push(`Vacancy data (${prerequisites.totalAvailableSeats} available seats)`);
+            }
+            if (!prerequisites.hasEntranceResults) {
+              missingPrerequisites.push(`Entrance results (${prerequisites.entranceResultsCount} found)`);
+            }
+            if (!prerequisites.hasStudentChoices) {
+              missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students with choices)`);
+            }
+            
+            return res.status(400).json({ 
+              message: `Cannot create first round for "${roundName}". Prerequisites not met: ${missingPrerequisites.join(', ')}. Please upload the required data first.` 
+            });
+          }
+        } else {
+          // For subsequent rounds: Check previous round is completed AND vacancies exist
+          const previousRound = sameCounselingRounds.find(r => r.roundNumber === nextRoundNumber - 1);
+          
+          if (!previousRound) {
+            return res.status(400).json({ 
+              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". Previous round (Round ${nextRoundNumber - 1}) not found.` 
+            });
+          }
+          
+          if (!previousRound.isCompleted) {
+            return res.status(400).json({ 
+              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". Previous round (Round ${nextRoundNumber - 1}) must be completed first.` 
+            });
+          }
+          
+          // Check if vacancies exist
+          const vacancyAvailability = await storage.checkVacancyAvailability(academicYear, roundName);
+          
+          if (!vacancyAvailability.hasVacancies) {
+            return res.status(400).json({ 
+              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". All vacancies are filled (${vacancyAvailability.totalAvailableSeats} available seats). No more rounds can be created.` 
+            });
+          }
+        }
       }
 
       const currentSession = getCurrentSession();
@@ -2524,6 +2618,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get prerequisites status for a counseling round
+  app.get('/api/counseling-rounds/:id/prerequisites', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+
+      const prerequisites = await storage.getPrerequisitesStatus(round.academicYear, round.roundName);
+      
+      res.json(prerequisites);
+    } catch (error: any) {
+      console.error("Get prerequisites error:", error);
+      res.status(500).json({ message: error.message || "Failed to get prerequisites status" });
+    }
+  });
+
   app.post('/api/counseling-rounds/:id/run-allocation', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
@@ -2566,6 +2679,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: `Cannot run Round ${round.roundNumber} before Round ${i} is completed. Please complete Round ${i} first.` 
           });
         }
+      }
+
+      // Check prerequisites before allowing allocation
+      const prerequisites = await storage.getPrerequisitesStatus(round.academicYear, round.roundName);
+      
+      if (!prerequisites.allPrerequisitesMet) {
+        const missingPrerequisites: string[] = [];
+        if (!prerequisites.hasVacancyData) {
+          missingPrerequisites.push(`Vacancy data (${prerequisites.totalAvailableSeats} available seats)`);
+        }
+        if (!prerequisites.hasEntranceResults) {
+          missingPrerequisites.push(`Entrance results (${prerequisites.entranceResultsCount} found)`);
+        }
+        if (!prerequisites.hasStudentChoices) {
+          missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students with choices)`);
+        }
+        
+        return res.status(400).json({ 
+          message: `Cannot run allocation. Prerequisites not met: ${missingPrerequisites.join(', ')}. Please ensure all required data is uploaded.` 
+        });
       }
 
       // Create allocation service with audit logging

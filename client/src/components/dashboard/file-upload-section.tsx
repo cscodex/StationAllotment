@@ -6,11 +6,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { Upload, FileSpreadsheet, Check, Eye, X, Download, Calendar, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { DataPreviewModal } from "@/components/ui/data-preview-modal";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { Student, Vacancy } from "@shared/schema";
 
 interface CounselingRound {
@@ -26,9 +27,10 @@ export default function FileUploadSection() {
   const [isDragging, setIsDragging] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showValidationPreview, setShowValidationPreview] = useState(false);
+  const [showColumnRequirements, setShowColumnRequirements] = useState(false);
+  const [columnRequirementsType, setColumnRequirementsType] = useState<'entrance-results' | 'students' | 'vacancies' | null>(null);
   const [pendingFile, setPendingFile] = useState<{file: File, type: string, validationResults: any} | null>(null);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("");
-  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
   const [selectedCounselingTitle, setSelectedCounselingTitle] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -112,12 +114,13 @@ export default function FileUploadSection() {
       if (!selectedAcademicYear) {
         throw new Error("Please select an academic year");
       }
+      if (!selectedCounselingTitle) {
+        throw new Error("Please select a counseling title");
+      }
       const formData = new FormData();
       formData.append('file', file);
       formData.append('academicYear', selectedAcademicYear);
-      if (selectedRoundId) {
-        formData.append('counselingRoundId', selectedRoundId);
-      }
+      formData.append('roundName', selectedCounselingTitle);
       const response = await fetch('/api/files/upload/students', {
         method: 'POST',
         body: formData,
@@ -154,12 +157,13 @@ export default function FileUploadSection() {
       if (!selectedAcademicYear) {
         throw new Error("Please select an academic year");
       }
+      if (!selectedCounselingTitle) {
+        throw new Error("Please select a counseling title");
+      }
       const formData = new FormData();
       formData.append('file', file);
       formData.append('academicYear', selectedAcademicYear);
-      if (selectedRoundId) {
-        formData.append('counselingRoundId', selectedRoundId);
-      }
+      formData.append('roundName', selectedCounselingTitle);
       const response = await fetch('/api/files/upload/vacancies', {
         method: 'POST',
         body: formData,
@@ -194,12 +198,13 @@ export default function FileUploadSection() {
       if (!selectedAcademicYear) {
         throw new Error("Please select an academic year");
       }
+      if (!selectedCounselingTitle) {
+        throw new Error("Please select a counseling title");
+      }
       const formData = new FormData();
       formData.append('file', file);
       formData.append('academicYear', selectedAcademicYear);
-      if (selectedRoundId) {
-        formData.append('counselingRoundId', selectedRoundId);
-      }
+      formData.append('roundName', selectedCounselingTitle);
       const response = await fetch('/api/files/upload/entrance-results', {
         method: 'POST',
         body: formData,
@@ -324,6 +329,38 @@ export default function FileUploadSection() {
     },
   });
 
+  const downloadVacanciesTestDataMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/files/test-data/vacancies', {
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Failed to download test data');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'vacancies_test_data.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Test data downloaded",
+        description: "Vacancies test data has been downloaded successfully. You can now upload this file to test the system.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -429,7 +466,6 @@ export default function FileUploadSection() {
               value={selectedAcademicYear}
               onValueChange={(year) => {
                 setSelectedAcademicYear(year);
-                setSelectedRoundId(null);
                 setSelectedCounselingTitle(null);
               }}
               showLabel={false}
@@ -453,23 +489,18 @@ export default function FileUploadSection() {
           <div className="p-4 bg-muted rounded-lg">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Counseling Title (Optional)</Label>
+                <Label>Counseling Title <span className="text-red-500">*</span></Label>
                 <Select
                   value={selectedCounselingTitle || undefined}
                   onValueChange={(value) => {
-                    if (value === "none") {
-                      setSelectedCounselingTitle(null);
-                    } else {
-                      setSelectedCounselingTitle(value);
-                    }
-                    setSelectedRoundId(null);
+                    setSelectedCounselingTitle(value);
                   }}
+                  required
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select counseling title (optional)" />
+                    <SelectValue placeholder="Select counseling title (required)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None (Use Active Round)</SelectItem>
                     {Array.from(new Set(rounds.map(r => r.roundName).filter(Boolean))).map((title) => (
                       <SelectItem key={title} value={title || "unknown"}>
                         {title}
@@ -477,61 +508,43 @@ export default function FileUploadSection() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Files must be associated with a specific counseling title
+                </p>
               </div>
 
-              {selectedCounselingTitle && (
-                <div className="space-y-2">
-                  <Label>Round Number (Optional)</Label>
-                  <Select
-                    value={selectedRoundId || undefined}
-                    onValueChange={(value) => {
-                      if (value === "none") {
-                        setSelectedRoundId(null);
-                      } else {
-                        setSelectedRoundId(value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select round number (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None (Use Active Round)</SelectItem>
-                      {rounds
-                        .filter(r => r.roundName === selectedCounselingTitle)
-                        .sort((a, b) => a.roundNumber - b.roundNumber)
-                        .map((round) => (
-                          <SelectItem key={round.id} value={round.id}>
-                            Round {round.roundNumber}
-                            {round.isActive && !round.isCompleted && " (Active)"}
-                            {round.isCompleted && " (Completed)"}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    If not selected, file will be associated with the active round for this academic year
-                  </p>
-                </div>
-              )}
             </div>
           </div>
         )}
 
         {/* Entrance Results Upload */}
+        {selectedCounselingTitle && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="block text-sm font-medium">Student Entrance Results</label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => downloadEntranceResultsTemplateMutation.mutate()}
-              disabled={downloadEntranceResultsTemplateMutation.isPending}
-              data-testid="button-download-entrance-template"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {downloadEntranceResultsTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setColumnRequirementsType('entrance-results');
+                  setShowColumnRequirements(true);
+                }}
+                title="Preview column requirements"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadEntranceResultsTemplateMutation.mutate()}
+                disabled={downloadEntranceResultsTemplateMutation.isPending}
+                data-testid="button-download-entrance-template"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadEntranceResultsTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+              </Button>
+            </div>
           </div>
           <div 
             className={cn(
@@ -563,21 +576,36 @@ export default function FileUploadSection() {
             </div>
           )}
         </div>
+        )}
 
         {/* Student Choices Upload */}
+        {selectedCounselingTitle && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="block text-sm font-medium">Student Choices File</label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => downloadStudentChoicesTemplateMutation.mutate()}
-              disabled={downloadStudentChoicesTemplateMutation.isPending}
-              data-testid="button-download-student-template"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {downloadStudentChoicesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setColumnRequirementsType('students');
+                  setShowColumnRequirements(true);
+                }}
+                title="Preview column requirements"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadStudentChoicesTemplateMutation.mutate()}
+                disabled={downloadStudentChoicesTemplateMutation.isPending}
+                data-testid="button-download-student-template"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadStudentChoicesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+              </Button>
+            </div>
           </div>
           <div 
             className={cn(
@@ -609,21 +637,47 @@ export default function FileUploadSection() {
             </div>
           )}
         </div>
+        )}
 
         {/* Vacancy Upload */}
+        {selectedCounselingTitle && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="block text-sm font-medium">Vacancy Data File</label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => downloadVacanciesTemplateMutation.mutate()}
-              disabled={downloadVacanciesTemplateMutation.isPending}
-              data-testid="button-download-vacancy-template"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {downloadVacanciesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setColumnRequirementsType('vacancies');
+                  setShowColumnRequirements(true);
+                }}
+                title="Preview column requirements"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadVacanciesTemplateMutation.mutate()}
+                disabled={downloadVacanciesTemplateMutation.isPending}
+                data-testid="button-download-vacancy-template"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadVacanciesTemplateMutation.isPending ? 'Downloading...' : 'Download Template'}
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => downloadVacanciesTestDataMutation.mutate()}
+                disabled={downloadVacanciesTestDataMutation.isPending}
+                data-testid="button-download-vacancy-test-data"
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {downloadVacanciesTestDataMutation.isPending ? 'Downloading...' : 'Download Test Data'}
+              </Button>
+            </div>
           </div>
           <div 
             className={cn(
@@ -655,7 +709,15 @@ export default function FileUploadSection() {
             </div>
           )}
         </div>
+        )}
 
+        {!selectedCounselingTitle && (
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">Please select a counseling title above to upload files</p>
+          </div>
+        )}
+
+        {selectedCounselingTitle && (
         <div className="flex space-x-3">
           <Button 
             className="flex-1"
@@ -675,6 +737,7 @@ export default function FileUploadSection() {
             Preview Data
           </Button>
         </div>
+        )}
       </CardContent>
     </Card>
 
@@ -815,6 +878,208 @@ export default function FileUploadSection() {
         isUploading={uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending || uploadEntranceResultsMutation.isPending}
       />
     )}
+
+    {/* Column Requirements Dialog */}
+    <Dialog open={showColumnRequirements} onOpenChange={setShowColumnRequirements}>
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Eye className="w-5 h-5" />
+            Column Requirements
+            {columnRequirementsType === 'entrance-results' && ' - Entrance Results'}
+            {columnRequirementsType === 'students' && ' - Student Choices'}
+            {columnRequirementsType === 'vacancies' && ' - Vacancies'}
+          </DialogTitle>
+          <DialogDescription>
+            Required columns and their formats for the Excel/CSV template
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-4">
+          {columnRequirementsType === 'entrance-results' && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Column Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Required</TableHead>
+                  <TableHead>Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Merit Number</TableCell>
+                  <TableCell>Integer</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Unique merit ranking number (ascending = better rank)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Application Number</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Unique application identifier</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Roll Number</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Unique roll number</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Student Name</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Full name of the student</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Marks</TableCell>
+                  <TableCell>Integer</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Total marks obtained</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Gender</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Male, Female, or Other</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Category</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Open, WHH, Disabled, or Private</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Stream</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="outline">Optional</Badge></TableCell>
+                  <TableCell>Must be: Medical, Commerce, or NonMedical</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+
+          {columnRequirementsType === 'students' && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Column Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Required</TableHead>
+                  <TableHead>Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">App No</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Unique application number</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Merit Number</TableCell>
+                  <TableCell>Integer</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Merit ranking number (ascending = better rank)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Name</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Full name of the student</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Gender</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Male, Female, or Other</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Category</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Open, WHH, Disabled, or Private</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Stream</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Medical, Commerce, or NonMedical</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 1</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>First preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 2-10</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="outline">Optional</Badge></TableCell>
+                  <TableCell>Additional preference districts (up to 10 choices)</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+
+          {columnRequirementsType === 'vacancies' && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Column Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Required</TableHead>
+                  <TableHead>Description</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">UDISE Code</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Unique school identifier code</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">District</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be a valid Punjab district name</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Stream</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Medical, Commerce, or NonMedical</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Gender</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Male, Female, or Other</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Category</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Must be: Open, WHH, Disabled, or Private</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Total Seats</TableCell>
+                  <TableCell>Integer</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Total number of seats available (non-negative)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Available Seats</TableCell>
+                  <TableCell>Integer</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Currently available seats (typically equals Total Seats initially)</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

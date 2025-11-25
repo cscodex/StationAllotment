@@ -27,22 +27,19 @@ import {
   XCircle,
   Trash2,
   Rocket,
-  Minus
+  Minus,
+  Pause,
+  PlayCircle,
+  X
 } from "lucide-react";
 import { format } from "date-fns";
 
-const roundRowSchema = z.object({
-  startDate: z.string().min(1, "Start date and time is required"),
-});
-
-const createRoundsSchema = z.object({
+const createTitleSchema = z.object({
   academicYear: z.string().regex(/^\d{4}-\d{4}$/, "Format: YYYY-YYYY (e.g., 2024-2025)"),
   roundName: z.string().min(1, "Counseling title is required"),
-  rounds: z.array(roundRowSchema).min(1, "At least one round is required"),
 });
 
-type RoundRow = z.infer<typeof roundRowSchema>;
-type CreateRoundsForm = z.infer<typeof createRoundsSchema>;
+type CreateTitleForm = z.infer<typeof createTitleSchema>;
 
 interface CounselingRound {
   id: string;
@@ -52,8 +49,82 @@ interface CounselingRound {
   startDate: string;
   isActive: boolean;
   isCompleted: boolean;
+  isSuspended?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+interface PrerequisitesStatus {
+  hasVacancyData: boolean;
+  vacancyCount: number;
+  totalAvailableSeats: number;
+  hasEntranceResults: boolean;
+  entranceResultsCount: number;
+  hasStudentChoices: boolean;
+  studentsWithChoicesCount: number;
+  allPrerequisitesMet: boolean;
+}
+
+// Component to handle prerequisites checking and display for Run Allocation button
+function PrerequisitesButton({ 
+  round, 
+  onRunAllocation, 
+  isPending 
+}: { 
+  round: CounselingRound; 
+  onRunAllocation: (round: CounselingRound) => void;
+  isPending: boolean;
+}) {
+  const { data: prerequisites, isLoading } = useQuery<PrerequisitesStatus>({
+    queryKey: ["/api/counseling-rounds", round.id, "prerequisites"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/counseling-rounds/${round.id}/prerequisites`);
+      return await res.json();
+    },
+    enabled: round.isActive && !round.isCompleted,
+  });
+
+  const canRunAllocation = prerequisites?.allPrerequisitesMet ?? false;
+  const missingPrerequisites: string[] = [];
+  
+  if (prerequisites) {
+    if (!prerequisites.hasVacancyData) {
+      missingPrerequisites.push(`Vacancy data (${prerequisites.totalAvailableSeats} seats)`);
+    }
+    if (!prerequisites.hasEntranceResults) {
+      missingPrerequisites.push(`Entrance results (${prerequisites.entranceResultsCount} found)`);
+    }
+    if (!prerequisites.hasStudentChoices) {
+      missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students)`);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        variant="default"
+        onClick={() => onRunAllocation(round)}
+        disabled={isPending || isLoading || !canRunAllocation}
+        className="bg-green-600 hover:bg-green-700"
+        title={
+          isLoading 
+            ? "Checking prerequisites..." 
+            : !canRunAllocation 
+            ? `Prerequisites not met: ${missingPrerequisites.join(", ")}`
+            : "Run allocation"
+        }
+      >
+        <Rocket className="w-3 h-3 mr-1" />
+        Run Allocation
+      </Button>
+      {prerequisites && !canRunAllocation && (
+        <div className="text-xs text-muted-foreground max-w-[200px]">
+          Missing: {missingPrerequisites.join(", ")}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CounselingRounds() {
@@ -64,10 +135,6 @@ export default function CounselingRounds() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingRound, setEditingRound] = useState<CounselingRound | null>(null);
   const [editStartDate, setEditStartDate] = useState<string>("");
-  const [roundRows, setRoundRows] = useState<RoundRow[]>([
-    { startDate: "" }
-  ]);
-
   // Fetch current session
   const { data: currentSessionData } = useQuery<{ currentSession: string }>({
     queryKey: ["/api/session/current"],
@@ -75,12 +142,11 @@ export default function CounselingRounds() {
   });
   const currentSession = currentSessionData?.currentSession || "";
 
-  const form = useForm<CreateRoundsForm>({
-    resolver: zodResolver(createRoundsSchema),
+  const form = useForm<CreateTitleForm>({
+    resolver: zodResolver(createTitleSchema),
     defaultValues: {
       academicYear: selectedAcademicYear || "",
       roundName: "",
-      rounds: roundRows,
     },
   });
   
@@ -90,11 +156,6 @@ export default function CounselingRounds() {
       form.setValue("academicYear", selectedAcademicYear);
     }
   }, [selectedAcademicYear, form]);
-  
-  // Sync form when roundRows changes
-  useEffect(() => {
-    form.setValue("rounds", roundRows);
-  }, [roundRows.length, form]);
 
   // Fetch counseling rounds
   const { data: rounds, isLoading, error, refetch } = useQuery<CounselingRound[]>({
@@ -126,37 +187,54 @@ export default function CounselingRounds() {
     retry: 1,
   });
 
-  // Bulk create rounds mutation
-  const bulkCreateRoundsMutation = useMutation({
-    mutationFn: async (data: CreateRoundsForm) => {
-      const rounds = data.rounds.map(round => ({
+  // Create counseling title mutation (auto-creates first round)
+  const createTitleMutation = useMutation({
+    mutationFn: async (data: CreateTitleForm) => {
+      const res = await apiRequest("POST", "/api/counseling-titles", {
         academicYear: data.academicYear,
         roundName: data.roundName,
-        startDate: round.startDate,
-      }));
-      const res = await apiRequest("POST", "/api/counseling-rounds/bulk", { rounds });
+      });
       return await res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
-      const count = Array.isArray(data) ? data.length : (data?.count || 1);
+      refetch();
+      setShowCreateDialog(false);
+      form.reset();
       toast({
         title: "Success",
-        description: `${count} counseling round(s) created successfully`,
+        description: data.message || "Counseling title created successfully. Round 1 has been auto-created.",
       });
-      setShowCreateDialog(false);
-      setRoundRows([{ startDate: "" }]);
-      form.reset({
-        academicYear: selectedAcademicYear || "",
-        roundName: "",
-        rounds: [{ startDate: "" }],
-      });
-      refetch();
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to create counseling rounds",
+        description: error.message || "Failed to create counseling title",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Suspend/unsuspend mutation
+  const suspendMutation = useMutation({
+    mutationFn: async ({ academicYear, roundName, suspend }: { academicYear: string; roundName: string; suspend: boolean }) => {
+      const res = await apiRequest("POST", `/api/counseling-titles/${encodeURIComponent(academicYear)}/${encodeURIComponent(roundName)}/suspend`, {
+        suspend,
+      });
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
+      refetch();
+      toast({
+        title: "Success",
+        description: data.message || (data.suspend ? "Subsequent rounds suspended" : "Subsequent rounds unsuspended"),
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to suspend/unsuspend",
         variant: "destructive",
       });
     },
@@ -209,28 +287,6 @@ export default function CounselingRounds() {
     },
   });
 
-  // Activate round mutation
-  const activateRoundMutation = useMutation({
-    mutationFn: async ({ id, academicYear }: { id: string; academicYear: string }) => {
-      const res = await apiRequest("POST", `/api/counseling-rounds/${id}/activate`, { academicYear });
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
-      refetch();
-      toast({
-        title: "Success",
-        description: "Counseling round activated successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to activate counseling round",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Complete round mutation
   const completeRoundMutation = useMutation({
@@ -238,12 +294,12 @@ export default function CounselingRounds() {
       const res = await apiRequest("POST", `/api/counseling-rounds/${id}/complete`);
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
       refetch();
       toast({
         title: "Success",
-        description: "Counseling round completed successfully",
+        description: data.message || "Counseling round completed successfully",
       });
     },
     onError: (error: any) => {
@@ -261,14 +317,17 @@ export default function CounselingRounds() {
       const res = await apiRequest("PUT", `/api/counseling-rounds/${id}`, { startDate });
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
       refetch();
+      const wasDeactivated = editingRound?.isActive === true && data?.isActive === false;
       setEditingRound(null);
       setEditStartDate("");
       toast({
         title: "Success",
-        description: "Start date updated successfully",
+        description: wasDeactivated 
+          ? "Start date updated successfully. Round has been deactivated because the new date is in the future."
+          : "Start date updated successfully",
       });
     },
     onError: (error: any) => {
@@ -280,47 +339,17 @@ export default function CounselingRounds() {
     },
   });
 
-  const handleCreateRounds = (data: CreateRoundsForm) => {
-    // Ensure rounds array is properly populated from form
-    const formRounds = data.rounds || roundRows;
-    if (!formRounds || formRounds.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one round",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Validate all rounds have dates
-    const invalidRounds = formRounds.filter(r => !r.startDate);
-    if (invalidRounds.length > 0) {
-      toast({
-        title: "Error",
-        description: "Please fill in all date fields",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    bulkCreateRoundsMutation.mutate({
-      ...data,
-      rounds: formRounds,
+  const handleCreateTitle = (data: CreateTitleForm) => {
+    createTitleMutation.mutate(data);
+  };
+
+  const handleSuspend = (round: CounselingRound, suspend: boolean) => {
+    if (!round.roundName) return;
+    suspendMutation.mutate({
+      academicYear: round.academicYear,
+      roundName: round.roundName,
+      suspend,
     });
-  };
-
-  const addRoundRow = () => {
-    const newRows = [...roundRows, { startDate: "" }];
-    setRoundRows(newRows);
-    form.setValue("rounds", newRows);
-  };
-
-  const removeRoundRow = (index: number) => {
-    if (roundRows.length > 1) {
-      const newRows = roundRows.filter((_, i) => i !== index);
-      setRoundRows(newRows);
-      form.setValue("rounds", newRows);
-    }
   };
 
   const handleDelete = (round: CounselingRound) => {
@@ -340,16 +369,80 @@ export default function CounselingRounds() {
   };
 
   const isPastRound = (round: CounselingRound) => {
-    const startDate = new Date(round.startDate);
+    // Database column is TIMESTAMP type (datetime)
+    // Parse ISO timestamp string or Date object
+    let startDate: Date;
+    if (typeof round.startDate === 'string') {
+      startDate = new Date(round.startDate);
+    } else if (round.startDate && typeof round.startDate === 'object' && 'getTime' in round.startDate) {
+      startDate = round.startDate as Date;
+    } else {
+      startDate = new Date(round.startDate as string);
+    }
+    
+    if (isNaN(startDate.getTime())) {
+      return false; // Invalid date, don't consider it past
+    }
+    
     const now = new Date();
     return startDate < now;
   };
 
-  const handleActivate = (round: CounselingRound) => {
-    if (confirm(`Activate ${round.roundName || `Round ${round.roundNumber}`}? This will deactivate any other active round for ${round.academicYear}.`)) {
-      activateRoundMutation.mutate({ id: round.id, academicYear: round.academicYear });
+  // Check if previous round is completed (for showing Complete button)
+  const canCompleteRound = (round: CounselingRound): boolean => {
+    // Round 1 can always be completed
+    if (round.roundNumber === 1) {
+      return true;
     }
+    
+    // For subsequent rounds, check if previous round is completed
+    const previousRound = rounds?.find(
+      r => r.roundName === round.roundName && 
+           r.academicYear === round.academicYear && 
+           r.roundNumber === round.roundNumber - 1
+    );
+    
+    return previousRound?.isCompleted === true;
   };
+
+  // Get round status display
+  const getRoundStatus = (round: CounselingRound): { text: string; variant: "default" | "secondary" | "destructive"; className: string; icon: any } => {
+    // Priority: Completed > Suspended > Active > Inactive
+    if (round.isCompleted) {
+      return {
+        text: "Completed",
+        variant: "default",
+        className: "bg-green-600",
+        icon: CheckCircle
+      };
+    }
+    
+    if (round.isSuspended) {
+      return {
+        text: "Suspended",
+        variant: "destructive",
+        className: "bg-orange-600",
+        icon: Pause
+      };
+    }
+    
+    if (round.isActive) {
+      return {
+        text: "Active",
+        variant: "default",
+        className: "bg-blue-600",
+        icon: Play
+      };
+    }
+    
+    return {
+      text: "Inactive",
+      variant: "secondary",
+      className: "",
+      icon: Clock
+    };
+  };
+
 
   const handleComplete = (round: CounselingRound) => {
     if (confirm(`Mark ${round.roundName || `Round ${round.roundNumber}`} as completed?`)) {
@@ -369,16 +462,26 @@ export default function CounselingRounds() {
       return;
     }
     
-    // Convert startDate to datetime-local format
-    // Handle invalid dates that might default to 1970
-    const startDate = new Date(round.startDate);
+    // Database column is TIMESTAMP type (datetime with time)
+    // Handle both ISO timestamp strings and Date objects
+    let startDate: Date;
     
-    // Check if date is valid (not 1970 epoch)
+    if (typeof round.startDate === 'string') {
+      // Parse ISO timestamp string (e.g., "2024-06-15T10:00:00.000Z" or "2024-06-15T10:00:00")
+      startDate = new Date(round.startDate);
+    } else if (round.startDate && typeof round.startDate === 'object' && 'getTime' in round.startDate) {
+      startDate = round.startDate as Date;
+    } else {
+      // Try to parse as Date
+      startDate = new Date(round.startDate as string);
+    }
+    
+    // Check if date is valid
     if (isNaN(startDate.getTime()) || startDate.getFullYear() < 2000) {
       console.error('Invalid date received:', {
         roundId: round.id,
         startDate: round.startDate,
-        parsed: startDate.toISOString(),
+        startDateType: typeof round.startDate,
         timestamp: startDate.getTime(),
         year: startDate.getFullYear()
       });
@@ -390,6 +493,8 @@ export default function CounselingRounds() {
       return;
     }
     
+    // Convert to datetime-local format (YYYY-MM-DDTHH:mm)
+    // datetime-local expects local time without timezone
     const year = startDate.getFullYear();
     const month = String(startDate.getMonth() + 1).padStart(2, '0');
     const day = String(startDate.getDate()).padStart(2, '0');
@@ -402,6 +507,19 @@ export default function CounselingRounds() {
 
   const handleSaveEdit = () => {
     if (editingRound && editStartDate) {
+      // Validate that the date is not in the past
+      const selectedDate = new Date(editStartDate);
+      const now = new Date();
+      
+      if (selectedDate < now) {
+        toast({
+          title: "Error",
+          description: "Start date cannot be set to a past date. Please select a future date and time.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       updateRoundMutation.mutate({ id: editingRound.id, startDate: editStartDate });
     }
   };
@@ -495,103 +613,163 @@ export default function CounselingRounds() {
                         <TableHead>Round No.</TableHead>
                         <TableHead>Start Date & Time</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Prerequisites</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {rounds.map((round) => (
-                        <TableRow key={round.id}>
-                          <TableCell className="font-medium">
-                            {round.roundName}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {round.roundNumber}
-                          </TableCell>
-                          <TableCell>
-                            {round.startDate && round.startDate !== 'null' ? (
-                              (() => {
-                                try {
-                                  const date = new Date(round.startDate);
-                                  if (!isNaN(date.getTime())) {
-                                    return format(date, "MMM dd, yyyy HH:mm");
+                      {rounds.map((round) => {
+                        const PrerequisitesCell = ({ round }: { round: CounselingRound }) => {
+                          const { data: prerequisites, isLoading: isLoadingPrerequisites } = useQuery<PrerequisitesStatus>({
+                            queryKey: ["/api/counseling-rounds", round.id, "prerequisites"],
+                            queryFn: async () => {
+                              const res = await apiRequest("GET", `/api/counseling-rounds/${round.id}/prerequisites`);
+                              return await res.json();
+                            },
+                            enabled: round.isActive && !round.isCompleted,
+                          });
+
+                          if (!round.isActive || round.isCompleted) {
+                            return <span className="text-xs text-muted-foreground">-</span>;
+                          }
+
+                          if (isLoadingPrerequisites) {
+                            return <span className="text-xs text-muted-foreground">Checking...</span>;
+                          }
+
+                          if (!prerequisites) {
+                            return <span className="text-xs text-muted-foreground">-</span>;
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-1 text-xs">
+                              <div className={`flex items-center gap-1 ${prerequisites.hasVacancyData ? 'text-green-600' : 'text-red-600'}`}>
+                                {prerequisites.hasVacancyData ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                                <span>Vacancies: {prerequisites.totalAvailableSeats}</span>
+                              </div>
+                              <div className={`flex items-center gap-1 ${prerequisites.hasEntranceResults ? 'text-green-600' : 'text-red-600'}`}>
+                                {prerequisites.hasEntranceResults ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                                <span>Results: {prerequisites.entranceResultsCount}</span>
+                              </div>
+                              <div className={`flex items-center gap-1 ${prerequisites.hasStudentChoices ? 'text-green-600' : 'text-red-600'}`}>
+                                {prerequisites.hasStudentChoices ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                                <span>Choices: {prerequisites.studentsWithChoicesCount}</span>
+                              </div>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <TableRow key={round.id}>
+                            <TableCell className="font-medium">
+                              {round.roundName}
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {round.roundNumber}
+                            </TableCell>
+                            <TableCell>
+                              {round.startDate && round.startDate !== 'null' ? (
+                                (() => {
+                                  try {
+                                    const date = new Date(round.startDate);
+                                    if (!isNaN(date.getTime())) {
+                                      return format(date, "MMM dd, yyyy HH:mm");
+                                    }
+                                  } catch (e) {
+                                    console.error('Error formatting date:', round.startDate, e);
                                   }
-                                } catch (e) {
-                                  console.error('Error formatting date:', round.startDate, e);
-                                }
-                                return <span className="text-muted-foreground italic">Invalid date</span>;
-                              })()
-                            ) : (
-                              <span className="text-muted-foreground italic">No date set</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {round.isCompleted ? (
-                              <Badge variant="default" className="bg-green-600">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                Completed
-                              </Badge>
-                            ) : round.isActive ? (
-                              <Badge variant="default" className="bg-blue-600">
-                                <Play className="w-3 h-3 mr-1" />
-                                Active
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                <Clock className="w-3 h-3 mr-1" />
-                                Inactive
-                              </Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-2 flex-wrap gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleEdit(round)}
-                                disabled={round.isCompleted}
-                              >
-                                <Edit className="w-3 h-3 mr-1" />
-                                Edit
-                              </Button>
-                              {round.isActive && !round.isCompleted && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="default"
-                                    onClick={() => handleRunAllocation(round)}
-                                    disabled={runAllocationMutation.isPending}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    <Rocket className="w-3 h-3 mr-1" />
-                                    Run Allocation
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleComplete(round)}
-                                    disabled={completeRoundMutation.isPending}
-                                  >
-                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                    Complete
-                                  </Button>
-                                </>
+                                  return <span className="text-muted-foreground italic">Invalid date</span>;
+                                })()
+                              ) : (
+                                <span className="text-muted-foreground italic">No date set</span>
                               )}
-                              {canDelete(round) && (
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const status = getRoundStatus(round);
+                                const Icon = status.icon;
+                                return (
+                                  <Badge variant={status.variant} className={status.className}>
+                                    <Icon className="w-3 h-3 mr-1" />
+                                    {status.text}
+                                  </Badge>
+                                );
+                              })()}
+                            </TableCell>
+                            <TableCell>
+                              <PrerequisitesCell round={round} />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-2 flex-wrap gap-1">
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleDelete(round)}
-                                  disabled={deleteRoundMutation.isPending || isPastRound(round)}
-                                  className="text-red-600 hover:text-red-700"
-                                  title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
+                                  onClick={() => handleEdit(round)}
+                                  disabled={round.isCompleted}
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Edit className="w-3 h-3 mr-1" />
+                                  Edit
                                 </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                {round.roundNumber === 1 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleSuspend(round, !round.isSuspended)}
+                                    disabled={suspendMutation.isPending}
+                                    className={round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}
+                                    title={round.isSuspended ? "Unsuspend subsequent rounds" : "Suspend subsequent rounds"}
+                                  >
+                                    {round.isSuspended ? (
+                                      <>
+                                        <PlayCircle className="w-3 h-3 mr-1" />
+                                        Unsuspend
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Pause className="w-3 h-3 mr-1" />
+                                        Suspend
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                                {round.isActive && !round.isCompleted && (
+                                  <>
+                                    <PrerequisitesButton
+                                      round={round}
+                                      onRunAllocation={handleRunAllocation}
+                                      isPending={runAllocationMutation.isPending}
+                                    />
+                                    {canCompleteRound(round) && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleComplete(round)}
+                                        disabled={completeRoundMutation.isPending}
+                                        title={round.roundNumber === 1 ? "Complete this round" : "Previous round must be completed first"}
+                                      >
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        Complete
+                                      </Button>
+                                    )}
+                                  </>
+                                )}
+                                {canDelete(round) && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleDelete(round)}
+                                    disabled={deleteRoundMutation.isPending || isPastRound(round)}
+                                    className="text-red-600 hover:text-red-700"
+                                    title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 ) : (
@@ -602,7 +780,7 @@ export default function CounselingRounds() {
                     </p>
                     <Button onClick={() => setShowCreateDialog(true)}>
                       <Plus className="w-4 h-4 mr-2" />
-                      Create First Round
+                      Create Counseling Title
                     </Button>
                   </div>
                 )}
@@ -622,14 +800,14 @@ export default function CounselingRounds() {
           )}
         </div>
 
-        {/* Create Rounds Dialog */}
+        {/* Create Counseling Title Dialog */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create Counseling Rounds</DialogTitle>
+              <DialogTitle>Create Counseling Title</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleCreateRounds)} className="space-y-4">
+              <form onSubmit={form.handleSubmit(handleCreateTitle)} className="space-y-4">
                 <FormField
                   control={form.control}
                   name="academicYear"
@@ -658,62 +836,16 @@ export default function CounselingRounds() {
                       </FormControl>
                       <FormMessage />
                       <p className="text-xs text-muted-foreground">
-                        Each counseling can have multiple rounds. Round numbers (1, 2, 3...) will be automatically assigned within each counseling.
+                        Create a counseling title (e.g., "Meritorious School", "Regular Counseling"). 
+                        Round 1 will be automatically created with the current date/time. You can edit the start date/time later.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <strong>Note:</strong> Before the first round can run allocation, you must upload: 
+                        vacancy data, entrance results, and student choices for this counseling title.
                       </p>
                     </FormItem>
                   )}
                 />
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <FormLabel>Rounds</FormLabel>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addRoundRow}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Add Round
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-3 border rounded-lg p-4">
-                    {roundRows.map((_, index) => (
-                      <div key={index} className="flex items-end gap-2 p-3 bg-muted/50 rounded-md">
-                        <div className="flex-1">
-                          <FormField
-                            control={form.control}
-                            name={`rounds.${index}.startDate`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Start Date & Time</FormLabel>
-                                <FormControl>
-                                  <Input type="datetime-local" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                                <p className="text-xs text-muted-foreground">
-                                  Round will automatically activate when this date/time is reached
-                                </p>
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                        {roundRows.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeRoundRow(index)}
-                            className="mb-0"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
                 
                 <DialogFooter>
                   <Button
@@ -721,18 +853,13 @@ export default function CounselingRounds() {
                     variant="outline"
                     onClick={() => {
                       setShowCreateDialog(false);
-                      setRoundRows([{ startDate: "" }]);
-                      form.reset({
-                        academicYear: selectedAcademicYear || "",
-                        roundName: "",
-                        rounds: [{ startDate: "" }],
-                      });
+                      form.reset();
                     }}
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={bulkCreateRoundsMutation.isPending}>
-                    {bulkCreateRoundsMutation.isPending ? "Creating..." : `Create ${roundRows.length} Round(s)`}
+                  <Button type="submit" disabled={createTitleMutation.isPending}>
+                    {createTitleMutation.isPending ? "Creating..." : "Create Counseling Title"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -753,10 +880,20 @@ export default function CounselingRounds() {
                   type="datetime-local"
                   value={editStartDate}
                   onChange={(e) => setEditStartDate(e.target.value)}
+                  min={(() => {
+                    // Set min to current date/time
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const hours = String(now.getHours()).padStart(2, '0');
+                    const minutes = String(now.getMinutes()).padStart(2, '0');
+                    return `${year}-${month}-${day}T${hours}:${minutes}`;
+                  })()}
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Round will automatically activate when this date/time is reached
+                  Round will automatically activate when this date/time is reached. Date cannot be in the past.
                 </p>
               </div>
             </div>

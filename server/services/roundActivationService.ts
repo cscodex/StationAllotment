@@ -72,9 +72,25 @@ export class RoundActivationService {
       if (round.isCompleted || !round.isActive) return false;
       
       // Check if end date has passed
-      // Dates from database come as strings (YYYY-MM-DD format)
-      const dateStr = String(round.endDate).split('T')[0]; // Get date part only
-      const endDate = new Date(dateStr + 'T00:00:00');
+      // Handle null/undefined endDate (rounds may not have end dates)
+      if (!round.endDate) return false;
+      
+      // Dates from database come as strings (YYYY-MM-DD format) or Date objects
+      let endDate: Date;
+      if (typeof round.endDate === 'string') {
+        const dateStr = round.endDate.split('T')[0]; // Get date part only
+        endDate = new Date(dateStr + 'T00:00:00');
+      } else if (round.endDate instanceof Date) {
+        endDate = round.endDate;
+      } else {
+        return false; // Invalid date format
+      }
+      
+      // Validate date
+      if (isNaN(endDate.getTime())) {
+        console.error('Invalid endDate for round:', round.id, round.endDate);
+        return false;
+      }
       
       // Compare dates (ignoring time)
       const endDateStr = endDate.toISOString().split('T')[0];
@@ -173,6 +189,58 @@ export class RoundActivationService {
   }
 
   /**
+   * Deactivate active rounds whose start date is in the future
+   * This handles cases where a round's start date was updated to a future date
+   * @returns Array of deactivated rounds
+   */
+  async deactivateFutureRounds(): Promise<CounselingRound[]> {
+    const currentSession = getCurrentSession();
+    // Use local system time for comparison
+    const now = new Date();
+    
+    // Get all active rounds for current session
+    const allRounds = await this.storage.getCounselingRounds(currentSession);
+    
+    const roundsToDeactivate = allRounds.filter(round => {
+      // Only process rounds for current session
+      if (!isCurrentSession(round.academicYear)) return false;
+      
+      // Skip if not active or already completed
+      if (!round.isActive || round.isCompleted) return false;
+      
+      // Check if start date is in the future
+      let startDate: Date;
+      if (typeof round.startDate === 'string') {
+        startDate = new Date(round.startDate);
+      } else if (round.startDate instanceof Date) {
+        startDate = round.startDate;
+      } else {
+        startDate = new Date(round.startDate);
+      }
+      
+      if (isNaN(startDate.getTime())) return false;
+      
+      // Deactivate if start date is in the future (using local timezone)
+      return startDate > now;
+    });
+
+    const deactivatedRounds: CounselingRound[] = [];
+
+    // Deactivate each round
+    for (const round of roundsToDeactivate) {
+      try {
+        await this.storage.updateCounselingRound(round.id, { isActive: false });
+        deactivatedRounds.push(round);
+        console.log(`🔄 Deactivated round with future start date: ${round.roundName} - Round ${round.roundNumber} (${round.academicYear})`);
+      } catch (error) {
+        console.error(`❌ Failed to deactivate round ${round.id}:`, error);
+      }
+    }
+
+    return deactivatedRounds;
+  }
+
+  /**
    * Run both activation and completion checks, plus cleanup previous sessions
    * This is the main method to call periodically
    */
@@ -180,9 +248,13 @@ export class RoundActivationService {
     activated: CounselingRound[];
     completed: CounselingRound[];
     deactivated: number;
+    futureDeactivated: CounselingRound[];
   }> {
     // First, deactivate all previous session rounds
     const deactivated = await this.deactivatePreviousSessions();
+    
+    // Deactivate active rounds whose start date is in the future
+    const futureDeactivated = await this.deactivateFutureRounds();
     
     // Then activate due rounds (checking all, but only activating current session)
     const activated = await this.activateDueRoundsAll();
@@ -190,7 +262,7 @@ export class RoundActivationService {
     // Finally, complete expired rounds
     const completed = await this.completeExpiredRounds();
     
-    return { activated, completed, deactivated };
+    return { activated, completed, deactivated, futureDeactivated };
   }
 }
 

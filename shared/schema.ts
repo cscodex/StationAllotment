@@ -49,10 +49,11 @@ export const counselingRounds = pgTable("counseling_rounds", {
   academicYear: varchar("academic_year").notNull(), // '2024-2025'
   roundNumber: integer("round_number").notNull(), // 1, 2, 3, etc. (within each counseling)
   roundName: varchar("round_name").notNull(), // 'First Counseling', 'Second Counseling' - Counseling title
-  startDate: timestamp("start_date").notNull(), // Changed to timestamp for datetime support
+  startDate: timestamp("start_date").notNull(), // TIMESTAMP type - datetime with time component
   endDate: date("end_date"), // Made optional - rounds are completed manually
   isActive: boolean("is_active").default(false),
   isCompleted: boolean("is_completed").default(false),
+  isSuspended: boolean("is_suspended").default(false), // Whether subsequent rounds are suspended for this counseling
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

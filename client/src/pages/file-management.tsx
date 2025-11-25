@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import FileUploadSection from "@/components/dashboard/file-upload-section";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileText, Check, X, Clock, Calendar, AlertTriangle, ArrowRight } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 
 export default function FileManagement() {
+  const [selectedCounselingTitle, setSelectedCounselingTitle] = useState<string>("");
   
   // Get current session
   const { data: currentSessionData } = useQuery<{ currentSession: string }>({
@@ -21,11 +25,6 @@ export default function FileManagement() {
   const { data: allFiles } = useQuery({
     queryKey: ["/api/files"],
   });
-
-  // Filter files to only show current session
-  const files = currentSession 
-    ? (allFiles as any[])?.filter((file: any) => file.academicYear === currentSession) || []
-    : [];
 
   // Fetch counseling rounds for current session
   const { data: rounds } = useQuery<any[]>({
@@ -40,6 +39,26 @@ export default function FileManagement() {
   });
 
   const hasRounds = rounds && rounds.length > 0;
+  
+  // Get unique counseling titles
+  const counselingTitles = rounds 
+    ? Array.from(new Set(rounds.map((r: any) => r.roundName).filter(Boolean)))
+    : [];
+
+  // Filter files to show current session and selected counseling title
+  const files = currentSession 
+    ? (allFiles as any[])?.filter((file: any) => {
+        const matchesSession = file.academicYear === currentSession;
+        if (!selectedCounselingTitle) {
+          return matchesSession;
+        }
+        // Check if file is associated with the selected counseling title
+        // Files can be associated via roundName or via counselingRoundId (which has roundName)
+        const fileRoundName = file.roundName || 
+          (file.counselingRoundId && rounds?.find((r: any) => r.id === file.counselingRoundId)?.roundName);
+        return matchesSession && fileRoundName === selectedCounselingTitle;
+      }) || []
+    : [];
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -109,9 +128,31 @@ export default function FileManagement() {
                   </Badge>
                 )}
               </CardTitle>
-              <p className="text-sm text-muted-foreground mt-2">
-                Showing files for current session only
-              </p>
+              <div className="mt-4 space-y-2">
+                <Label>Filter by Counseling Title</Label>
+                <Select
+                  value={selectedCounselingTitle || "all"}
+                  onValueChange={(value) => setSelectedCounselingTitle(value === "all" ? "" : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All counseling titles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All counseling titles</SelectItem>
+                    {counselingTitles.map((title) => (
+                      <SelectItem key={title} value={title}>
+                        {title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  {selectedCounselingTitle 
+                    ? `Showing files for "${selectedCounselingTitle}" in ${currentSession}`
+                    : `Showing all files for ${currentSession}`
+                  }
+                </p>
+              </div>
             </CardHeader>
             <CardContent>
               {files?.length > 0 ? (

@@ -68,10 +68,14 @@ export default function Allocation() {
     queryKey: ["/api/vacancies"],
   });
 
-  // Filter vacancies by academic year
-  const vacancies = selectedAcademicYear
-    ? allVacancies?.filter((v: any) => v.academicYear === selectedAcademicYear) || []
-    : allVacancies || [];
+  // Filter vacancies by selected counseling title and academic year
+  const vacancies = selectedAcademicYear && selectedCounselingTitle
+    ? allVacancies?.filter((v: any) => {
+        const matchesYear = v.academicYear === selectedAcademicYear;
+        const matchesTitle = !v.roundName || v.roundName === selectedCounselingTitle;
+        return matchesYear && matchesTitle;
+      }) || []
+    : [];
 
   const { data: entranceResultsResponse } = useQuery<any>({
     queryKey: ["/api/students-entrance-results"],
@@ -159,28 +163,48 @@ export default function Allocation() {
     },
   });
 
-  const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
-  const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
-  const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
+  // Filter files by selected counseling title and academic year
+  const filteredFiles = selectedAcademicYear
+    ? (files as any[])?.filter((file: any) => {
+        const matchesSession = file.academicYear === selectedAcademicYear;
+        if (!selectedCounselingTitle) {
+          return matchesSession;
+        }
+        // Check if file is associated with the selected counseling title
+        const fileRoundName = file.roundName || 
+          (file.counselingRoundId && rounds?.find((r: any) => r.id === file.counselingRoundId)?.roundName);
+        return matchesSession && fileRoundName === selectedCounselingTitle;
+      }) || []
+    : files || [];
+
+  const studentFile = filteredFiles?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
+  const vacancyFile = filteredFiles?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
+  const entranceFile = filteredFiles?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
 
   // Handle different API response formats
   const allStudents = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
   const allEntranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
 
-  // Filter students by selected round
-  const students = selectedRoundId 
-    ? allStudents.filter((s: any) => 
-        s.counselingRoundId === selectedRoundId || 
-        (s.academicYear === selectedAcademicYear && 
-         s.counselingRoundNumber === selectedRound?.roundNumber &&
-         s.counselingRoundId === selectedRoundId)
-      )
-    : allStudents;
+  // Filter students by selected counseling title and academic year
+  const students = selectedAcademicYear && selectedCounselingTitle
+    ? allStudents.filter((s: any) => {
+        const matchesYear = s.academicYear === selectedAcademicYear;
+        // Students are shared across rounds for the same counseling title
+        // Check if student is associated with the counseling title (via roundName or round)
+        const studentRoundName = s.roundName || 
+          (s.counselingRoundId && rounds?.find((r: any) => r.id === s.counselingRoundId)?.roundName);
+        return matchesYear && studentRoundName === selectedCounselingTitle;
+      })
+    : [];
 
-  // Filter entrance results by academic year
-  const entranceResults = selectedAcademicYear
-    ? allEntranceResults.filter((er: any) => er.academicYear === selectedAcademicYear)
-    : allEntranceResults;
+  // Filter entrance results by selected counseling title and academic year
+  const entranceResults = selectedAcademicYear && selectedCounselingTitle
+    ? allEntranceResults.filter((er: any) => {
+        const matchesYear = er.academicYear === selectedAcademicYear;
+        const matchesTitle = !er.roundName || er.roundName === selectedCounselingTitle;
+        return matchesYear && matchesTitle;
+      })
+    : [];
 
   // Minimum data requirements for allocation
   const hasEntranceResults = entranceResults && entranceResults.length > 0;
@@ -452,7 +476,17 @@ export default function Allocation() {
                       </p>
                       <p className="text-sm text-muted-foreground">
                         Academic Year: {selectedRound.academicYear} • 
-                        Start: {format(new Date(selectedRound.startDate), "MMM dd, yyyy HH:mm")}
+                        Start: {(() => {
+                          try {
+                            const date = new Date(selectedRound.startDate);
+                            if (!isNaN(date.getTime())) {
+                              return format(date, "MMM dd, yyyy HH:mm");
+                            }
+                          } catch (e) {
+                            console.error('Error formatting date:', selectedRound.startDate, e);
+                          }
+                          return String(selectedRound.startDate);
+                        })()}
                       </p>
                     </div>
                     <Badge variant={selectedRound.isActive ? "default" : "secondary"}>
@@ -532,19 +566,31 @@ export default function Allocation() {
                   </div>
                 ) : (
                   <>
-                    {selectedRound && (
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm font-medium text-blue-900">
-                          Showing pre-condition status for: <strong>{selectedRound.roundName}</strong> - Round {selectedRound.roundNumber}
+                    {!selectedCounselingTitle || !selectedRoundId ? (
+                      <div className="text-center p-8 bg-muted rounded-lg border border-border">
+                        <AlertTriangle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">
+                          Select Counseling Title and Round
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          Please select an academic year, counseling title, and round number above to view pre-flight checks and allocation status.
                         </p>
                       </div>
-                    )}
-                    <div className="space-y-4">
-                      <h3 className="font-semibold">
-                        Pre-flight Checks
-                        {selectedRound && ` (${selectedRound.roundName} - Round ${selectedRound.roundNumber})`}
-                      </h3>
-                      {preflightChecks.map((check, index) => (
+                    ) : (
+                      <>
+                        {selectedRound && (
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm font-medium text-blue-900">
+                              Showing pre-condition status for: <strong>{selectedRound.roundName}</strong> - Round {selectedRound.roundNumber}
+                            </p>
+                          </div>
+                        )}
+                        <div className="space-y-4">
+                          <h3 className="font-semibold">
+                            Pre-flight Checks
+                            {selectedRound && ` (${selectedRound.roundName} - Round ${selectedRound.roundNumber})`}
+                          </h3>
+                          {preflightChecks.map((check, index) => (
                         <div key={index} className="flex items-start space-x-3 p-3 border border-border rounded-lg">
                           <check.icon className={`w-5 h-5 mt-0.5 ${check.color}`} />
                           <div className="flex-1">
@@ -560,12 +606,12 @@ export default function Allocation() {
                             <p className="text-sm text-muted-foreground">{check.description}</p>
                           </div>
                         </div>
-                      ))}
-                    </div>
+                          ))}
+                        </div>
 
-                    <div className="space-y-4">
-                      {/* Finalize Allocation Section */}
-                      {!isAllocationFinalized && !allocationStatus?.completed && (
+                        <div className="space-y-4">
+                          {/* Finalize Allocation Section */}
+                          {!isAllocationFinalized && !allocationStatus?.completed && (
                         <div className="space-y-2">
                           <h4 className="font-medium text-sm">Step 1: Finalize Allocation</h4>
                           <AlertDialog>
@@ -654,20 +700,22 @@ export default function Allocation() {
                           Upload Required Files
                         </Button>
                       )}
-                    </div>
+                      </div>
 
-                    {!canRunAllocation && (
-                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                        <div className="flex items-start space-x-2">
-                          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
-                          <div>
-                            <h4 className="font-medium text-amber-800">Action Required</h4>
-                            <p className="text-sm text-amber-700">
-                              Please upload and validate both student choices and vacancy data files before running the allocation.
-                            </p>
+                      {!canRunAllocation && (
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-start space-x-2">
+                            <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
+                            <div>
+                              <h4 className="font-medium text-amber-800">Action Required</h4>
+                              <p className="text-sm text-amber-700">
+                                Please upload and validate both student choices and vacancy data files before running the allocation.
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
+                      </>
                     )}
                   </>
                 )}

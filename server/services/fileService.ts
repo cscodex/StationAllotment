@@ -426,6 +426,79 @@ export class FileService {
     return csvContent;
   }
 
+  generateVacanciesTestData(): string {
+    const headers = [
+      'UDISE Code',
+      'School Name',
+      'District',
+      'Stream',
+      'Gender',
+      'Category',
+      'Total Seats',
+      'Available Seats'
+    ];
+
+    // School districts (10 districts that have schools)
+    const schoolDistricts = [
+      'Amritsar', 'Bathinda', 'Ferozepur', 'Gurdaspur', 'Jalandhar',
+      'Ludhiana', 'Patiala', 'Pathankot', 'SAS Nagar', 'Sangrur'
+    ];
+
+    const streams = ['Medical', 'Commerce', 'NonMedical'];
+    const genders = ['Male', 'Female', 'Other'];
+    
+    // Male categories
+    const maleCategories = ['Open', 'Disabled', 'Private'];
+    // Female categories
+    const femaleCategories = ['Open', 'WHH', 'Disabled', 'Private'];
+    // Other gender categories (same as male)
+    const otherCategories = ['Open', 'Disabled', 'Private'];
+
+    const rows: string[][] = [];
+    let udiseCounter = 31010000001; // Starting UDISE code
+
+    // Generate test data for each school district
+    schoolDistricts.forEach((district, districtIndex) => {
+      const baseUdise = udiseCounter + (districtIndex * 1000);
+      
+      streams.forEach((stream, streamIndex) => {
+        const streamUdise = baseUdise + (streamIndex * 100);
+        
+        genders.forEach((gender) => {
+          const categories = gender === 'Female' ? femaleCategories : 
+                           gender === 'Other' ? otherCategories : maleCategories;
+          
+          categories.forEach((category, categoryIndex) => {
+            const udiseCode = String(streamUdise + categoryIndex);
+            const schoolName = `Government Senior Secondary School, ${district}`;
+            
+            // Generate varied seat numbers for testing
+            const totalSeats = 20 + (districtIndex * 5) + (streamIndex * 10) + (categoryIndex * 3);
+            const availableSeats = totalSeats; // Initially all seats are available
+            
+            rows.push([
+              udiseCode,
+              schoolName,
+              district,
+              stream,
+              gender,
+              category,
+              String(totalSeats),
+              String(availableSeats)
+            ]);
+          });
+        });
+      });
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
   private async parseEntranceResultsFile(file: Express.Multer.File, academicYear: string): Promise<InsertStudentsEntranceResult[]> {
     const workbook = XLSX.readFile(file.path);
     const sheetName = workbook.SheetNames[0];

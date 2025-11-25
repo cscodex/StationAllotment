@@ -55,16 +55,52 @@ function parseSQL(sqlContent: string): string[] {
     })
     .join("\n");
 
-  // Split by semicolon, handling strings
+  // Split by semicolon, handling strings and dollar-quoted strings
   const statements: string[] = [];
   let currentStatement = "";
   let inString = false;
   let stringChar = "";
+  let inDollarQuote = false;
+  let dollarTag = "";
   
   for (let i = 0; i < cleanedSQL.length; i++) {
     const char = cleanedSQL[i];
     
-    if ((char === "'" || char === '"') && (i === 0 || cleanedSQL[i - 1] !== '\\')) {
+    // Handle dollar-quoted strings ($tag$ ... $tag$ or $$ ... $$)
+    if (char === '$' && !inString && !inDollarQuote) {
+      // Find the closing $ of the opening tag
+      let tagEnd = i + 1;
+      while (tagEnd < cleanedSQL.length && cleanedSQL[tagEnd] !== '$') {
+        tagEnd++;
+      }
+      if (tagEnd < cleanedSQL.length) {
+        dollarTag = cleanedSQL.substring(i, tagEnd + 1);
+        inDollarQuote = true;
+        currentStatement += dollarTag;
+        i = tagEnd;
+        continue;
+      }
+    } else if (inDollarQuote && char === '$') {
+      // Check if this matches the opening tag
+      let tagEnd = i;
+      while (tagEnd < cleanedSQL.length && cleanedSQL[tagEnd] !== '$') {
+        tagEnd++;
+      }
+      if (tagEnd < cleanedSQL.length) {
+        const potentialEndTag = cleanedSQL.substring(i, tagEnd + 1);
+        if (potentialEndTag === dollarTag) {
+          // Found matching closing tag
+          currentStatement += potentialEndTag;
+          inDollarQuote = false;
+          dollarTag = "";
+          i = tagEnd;
+          continue;
+        }
+      }
+    }
+    
+    // Handle regular strings (only if not in dollar quote)
+    if (!inDollarQuote && (char === "'" || char === '"') && (i === 0 || cleanedSQL[i - 1] !== '\\')) {
       if (!inString) {
         inString = true;
         stringChar = char;
@@ -74,9 +110,11 @@ function parseSQL(sqlContent: string): string[] {
       }
     }
     
+    // Add character to current statement
     currentStatement += char;
     
-    if (char === ";" && !inString) {
+    // Only split on semicolon if not in any string context
+    if (char === ";" && !inString && !inDollarQuote) {
       const trimmed = currentStatement.trim();
       if (trimmed.length > 0) {
         statements.push(trimmed);
@@ -113,6 +151,8 @@ async function runAllMigrations() {
     { name: "Update Counseling Rounds Constraints", file: "migrations/update_counseling_rounds_unique_constraint.sql", path: path.join(__dirname, "migrations", "update_counseling_rounds_unique_constraint.sql") },
     { name: "Make end_date Nullable", file: "migrations/make_end_date_nullable.sql", path: path.join(__dirname, "migrations", "make_end_date_nullable.sql") },
     { name: "Add roundName to Shared Data", file: "migrations/add_round_name_to_shared_data.sql", path: path.join(__dirname, "migrations", "add_round_name_to_shared_data.sql") },
+    { name: "Change start_date to TIMESTAMP", file: "migrations/change_start_date_to_timestamp.sql", path: path.join(__dirname, "migrations", "change_start_date_to_timestamp.sql") },
+    { name: "Add is_suspended to Counseling Rounds", file: "migrations/add_is_suspended_to_counseling_rounds.sql", path: path.join(__dirname, "migrations", "add_is_suspended_to_counseling_rounds.sql") },
   ];
 
   console.log("\n📋 Migration Plan:");
@@ -157,6 +197,8 @@ async function runAllMigrations() {
     console.log("   ✅ UDISE code columns added");
     console.log("   ✅ Unique constraints updated");
     console.log("   ✅ end_date made nullable (optional)");
+    console.log("   ✅ start_date changed to TIMESTAMP (datetime support)");
+    console.log("   ✅ is_suspended column added to counseling_rounds");
     console.log("\n🎉 Your database is ready for production!");
 
   } catch (error: any) {

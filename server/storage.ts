@@ -103,6 +103,21 @@ export interface IStorage {
   getVacanciesByYear(academicYear: string, roundName?: string): Promise<Vacancy[]>;
   createVacancy(vacancy: InsertVacancy): Promise<Vacancy>;
   checkIfAllSeatsFilled(academicYear: string, roundName: string): Promise<boolean>;
+  checkVacancyAvailability(academicYear: string, roundName: string): Promise<{
+    hasVacancies: boolean;
+    totalAvailableSeats: number;
+    vacancyCount: number;
+  }>;
+  getPrerequisitesStatus(academicYear: string, roundName: string): Promise<{
+    hasVacancyData: boolean;
+    vacancyCount: number;
+    totalAvailableSeats: number;
+    hasEntranceResults: boolean;
+    entranceResultsCount: number;
+    hasStudentChoices: boolean;
+    studentsWithChoicesCount: number;
+    allPrerequisitesMet: boolean;
+  }>;
   updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy>;
   bulkUpsertVacancies(vacancies: InsertVacancy[]): Promise<Vacancy[]>;
   deleteAllVacancies(): Promise<void>;
@@ -431,6 +446,42 @@ export class DatabaseStorage implements IStorage {
     return round;
   }
 
+  async counselingTitleExists(academicYear: string, roundName: string): Promise<boolean> {
+    const existing = await db.select().from(counselingRounds)
+      .where(and(
+        eq(counselingRounds.academicYear, academicYear),
+        eq(counselingRounds.roundName, roundName)
+      ))
+      .limit(1);
+    return existing.length > 0;
+  }
+
+  async getLatestRoundForCounseling(academicYear: string, roundName: string): Promise<CounselingRound | undefined> {
+    const rounds = await db.select().from(counselingRounds)
+      .where(and(
+        eq(counselingRounds.academicYear, academicYear),
+        eq(counselingRounds.roundName, roundName)
+      ))
+      .orderBy(desc(counselingRounds.roundNumber))
+      .limit(1);
+    return rounds[0];
+  }
+
+  async toggleSuspendCounseling(academicYear: string, roundName: string, suspend: boolean): Promise<CounselingRound[]> {
+    const updated = await db
+      .update(counselingRounds)
+      .set({ 
+        isSuspended: suspend,
+        updatedAt: new Date() 
+      })
+      .where(and(
+        eq(counselingRounds.academicYear, academicYear),
+        eq(counselingRounds.roundName, roundName)
+      ))
+      .returning();
+    return updated;
+  }
+
   async getActiveCounselingRound(academicYear: string): Promise<CounselingRound | undefined> {
     const [round] = await db.select().from(counselingRounds)
       .where(and(
@@ -534,6 +585,57 @@ export class DatabaseStorage implements IStorage {
       .where(eq(counselingRounds.id, id))
       .returning();
     return completed;
+  }
+
+  async autoCreateNextRound(academicYear: string, roundName: string, defaultStartDate: Date): Promise<CounselingRound | null> {
+    // Get the latest round for this counseling
+    const latestRound = await this.getLatestRoundForCounseling(academicYear, roundName);
+    
+    if (!latestRound) {
+      return null; // No existing rounds, should create first round instead
+    }
+
+    // Check if suspended
+    if (latestRound.isSuspended) {
+      console.log(`⏸️  Auto-creation skipped: Counseling "${roundName}" is suspended`);
+      return null;
+    }
+
+    // Check if latest round is completed
+    if (!latestRound.isCompleted) {
+      return null; // Latest round not completed yet
+    }
+
+    // Check if vacancies exist
+    const vacancyAvailability = await this.checkVacancyAvailability(academicYear, roundName);
+    if (!vacancyAvailability.hasVacancies) {
+      console.log(`⏸️  Auto-creation skipped: No vacancies available for "${roundName}"`);
+      return null;
+    }
+
+    // Create next round
+    const nextRoundNumber = latestRound.roundNumber + 1;
+    const newRound = await this.createCounselingRound({
+      academicYear,
+      roundNumber: nextRoundNumber,
+      roundName,
+      startDate: defaultStartDate,
+      endDate: undefined,
+      isActive: false,
+      isCompleted: false,
+    });
+
+    // Copy isSuspended from previous round
+    if (latestRound.isSuspended) {
+      await db
+        .update(counselingRounds)
+        .set({ isSuspended: true, updatedAt: new Date() })
+        .where(eq(counselingRounds.id, newRound.id));
+      newRound.isSuspended = true;
+    }
+
+    console.log(`✅ Auto-created Round ${nextRoundNumber} for "${roundName}"`);
+    return newRound;
   }
 
   async bulkCreateCounselingRounds(rounds: InsertCounselingRound[]): Promise<CounselingRound[]> {
@@ -651,6 +753,62 @@ export class DatabaseStorage implements IStorage {
     
     // If no vacancies have available seats, all seats are filled
     return !hasAvailableSeats;
+  }
+
+  async checkVacancyAvailability(academicYear: string, roundName: string): Promise<{
+    hasVacancies: boolean;
+    totalAvailableSeats: number;
+    vacancyCount: number;
+  }> {
+    const allVacancies = await this.getVacancies(academicYear, roundName);
+    const totalAvailableSeats = allVacancies.reduce((sum, v) => sum + (v.availableSeats || 0), 0);
+    
+    return {
+      hasVacancies: totalAvailableSeats > 0,
+      totalAvailableSeats,
+      vacancyCount: allVacancies.length,
+    };
+  }
+
+  async getPrerequisitesStatus(academicYear: string, roundName: string): Promise<{
+    hasVacancyData: boolean;
+    vacancyCount: number;
+    totalAvailableSeats: number;
+    hasEntranceResults: boolean;
+    entranceResultsCount: number;
+    hasStudentChoices: boolean;
+    studentsWithChoicesCount: number;
+    allPrerequisitesMet: boolean;
+  }> {
+    // Check vacancy data
+    const vacancies = await this.getVacancies(academicYear, roundName);
+    const totalAvailableSeats = vacancies.reduce((sum, v) => sum + (v.availableSeats || 0), 0);
+    const hasVacancyData = totalAvailableSeats > 0;
+
+    // Check entrance results
+    const allEntranceResults = await db.select().from(studentsEntranceResult)
+      .where(and(
+        eq(studentsEntranceResult.academicYear, academicYear),
+        eq(studentsEntranceResult.roundName, roundName)
+      ));
+    const hasEntranceResults = allEntranceResults.length > 0;
+
+    // Check students with choices (choice1 filled)
+    const allStudents = await db.select().from(students)
+      .where(eq(students.academicYear, academicYear));
+    const studentsWithChoices = allStudents.filter(s => s.choice1 && s.choice1.trim() !== '');
+    const hasStudentChoices = studentsWithChoices.length > 0;
+
+    return {
+      hasVacancyData,
+      vacancyCount: vacancies.length,
+      totalAvailableSeats,
+      hasEntranceResults,
+      entranceResultsCount: allEntranceResults.length,
+      hasStudentChoices,
+      studentsWithChoicesCount: studentsWithChoices.length,
+      allPrerequisitesMet: hasVacancyData && hasEntranceResults && hasStudentChoices,
+    };
   }
 
   async createVacancy(vacancy: InsertVacancy): Promise<Vacancy> {
