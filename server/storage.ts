@@ -34,7 +34,7 @@ import {
   type InsertUnlockRequest,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, asc, sql, or, ilike } from "drizzle-orm";
+import { eq, desc, and, asc, sql, or, ilike, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -53,7 +53,7 @@ export interface IStorage {
   getStudentsByYearAndRound(academicYear: string, roundNumber: number): Promise<Student[]>;
   createStudent(student: InsertStudent): Promise<Student>;
   updateStudent(id: string, student: Partial<InsertStudent>): Promise<Student>;
-  bulkCreateStudents(students: InsertStudent[]): Promise<Student[]>;
+  bulkCreateStudents(students: InsertStudent[], onProgress?: (processed: number, total: number) => void): Promise<Student[]>;
   deleteAllStudents(): Promise<void>;
   getStudentsCount(academicYear?: string): Promise<number>;
   getStudentsByStatus(status: string, academicYear?: string): Promise<Student[]>;
@@ -65,7 +65,7 @@ export interface IStorage {
   getStudentsEntranceResultsCount(): Promise<number>;
   searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]>;
   createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult>;
-  bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[]): Promise<StudentsEntranceResult[]>;
+  bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[], onProgress?: (processed: number, total: number) => void): Promise<StudentsEntranceResult[]>;
   updateStudentPreferences(studentId: string, preferences: {
     choice1?: string; choice2?: string; choice3?: string; choice4?: string; choice5?: string;
     choice6?: string; choice7?: string; choice8?: string; choice9?: string; choice10?: string;
@@ -79,6 +79,7 @@ export interface IStorage {
 
   // School operations
   getSchool(udiseCode: string): Promise<School | undefined>;
+  getSchoolByName(schoolName: string): Promise<School | undefined>;
   getAllSchools(): Promise<School[]>;
   getSchoolsByDistrict(district: string): Promise<School[]>;
   createSchool(school: InsertSchool): Promise<School>;
@@ -119,7 +120,7 @@ export interface IStorage {
     allPrerequisitesMet: boolean;
   }>;
   updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy>;
-  bulkUpsertVacancies(vacancies: InsertVacancy[]): Promise<Vacancy[]>;
+  bulkUpsertVacancies(vacancies: InsertVacancy[], onProgress?: (processed: number, total: number) => void): Promise<Vacancy[]>;
   deleteAllVacancies(): Promise<void>;
 
   // Settings operations
@@ -271,11 +272,51 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async bulkCreateStudents(studentsList: InsertStudent[]): Promise<Student[]> {
-    return db
-      .insert(students)
-      .values(studentsList.map(s => ({ ...s, updatedAt: new Date() })))
-      .returning();
+  async bulkCreateStudents(studentsList: InsertStudent[], onProgress?: (processed: number, total: number) => void): Promise<Student[]> {
+    const results = [];
+    const total = studentsList.length;
+    const BATCH_SIZE = 50; // Process in batches of 50
+    
+    for (let i = 0; i < studentsList.length; i += BATCH_SIZE) {
+      const batch = studentsList.slice(i, i + BATCH_SIZE);
+      for (const student of batch) {
+        const [result] = await db
+          .insert(students)
+          .values({ ...student, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [students.appNo], // Use appNo as unique identifier
+            set: {
+              name: student.name,
+              meritNumber: student.meritNumber,
+              gender: student.gender,
+              category: student.category,
+              stream: student.stream,
+              choice1: student.choice1,
+              choice2: student.choice2,
+              choice3: student.choice3,
+              choice4: student.choice4,
+              choice5: student.choice5,
+              choice6: student.choice6,
+              choice7: student.choice7,
+              choice8: student.choice8,
+              choice9: student.choice9,
+              choice10: student.choice10,
+              academicYear: student.academicYear,
+              counselingRoundId: student.counselingRoundId,
+              counselingRoundNumber: student.counselingRoundNumber,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        results.push(result);
+      }
+      
+      // Report progress after each batch
+      if (onProgress) {
+        onProgress(results.length, total);
+      }
+    }
+    return results;
   }
 
   async deleteAllStudents(): Promise<void> {
@@ -348,11 +389,61 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[]): Promise<StudentsEntranceResult[]> {
-    return db
-      .insert(studentsEntranceResult)
-      .values(results.map(r => ({ ...r, updatedAt: new Date() })))
-      .returning();
+  async bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[], onProgress?: (processed: number, total: number) => void): Promise<StudentsEntranceResult[]> {
+    // Use upsert to handle duplicates - update if any unique field (merit_no, application_no, roll_no) already exists
+    const inserted = [];
+    const total = results.length;
+    const BATCH_SIZE = 50; // Process in batches of 50
+    
+    for (let i = 0; i < results.length; i += BATCH_SIZE) {
+      const batch = results.slice(i, i + BATCH_SIZE);
+      for (const result of batch) {
+        // Check if record exists by any unique field (single query with OR)
+        const existing = await db.select()
+          .from(studentsEntranceResult)
+          .where(or(
+            eq(studentsEntranceResult.meritNo, result.meritNo),
+            eq(studentsEntranceResult.applicationNo, result.applicationNo),
+            eq(studentsEntranceResult.rollNo, result.rollNo)
+          ))
+          .limit(1);
+
+        if (existing.length > 0) {
+          // Update existing record (use the id from the found record)
+          const [updated] = await db
+            .update(studentsEntranceResult)
+            .set({
+              meritNo: result.meritNo,
+              applicationNo: result.applicationNo,
+              rollNo: result.rollNo,
+              studentName: result.studentName,
+              marks: result.marks,
+              gender: result.gender,
+              category: result.category,
+              stream: result.stream,
+              academicYear: result.academicYear,
+              roundName: result.roundName,
+              updatedAt: new Date(),
+            })
+            .where(eq(studentsEntranceResult.id, existing[0].id))
+            .returning();
+          inserted.push(updated);
+        } else {
+          // Insert new record
+          const [newRecord] = await db
+            .insert(studentsEntranceResult)
+            .values({ ...result, updatedAt: new Date() })
+            .returning();
+          inserted.push(newRecord);
+        }
+      }
+      
+      // Report progress after each batch
+      if (onProgress) {
+        onProgress(inserted.length, total);
+      }
+    }
+    return inserted;
   }
 
   async updateStudentsEntranceResult(id: string, updateData: Partial<InsertStudentsEntranceResult>): Promise<StudentsEntranceResult> {
@@ -828,33 +919,85 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async bulkUpsertVacancies(vacanciesList: InsertVacancy[]): Promise<Vacancy[]> {
+  async bulkUpsertVacancies(vacanciesList: InsertVacancy[], onProgress?: (processed: number, total: number) => void): Promise<Vacancy[]> {
     const results = [];
-    for (const vacancy of vacanciesList) {
-      // New unique constraint: academicYear, udiseCode, stream, gender, category
-      if (!vacancy.udiseCode) {
-        // Skip vacancies without UDISE code (should not happen in production)
-        console.warn('Skipping vacancy without UDISE code:', vacancy);
-        continue;
+    const total = vacanciesList.length;
+    const BATCH_SIZE = 50; // Process in batches of 50
+    
+    for (let i = 0; i < vacanciesList.length; i += BATCH_SIZE) {
+      const batch = vacanciesList.slice(i, i + BATCH_SIZE);
+      for (const vacancy of batch) {
+        // Use the constraint that doesn't include nullable columns: district, stream, gender, category
+        // Note: udiseCode, academicYear, and roundName are nullable, so we can't use them in ON CONFLICT
+        // We'll use district-based constraint and handle academicYear/roundName/udiseCode in the SET clause
+        
+        if (!vacancy.district || !vacancy.stream || !vacancy.gender || !vacancy.category) {
+          console.warn('Skipping vacancy with missing required fields:', vacancy);
+          continue;
+        }
+
+        // Check if vacancy already exists based on district, stream, gender, category
+        // and also match academicYear, roundName, and udiseCode if provided
+        const conditions = [
+          eq(vacancies.district, vacancy.district),
+          eq(vacancies.stream, vacancy.stream),
+          eq(vacancies.gender, vacancy.gender),
+          eq(vacancies.category, vacancy.category),
+        ];
+        
+        // Add nullable field conditions
+        if (vacancy.academicYear) {
+          conditions.push(eq(vacancies.academicYear, vacancy.academicYear));
+        } else {
+          conditions.push(isNull(vacancies.academicYear));
+        }
+        
+        if (vacancy.roundName) {
+          conditions.push(eq(vacancies.roundName, vacancy.roundName));
+        } else {
+          conditions.push(isNull(vacancies.roundName));
+        }
+        
+        if (vacancy.udiseCode) {
+          conditions.push(eq(vacancies.udiseCode, vacancy.udiseCode));
+        } else {
+          conditions.push(isNull(vacancies.udiseCode));
+        }
+
+        const existing = await db.select()
+          .from(vacancies)
+          .where(and(...conditions))
+          .limit(1);
+
+        if (existing.length > 0) {
+          // Update existing vacancy
+          const [updated] = await db
+            .update(vacancies)
+            .set({
+              totalSeats: vacancy.totalSeats,
+              availableSeats: vacancy.availableSeats,
+              academicYear: vacancy.academicYear,
+              roundName: vacancy.roundName,
+              udiseCode: vacancy.udiseCode,
+              updatedAt: new Date(),
+            })
+            .where(eq(vacancies.id, existing[0].id))
+            .returning();
+          results.push(updated);
+        } else {
+          // Insert new vacancy
+          const [inserted] = await db
+            .insert(vacancies)
+            .values({ ...vacancy, updatedAt: new Date() })
+            .returning();
+          results.push(inserted);
+        }
       }
-      if (!vacancy.academicYear) {
-        console.warn('Skipping vacancy without academic year:', vacancy);
-        continue;
+      
+      // Report progress after each batch
+      if (onProgress) {
+        onProgress(results.length, total);
       }
-      const [result] = await db
-        .insert(vacancies)
-        .values({ ...vacancy, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: [vacancies.academicYear, vacancies.udiseCode, vacancies.stream, vacancies.gender, vacancies.category],
-          set: { 
-            totalSeats: vacancy.totalSeats,
-            availableSeats: vacancy.availableSeats,
-            district: vacancy.district, // Update district in case it changed
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      results.push(result);
     }
     return results;
   }
@@ -866,6 +1009,11 @@ export class DatabaseStorage implements IStorage {
   // School operations
   async getSchool(udiseCode: string): Promise<School | undefined> {
     const [school] = await db.select().from(schools).where(eq(schools.udiseCode, udiseCode));
+    return school;
+  }
+
+  async getSchoolByName(schoolName: string): Promise<School | undefined> {
+    const [school] = await db.select().from(schools).where(eq(schools.schoolName, schoolName));
     return school;
   }
 
@@ -890,19 +1038,42 @@ export class DatabaseStorage implements IStorage {
   async bulkUpsertSchools(schoolsList: InsertSchool[]): Promise<School[]> {
     const results = [];
     for (const school of schoolsList) {
-      const [result] = await db
-        .insert(schools)
-        .values({ ...school, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: [schools.udiseCode],
-          set: { 
-            schoolName: school.schoolName,
-            district: school.district,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      results.push(result);
+      // Check if school with this name already exists (school_name is unique)
+      const existingByName = await this.getSchoolByName(school.schoolName);
+      if (existingByName) {
+        // School name exists - update it if UDISE code matches, otherwise skip (can't change UDISE code)
+        if (existingByName.udiseCode === school.udiseCode) {
+          // Same UDISE code - update district if needed
+          const [updated] = await db
+            .update(schools)
+            .set({
+              district: school.district,
+              updatedAt: new Date(),
+            })
+            .where(eq(schools.udiseCode, school.udiseCode))
+            .returning();
+          results.push(updated);
+        } else {
+          // Different UDISE code - can't insert (school_name unique constraint)
+          console.warn(`School "${school.schoolName}" already exists with UDISE code ${existingByName.udiseCode}, skipping new UDISE code ${school.udiseCode}`);
+          results.push(existingByName);
+        }
+      } else {
+        // School name doesn't exist - insert/update based on UDISE code
+        const [result] = await db
+          .insert(schools)
+          .values({ ...school, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [schools.udiseCode],
+            set: { 
+              schoolName: school.schoolName,
+              district: school.district,
+              updatedAt: new Date(),
+            },
+          })
+          .returning();
+        results.push(result);
+      }
     }
     return results;
   }

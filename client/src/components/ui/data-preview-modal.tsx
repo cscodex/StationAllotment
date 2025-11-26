@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { 
   Pagination, 
   PaginationContent, 
@@ -30,6 +31,7 @@ interface DataPreviewModalProps {
   fileType: 'students' | 'vacancies' | 'entrance-results';
   fileName: string;
   isUploading: boolean;
+  uploadId?: string;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -41,9 +43,54 @@ export function DataPreviewModal({
   validationResults,
   fileType,
   fileName,
-  isUploading
+  isUploading,
+  uploadId
 }: DataPreviewModalProps) {
   const [currentPage, setCurrentPage] = useState(1);
+  const [uploadProgress, setUploadProgress] = useState<{
+    processed: number;
+    total: number;
+    percentage: number;
+    status: 'processing' | 'completed' | 'failed';
+  } | null>(null);
+
+  // Poll for progress when uploading
+  useEffect(() => {
+    if (!isUploading || !uploadId) {
+      setUploadProgress(null);
+      return;
+    }
+
+    const pollProgress = async () => {
+      try {
+        const response = await fetch(`/api/files/upload/progress/${uploadId}`, {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const progress = await response.json();
+          setUploadProgress({
+            processed: progress.processed || 0,
+            total: progress.total || 0,
+            percentage: progress.percentage || 0,
+            status: progress.status || 'processing',
+          });
+
+          // Stop polling if completed or failed
+          if (progress.status === 'completed' || progress.status === 'failed') {
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error polling progress:', error);
+      }
+    };
+
+    // Poll immediately and then every 500ms
+    pollProgress();
+    const interval = setInterval(pollProgress, 500);
+
+    return () => clearInterval(interval);
+  }, [isUploading, uploadId]);
 
   const totalPages = Math.ceil((validationResults.allRecords?.length || 0) / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -64,6 +111,13 @@ export function DataPreviewModal({
             <th className="p-2 text-left font-medium">Choice 1</th>
             <th className="p-2 text-left font-medium">Choice 2</th>
             <th className="p-2 text-left font-medium">Choice 3</th>
+            <th className="p-2 text-left font-medium">Choice 4</th>
+            <th className="p-2 text-left font-medium">Choice 5</th>
+            <th className="p-2 text-left font-medium">Choice 6</th>
+            <th className="p-2 text-left font-medium">Choice 7</th>
+            <th className="p-2 text-left font-medium">Choice 8</th>
+            <th className="p-2 text-left font-medium">Choice 9</th>
+            <th className="p-2 text-left font-medium">Choice 10</th>
           </tr>
         </thead>
         <tbody>
@@ -80,6 +134,13 @@ export function DataPreviewModal({
               <td className="p-2">{record.choice1 || '-'}</td>
               <td className="p-2">{record.choice2 || '-'}</td>
               <td className="p-2">{record.choice3 || '-'}</td>
+              <td className="p-2">{record.choice4 || '-'}</td>
+              <td className="p-2">{record.choice5 || '-'}</td>
+              <td className="p-2">{record.choice6 || '-'}</td>
+              <td className="p-2">{record.choice7 || '-'}</td>
+              <td className="p-2">{record.choice8 || '-'}</td>
+              <td className="p-2">{record.choice9 || '-'}</td>
+              <td className="p-2">{record.choice10 || '-'}</td>
             </tr>
           ))}
         </tbody>
@@ -342,6 +403,21 @@ export function DataPreviewModal({
             </Pagination>
           )}
         </div>
+
+        {/* Upload Progress Bar */}
+        {isUploading && uploadProgress && (
+          <div className="space-y-2 pt-4 border-t">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Uploading to database...
+              </span>
+              <span className="font-medium">
+                {uploadProgress.processed} / {uploadProgress.total} records ({uploadProgress.percentage}%)
+              </span>
+            </div>
+            <Progress value={uploadProgress.percentage} className="h-2" />
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex justify-end space-x-3 pt-4 border-t">

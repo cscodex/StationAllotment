@@ -86,7 +86,7 @@ export const studentsEntranceResult = pgTable("students_entrance_result", {
 // Schools table for UDISE code and school name mapping
 export const schools = pgTable("schools", {
   udiseCode: varchar("udise_code").primaryKey(),
-  schoolName: varchar("school_name").notNull(),
+  schoolName: varchar("school_name").notNull().unique(),
   district: varchar("district").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

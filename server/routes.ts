@@ -801,6 +801,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Progress tracking endpoint
+  app.get('/api/files/upload/progress/:uploadId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { uploadId } = req.params;
+      const { progressStore } = await import('./utils/progressStore');
+      const progress = progressStore.getProgress(uploadId);
+      
+      if (!progress) {
+        return res.status(404).json({ message: 'Progress not found' });
+      }
+      
+      res.json(progress);
+    } catch (error) {
+      console.error("Get upload progress error:", error);
+      res.status(500).json({ message: "Failed to get upload progress" });
+    }
+  });
+
   app.post('/api/files/upload/entrance-results', isCentralAdmin, upload.single('file'), async (req: any, res) => {
     try {
       if (!req.file) {

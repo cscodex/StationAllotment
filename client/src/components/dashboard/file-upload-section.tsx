@@ -30,6 +30,7 @@ export default function FileUploadSection() {
   const [showColumnRequirements, setShowColumnRequirements] = useState(false);
   const [columnRequirementsType, setColumnRequirementsType] = useState<'entrance-results' | 'students' | 'vacancies' | null>(null);
   const [pendingFile, setPendingFile] = useState<{file: File, type: string, validationResults: any} | null>(null);
+  const [currentUploadId, setCurrentUploadId] = useState<string | undefined>(undefined);
   const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("");
   const [selectedCounselingTitle, setSelectedCounselingTitle] = useState<string | null>(null);
   const { toast } = useToast();
@@ -79,8 +80,13 @@ export default function FileUploadSection() {
   // File validation mutations (don't save to database)
   const validateFileMutation = useMutation({
     mutationFn: async ({file, type}: {file: File, type: string}) => {
+      if (!selectedAcademicYear) {
+        throw new Error("Please select an academic year");
+      }
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('academicYear', selectedAcademicYear);
+      // Note: roundName is not needed for validation, only for actual upload
       const response = await fetch(`/api/files/validate/${type}`, {
         method: 'POST',
         body: formData,
@@ -132,7 +138,16 @@ export default function FileUploadSection() {
       }
       return response.json();
     },
+    onMutate: async () => {
+      // Set uploadId will be set from response
+    },
     onSuccess: (data) => {
+      // Set uploadId from response to track progress (even if upload is mostly done)
+      if (data.id) {
+        setCurrentUploadId(data.id);
+        // Clear after a delay to allow progress to be displayed
+        setTimeout(() => setCurrentUploadId(undefined), 2000);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
@@ -176,6 +191,12 @@ export default function FileUploadSection() {
       return response.json();
     },
     onSuccess: (data) => {
+      // Set uploadId from response to track progress (even if upload is mostly done)
+      if (data.id) {
+        setCurrentUploadId(data.id);
+        // Clear after a delay to allow progress to be displayed
+        setTimeout(() => setCurrentUploadId(undefined), 2000);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
@@ -217,6 +238,12 @@ export default function FileUploadSection() {
       return response.json();
     },
     onSuccess: (data) => {
+      // Set uploadId from response to track progress (even if upload is mostly done)
+      if (data.id) {
+        setCurrentUploadId(data.id);
+        // Clear after a delay to allow progress to be displayed
+        setTimeout(() => setCurrentUploadId(undefined), 2000);
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/files"] });
       queryClient.invalidateQueries({ queryKey: ["/api/students-entrance-results"] });
       toast({
@@ -859,6 +886,13 @@ export default function FileUploadSection() {
                         <th className="p-2 text-left">Choice 1</th>
                         <th className="p-2 text-left">Choice 2</th>
                         <th className="p-2 text-left">Choice 3</th>
+                        <th className="p-2 text-left">Choice 4</th>
+                        <th className="p-2 text-left">Choice 5</th>
+                        <th className="p-2 text-left">Choice 6</th>
+                        <th className="p-2 text-left">Choice 7</th>
+                        <th className="p-2 text-left">Choice 8</th>
+                        <th className="p-2 text-left">Choice 9</th>
+                        <th className="p-2 text-left">Choice 10</th>
                         <th className="p-2 text-left">Status</th>
                       </tr>
                     </thead>
@@ -872,6 +906,13 @@ export default function FileUploadSection() {
                           <td className="p-2">{student.choice1 || '-'}</td>
                           <td className="p-2">{student.choice2 || '-'}</td>
                           <td className="p-2">{student.choice3 || '-'}</td>
+                          <td className="p-2">{student.choice4 || '-'}</td>
+                          <td className="p-2">{student.choice5 || '-'}</td>
+                          <td className="p-2">{student.choice6 || '-'}</td>
+                          <td className="p-2">{student.choice7 || '-'}</td>
+                          <td className="p-2">{student.choice8 || '-'}</td>
+                          <td className="p-2">{student.choice9 || '-'}</td>
+                          <td className="p-2">{student.choice10 || '-'}</td>
                           <td className="p-2">
                             <span className={`px-2 py-1 rounded text-xs ${
                               student.allocationStatus === 'allotted' 
@@ -954,12 +995,14 @@ export default function FileUploadSection() {
         onClose={() => {
           setShowValidationPreview(false);
           setPendingFile(null);
+          setCurrentUploadId(undefined);
         }}
         onConfirm={handleConfirmUpload}
         validationResults={pendingFile.validationResults}
         fileType={pendingFile.type as 'students' | 'vacancies' | 'entrance-results'}
         fileName={pendingFile.file.name}
         isUploading={uploadStudentsMutation.isPending || uploadVacanciesMutation.isPending || uploadEntranceResultsMutation.isPending}
+        uploadId={currentUploadId}
       />
     )}
 
@@ -975,7 +1018,10 @@ export default function FileUploadSection() {
             {columnRequirementsType === 'vacancies' && ' - Vacancies'}
           </DialogTitle>
           <DialogDescription>
-            Required columns and their formats for the Excel/CSV template
+            Required columns and their formats for the Excel/CSV template. 
+            <span className="block mt-2 text-amber-600 font-medium">
+              Note: Academic Year and Counseling Title are selected in the form above, not included in the file.
+            </span>
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4">
@@ -1096,70 +1142,126 @@ export default function FileUploadSection() {
                   <TableCell>First preference district (must be valid Punjab district)</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="font-medium">Choice 2-10</TableCell>
+                  <TableCell className="font-medium">Choice 2</TableCell>
                   <TableCell>String</TableCell>
-                  <TableCell><Badge variant="outline">Optional</Badge></TableCell>
-                  <TableCell>Additional preference districts (up to 10 choices)</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Second preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 3</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Third preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 4</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Fourth preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 5</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Fifth preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 6</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Sixth preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 7</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Seventh preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 8</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Eighth preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 9</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Ninth preference district (must be valid Punjab district)</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Choice 10</TableCell>
+                  <TableCell>String</TableCell>
+                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                  <TableCell>Tenth preference district (must be valid Punjab district)</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
           )}
 
           {columnRequirementsType === 'vacancies' && (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[200px]">Column Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Required</TableHead>
-                  <TableHead>Description</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[200px]">Column Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Required</TableHead>
+                    <TableHead>Description</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                 <TableRow>
                   <TableCell className="font-medium">UDISE Code</TableCell>
                   <TableCell>String</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Unique school identifier code</TableCell>
+                  <TableCell><Badge variant="outline">Optional</Badge></TableCell>
+                  <TableCell>Unique school identifier code (11 digits, optional)</TableCell>
                 </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">District</TableCell>
-                  <TableCell>String</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be a valid Punjab district name</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">Stream</TableCell>
-                  <TableCell>String</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be: Medical, Commerce, or NonMedical</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">Gender</TableCell>
-                  <TableCell>String</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be: Male or Female</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">Category</TableCell>
-                  <TableCell>String</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Must be: Open, WHH, Disabled, or Private</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">Total Seats</TableCell>
-                  <TableCell>Integer</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Total number of seats available (non-negative)</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">Available Seats</TableCell>
-                  <TableCell>Integer</TableCell>
-                  <TableCell><Badge variant="destructive">Required</Badge></TableCell>
-                  <TableCell>Currently available seats (typically equals Total Seats initially)</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+                  <TableRow>
+                    <TableCell className="font-medium">District</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                    <TableCell>Must be a valid Punjab district name</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Stream</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                    <TableCell>Must be: Medical, Commerce, or NonMedical</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Gender</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                    <TableCell>Must be: Male or Female</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Category</TableCell>
+                    <TableCell>String</TableCell>
+                    <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                    <TableCell>Must be: Open, WHH, Disabled, or Private</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Total Seats</TableCell>
+                    <TableCell>Integer</TableCell>
+                    <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                    <TableCell>Total number of seats available (non-negative)</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Available Seats</TableCell>
+                    <TableCell>Integer</TableCell>
+                    <TableCell><Badge variant="destructive">Required</Badge></TableCell>
+                    <TableCell>Currently available seats (typically equals Total Seats initially)</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-sm text-blue-900">
+                  <strong>Important:</strong> Academic Year and Counseling Title are automatically set from your selections above. 
+                  Do NOT include these columns in your file - they will be ignored if present.
+                </p>
+              </div>
+            </>
           )}
         </div>
       </DialogContent>
