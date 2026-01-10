@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 async function executeSQL(sql: any, statement: string, index: number, total: number) {
   const statementPreview = statement.substring(0, 80).replace(/\s+/g, " ").trim();
   console.log(`[${index + 1}/${total}] Executing: ${statementPreview}...`);
-  
+
   try {
     await sql(statement);
     console.log(`   ✅ Success\n`);
@@ -25,9 +25,9 @@ async function executeSQL(sql: any, statement: string, index: number, total: num
   } catch (error: any) {
     const errorMsg = error.message || String(error);
     // Ignore "already exists" errors (IF NOT EXISTS handles this)
-    if (errorMsg.includes("already exists") || 
-        errorMsg.includes("duplicate") ||
-        (errorMsg.includes("does not exist") && errorMsg.includes("constraint"))) {
+    if (errorMsg.includes("already exists") ||
+      errorMsg.includes("duplicate") ||
+      (errorMsg.includes("does not exist") && errorMsg.includes("constraint"))) {
       console.log(`   ⚠️  Warning (ignored): ${errorMsg.substring(0, 100)}\n`);
       return true;
     } else {
@@ -62,10 +62,10 @@ function parseSQL(sqlContent: string): string[] {
   let stringChar = "";
   let inDollarQuote = false;
   let dollarTag = "";
-  
+
   for (let i = 0; i < cleanedSQL.length; i++) {
     const char = cleanedSQL[i];
-    
+
     // Handle dollar-quoted strings ($tag$ ... $tag$ or $$ ... $$)
     if (char === '$' && !inString && !inDollarQuote) {
       // Find the closing $ of the opening tag
@@ -98,7 +98,7 @@ function parseSQL(sqlContent: string): string[] {
         }
       }
     }
-    
+
     // Handle regular strings (only if not in dollar quote)
     if (!inDollarQuote && (char === "'" || char === '"') && (i === 0 || cleanedSQL[i - 1] !== '\\')) {
       if (!inString) {
@@ -109,10 +109,10 @@ function parseSQL(sqlContent: string): string[] {
         stringChar = "";
       }
     }
-    
+
     // Add character to current statement
     currentStatement += char;
-    
+
     // Only split on semicolon if not in any string context
     if (char === ";" && !inString && !inDollarQuote) {
       const trimmed = currentStatement.trim();
@@ -122,17 +122,17 @@ function parseSQL(sqlContent: string): string[] {
       currentStatement = "";
     }
   }
-  
+
   if (currentStatement.trim().length > 0) {
     statements.push(currentStatement.trim());
   }
-  
+
   return statements.filter(s => s.trim().length > 0);
 }
 
 async function runAllMigrations() {
   const databaseUrl = process.env.DATABASE_URL;
-  
+
   if (!databaseUrl) {
     console.error("❌ ERROR: DATABASE_URL environment variable is not set");
     console.error("   Set it with: export DATABASE_URL='your-connection-string'");
@@ -153,6 +153,7 @@ async function runAllMigrations() {
     { name: "Add roundName to Shared Data", file: "migrations/add_round_name_to_shared_data.sql", path: path.join(__dirname, "migrations", "add_round_name_to_shared_data.sql") },
     { name: "Change start_date to TIMESTAMP", file: "migrations/change_start_date_to_timestamp.sql", path: path.join(__dirname, "migrations", "change_start_date_to_timestamp.sql") },
     { name: "Add is_suspended to Counseling Rounds", file: "migrations/add_is_suspended_to_counseling_rounds.sql", path: path.join(__dirname, "migrations", "add_is_suspended_to_counseling_rounds.sql") },
+    { name: "Add Year Session Table", file: "migrations/add_year_session.sql", path: path.join(__dirname, "migrations", "add_year_session.sql") },
   ];
 
   console.log("\n📋 Migration Plan:");
@@ -172,7 +173,7 @@ async function runAllMigrations() {
     console.log(`📄 Reading: ${migration.file}`);
     const sqlContent = fs.readFileSync(migration.path, "utf-8");
     const statements = parseSQL(sqlContent);
-    
+
     statements.forEach(statement => {
       allStatements.push({ migration: migration.name, statement });
       totalStatements++;
@@ -180,7 +181,7 @@ async function runAllMigrations() {
   }
 
   console.log(`\n📝 Found ${totalStatements} SQL statements to execute\n`);
-  console.log("=" .repeat(60) + "\n");
+  console.log("=".repeat(60) + "\n");
 
   try {
     // Execute all statements
@@ -189,7 +190,7 @@ async function runAllMigrations() {
       await executeSQL(sql, statement, i, totalStatements);
     }
 
-    console.log("=" .repeat(60));
+    console.log("=".repeat(60));
     console.log("\n✅ All migrations completed successfully!");
     console.log("\n📋 Summary:");
     console.log("   ✅ Initial database schema created");

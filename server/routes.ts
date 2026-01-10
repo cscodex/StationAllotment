@@ -26,7 +26,7 @@ async function loadDemoCredentials() {
   if (process.env.NODE_ENV !== 'development') {
     return null;
   }
-  
+
   try {
     const credentialsData = await fs.readFile('./credentials.json', 'utf8');
     return JSON.parse(credentialsData);
@@ -36,7 +36,7 @@ async function loadDemoCredentials() {
   }
 }
 
-const upload = multer({ 
+const upload = multer({
   dest: 'uploads/',
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
 });
@@ -44,12 +44,12 @@ const upload = multer({
 // Helper function to check if student preferences are complete
 function isPreferencesComplete(student: any): boolean {
   if (!student.stream || !student.stream.trim()) return false;
-  
+
   const choices = [
     student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
     student.choice6, student.choice7, student.choice8, student.choice9, student.choice10
   ];
-  
+
   return choices.every(choice => choice && choice.trim());
 }
 
@@ -106,16 +106,16 @@ const isCentralAdmin = async (req: any, res: any, next: any) => {
   if (!req.session?.userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  
+
   const user = await storage.getUser(req.session.userId);
   if (!user || user.role !== 'central_admin') {
     return res.status(403).json({ message: "Forbidden - Central Admin access required" });
   }
-  
+
   if (user.isBlocked) {
     return res.status(403).json({ message: "Account has been blocked" });
   }
-  
+
   req.user = user;
   return next();
 };
@@ -124,16 +124,16 @@ const isDistrictAdmin = async (req: any, res: any, next: any) => {
   if (!req.session?.userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  
+
   const user = await storage.getUser(req.session.userId);
   if (!user || !['central_admin', 'district_admin'].includes(user.role)) {
     return res.status(403).json({ message: "Forbidden - Admin access required" });
   }
-  
+
   if (user.isBlocked) {
     return res.status(403).json({ message: "Account has been blocked" });
   }
-  
+
   req.user = user;
   return next();
 };
@@ -170,47 +170,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/auth/login', async (req, res) => {
     try {
       const { username, password } = req.body;
-      
+
       if (!username || !password) {
         return res.status(400).json({ message: "Username and password required" });
       }
 
       // Normalize input - trim whitespace and lowercase for username matching
       const normalizedUsername = username.trim().toLowerCase();
-      
+
       // Try to find user by username first, then by email
       let user = await storage.getUserByUsername(normalizedUsername);
       if (!user) {
         // Try finding by email (case-insensitive)
         user = await storage.getUserByEmail(normalizedUsername);
       }
-      
+
       if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
       const isValidPassword = await bcrypt.compare(password, user.password);
-      
+
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
       (req.session as any).userId = user.id;
-      
+
       await auditService.log(user.id, 'user_login', 'auth', user.id, {
         username: user.username,
         role: user.role,
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ 
-        user: { 
-          id: user.id, 
-          username: user.username, 
-          role: user.role, 
+      res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
           district: user.district,
           firstName: user.firstName,
           lastName: user.lastName,
-        } 
+        }
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -231,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/auth/demo-login', async (req, res) => {
     try {
       const { username } = req.body;
-      
+
       if (!username) {
         return res.status(400).json({ message: "Username is required" });
       }
@@ -263,11 +263,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if user exists in database
       let user = await storage.getUserByUsername(normalizedUsername);
-      
+
       // If user doesn't exist, create them
       if (!user) {
         const hashedPassword = await bcrypt.hash(credentialUser.password, 10);
-        
+
         const newUser = {
           username: normalizedUsername, // Store normalized version
           email: credentialUser.email,
@@ -284,21 +284,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create session
       (req.session as any).userId = user.id;
-      
+
       await auditService.log(user.id, 'demo_login', 'auth', user.id, {
         username: user.username,
         role: user.role,
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ 
-        user: { 
-          id: user.id, 
-          username: user.username, 
-          role: user.role, 
+      res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
           district: user.district,
           firstName: user.firstName,
           lastName: user.lastName,
-        } 
+        }
       });
     } catch (error) {
       console.error("Demo login error:", error);
@@ -349,11 +349,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
-      res.json({ 
-        id: user.id, 
-        username: user.username, 
-        role: user.role, 
+
+      res.json({
+        id: user.id,
+        username: user.username,
+        role: user.role,
         district: user.district,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -371,7 +371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Simple query to test database connectivity - use a lightweight query
       await db.execute(sql`SELECT 1`);
       const responseTime = Date.now() - startTime;
-      
+
       res.json({
         status: 'online',
         responseTime,
@@ -401,10 +401,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/users', isCentralAdmin, async (req: any, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
-      
+
       // Hash password
       const hashedPassword = await bcrypt.hash(userData.password, 10);
-      
+
       const user = await storage.createUser({
         ...userData,
         password: hashedPassword,
@@ -415,10 +415,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         role: user.role,
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ 
-        id: user.id, 
-        username: user.username, 
-        role: user.role, 
+      res.json({
+        id: user.id,
+        username: user.username,
+        role: user.role,
         district: user.district,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -435,17 +435,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const updateData = req.body;
-      
+
       // Security: Prevent password updates through this route
       // Use dedicated password change/reset routes instead
       if (updateData.password !== undefined) {
-        return res.status(400).json({ 
-          message: "Password updates are not allowed through this route. Use the dedicated password change or reset endpoints." 
+        return res.status(400).json({
+          message: "Password updates are not allowed through this route. Use the dedicated password change or reset endpoints."
         });
       }
-      
+
       const user = await storage.updateUser(id, updateData);
-      
+
       await auditService.log(req.user.id, 'user_update', 'users', id, {
         username: user.username,
         role: user.role,
@@ -463,14 +463,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/users/:id', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
-      
+
       const user = await storage.getUser(id);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       await storage.deleteUser(id);
-      
+
       await auditService.log(req.user.id, 'user_delete', 'users', id, {
         username: user.username,
         role: user.role,
@@ -487,7 +487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/users/:id/block', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
-      
+
       const user = await storage.getUser(id);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -496,18 +496,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user.role === 'central_admin') {
         return res.status(400).json({ message: "Cannot block central admin" });
       }
-      
+
       const updatedUser = await storage.updateUser(id, { isBlocked: true });
-      
+
       await auditService.log(req.user.id, 'user_block', 'users', id, {
         username: user.username,
         role: user.role,
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ 
-        id: updatedUser.id, 
-        username: updatedUser.username, 
-        role: updatedUser.role, 
+      res.json({
+        id: updatedUser.id,
+        username: updatedUser.username,
+        role: updatedUser.role,
         district: updatedUser.district,
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
@@ -524,23 +524,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/users/:id/unblock', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
-      
+
       const user = await storage.getUser(id);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       const updatedUser = await storage.updateUser(id, { isBlocked: false });
-      
+
       await auditService.log(req.user.id, 'user_unblock', 'users', id, {
         username: user.username,
         role: user.role,
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ 
-        id: updatedUser.id, 
-        username: updatedUser.username, 
-        role: updatedUser.role, 
+      res.json({
+        id: updatedUser.id,
+        username: updatedUser.username,
+        role: updatedUser.role,
         district: updatedUser.district,
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
@@ -591,7 +591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Generate unique secure password for this user
           const uniquePassword = crypto.randomBytes(16).toString('base64').slice(0, 16);
           const hashedPassword = await bcrypt.hash(uniquePassword, 10);
-          
+
           // Create user
           const newUser = {
             username: userData.username,
@@ -634,7 +634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/auth/change-password', isAuthenticated, async (req: any, res) => {
     try {
       const { currentPassword, newPassword } = req.body;
-      
+
       if (!currentPassword || !newPassword) {
         return res.status(400).json({ message: "Current password and new password required" });
       }
@@ -652,7 +652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Hash new password
       const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-      
+
       // Update password
       await storage.updateUser(user.id, { password: hashedNewPassword });
 
@@ -672,7 +672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { newPassword } = req.body;
-      
+
       if (!newPassword) {
         return res.status(400).json({ message: "New password is required" });
       }
@@ -693,7 +693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Hash new password
       const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-      
+
       // Update password
       await storage.updateUser(id, { password: hashedNewPassword });
 
@@ -727,7 +727,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!resolvedCounselingRoundId && roundName) {
         const rounds = await storage.getCounselingRounds(academicYear);
         // Find active round for this roundName, or first round if no active round
-        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive) 
+        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive)
           || rounds.find(r => r.roundName === roundName);
         if (matchingRound) {
           resolvedCounselingRoundId = matchingRound.id;
@@ -735,12 +735,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await fileService.processStudentFile(
-        req.file, 
-        req.session.userId, 
+        req.file,
+        req.session.userId,
         academicYear,
         resolvedCounselingRoundId || undefined
       );
-      
+
       await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
         filename: result.originalName,
         type: 'student_choices',
@@ -772,7 +772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!resolvedCounselingRoundId && roundName) {
         const rounds = await storage.getCounselingRounds(academicYear);
         // Find active round for this roundName, or first round if no active round
-        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive) 
+        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive)
           || rounds.find(r => r.roundName === roundName);
         if (matchingRound) {
           resolvedCounselingRoundId = matchingRound.id;
@@ -780,12 +780,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await fileService.processVacancyFile(
-        req.file, 
-        req.session.userId, 
+        req.file,
+        req.session.userId,
         academicYear,
         resolvedCounselingRoundId || undefined
       );
-      
+
       await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
         filename: result.originalName,
         type: 'vacancies',
@@ -807,11 +807,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { uploadId } = req.params;
       const { progressStore } = await import('./utils/progressStore');
       const progress = progressStore.getProgress(uploadId);
-      
+
       if (!progress) {
         return res.status(404).json({ message: 'Progress not found' });
       }
-      
+
       res.json(progress);
     } catch (error) {
       console.error("Get upload progress error:", error);
@@ -835,7 +835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!resolvedCounselingRoundId && roundName) {
         const rounds = await storage.getCounselingRounds(academicYear);
         // Find active round for this roundName, or first round if no active round
-        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive) 
+        const matchingRound = rounds.find(r => r.roundName === roundName && r.isActive)
           || rounds.find(r => r.roundName === roundName);
         if (matchingRound) {
           resolvedCounselingRoundId = matchingRound.id;
@@ -843,12 +843,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await fileService.processEntranceResultsFile(
-        req.file, 
-        req.session.userId, 
+        req.file,
+        req.session.userId,
         academicYear,
         resolvedCounselingRoundId || undefined
       );
-      
+
       await auditService.log(req.session.userId, 'file_upload', 'files', result.id, {
         filename: result.originalName,
         type: 'entrance_results',
@@ -867,7 +867,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/files/template/entrance-results', isCentralAdmin, async (req: any, res) => {
     try {
       const csvContent = fileService.generateEntranceResultsTemplate();
-      
+
       await auditService.log(req.user.id, 'template_download', 'files', 'entrance_results_template', {
         type: 'entrance_results',
       }, req.ip, req.get('User-Agent'));
@@ -884,7 +884,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/files/template/student-choices', isCentralAdmin, async (req: any, res) => {
     try {
       const csvContent = fileService.generateStudentChoicesTemplate();
-      
+
       await auditService.log(req.user.id, 'template_download', 'files', 'student_choices_template', {
         type: 'student_choices',
       }, req.ip, req.get('User-Agent'));
@@ -901,7 +901,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/files/template/vacancies', isCentralAdmin, async (req: any, res) => {
     try {
       const csvContent = fileService.generateVacanciesTemplate();
-      
+
       await auditService.log(req.user.id, 'template_download', 'files', 'vacancies_template', {
         type: 'vacancies',
       }, req.ip, req.get('User-Agent'));
@@ -918,7 +918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/files/test-data/vacancies', isCentralAdmin, async (req: any, res) => {
     try {
       const csvContent = fileService.generateVacanciesTestData();
-      
+
       await auditService.log(req.user.id, 'test_data_download', 'files', 'vacancies_test_data', {
         type: 'vacancies',
       }, req.ip, req.get('User-Agent'));
@@ -935,7 +935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/files/test-data/entrance-results', isCentralAdmin, async (req: any, res) => {
     try {
       const csvContent = fileService.generateEntranceResultsTestData();
-      
+
       await auditService.log(req.user.id, 'test_data_download', 'files', 'entrance_results_test_data', {
         type: 'entrance_results',
       }, req.ip, req.get('User-Agent'));
@@ -952,7 +952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/files/test-data/student-choices', isCentralAdmin, async (req: any, res) => {
     try {
       const csvContent = fileService.generateStudentChoicesTestData();
-      
+
       await auditService.log(req.user.id, 'test_data_download', 'files', 'student_choices_test_data', {
         type: 'student_choices',
       }, req.ip, req.get('User-Agent'));
@@ -983,20 +983,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = parseInt(req.query.offset as string) || 0;
       const allocated = req.query.allocated === 'true';
       const user = await storage.getUser(req.session.userId);
-      
+
       if (allocated) {
         // For the reports page - return all students
         const students = await storage.getStudents(10000, 0);
         return res.json(students);
       }
-      
+
       let students, total;
-      
+
       // Show all students for student preference management
       // This allows both central and district admins to see the full picture
       students = await storage.getStudents(limit, offset);
       total = await storage.getStudentsCount();
-      
+
       // Map database fields to frontend expected fields
       const mappedStudents = students.map(student => ({
         ...student,
@@ -1013,11 +1013,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const student = await storage.getStudent(id);
-      
+
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
       }
-      
+
       res.json(student);
     } catch (error) {
       console.error("Get student error:", error);
@@ -1028,19 +1028,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/students/:meritNumber', isAuthenticated, async (req, res) => {
     try {
       const meritNumberParam = req.params.meritNumber;
-      
+
       // Validate that merit number is a valid number
       if (!meritNumberParam || meritNumberParam === '[object Object]' || isNaN(Number(meritNumberParam))) {
         return res.status(400).json({ message: "Invalid merit number provided" });
       }
-      
+
       const meritNumber = parseInt(meritNumberParam);
       const student = await storage.getStudentByMeritNumber(meritNumber);
-      
+
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
       }
-      
+
       res.json(student);
     } catch (error) {
       console.error("Get student error:", error);
@@ -1052,18 +1052,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Extract the required fields from the request body
       const { appNo, meritNumber, name, stream, gender, category } = req.body;
-      
+
       // Validate required fields
       if (!appNo || !meritNumber || !name || !stream) {
-        return res.status(400).json({ 
-          message: "Missing required fields: appNo, meritNumber, name, stream" 
+        return res.status(400).json({
+          message: "Missing required fields: appNo, meritNumber, name, stream"
         });
       }
 
       // For new students created from student-preference-management, we need to get gender and category
       // from the entrance results if not provided
       let studentData = { appNo, meritNumber, name, stream, gender, category };
-      
+
       if (!gender || !category) {
         // Try to find the student in entrance results to get gender and category
         const entranceResult = await storage.getStudentsEntranceResultByMeritNumber(meritNumber);
@@ -1071,14 +1071,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           studentData.gender = entranceResult.gender;
           studentData.category = entranceResult.category;
         } else {
-          return res.status(400).json({ 
-            message: "Gender and category are required when not found in entrance results" 
+          return res.status(400).json({
+            message: "Gender and category are required when not found in entrance results"
           });
         }
       }
 
       const student = await storage.createStudent(studentData);
-      
+
       await auditService.log(req.user.id, 'student_create', 'students', student.id, {
         studentData,
         userDistrict: req.user.district,
@@ -1096,7 +1096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const userId = req.session.userId;
-      
+
       // First get the student to validate business rules
       const student = await storage.getStudent(id);
       if (!student) {
@@ -1105,29 +1105,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Business Rule 1: Student must be assigned to central admin
       if (student.counselingDistrict !== 'Mohali' || student.districtAdmin !== 'Central_admin') {
-        return res.status(403).json({ 
-          message: "Student is not currently assigned to central admin and cannot be locked for editing" 
+        return res.status(403).json({
+          message: "Student is not currently assigned to central admin and cannot be locked for editing"
         });
       }
 
       // Business Rule 2: Student must have complete preferences
       if (!isPreferencesComplete(student)) {
-        return res.status(403).json({ 
-          message: "Student preferences are incomplete. Only students with complete preferences can be locked for editing" 
+        return res.status(403).json({
+          message: "Student preferences are incomplete. Only students with complete preferences can be locked for editing"
         });
       }
-      
+
       const result = await storage.lockStudentForEdit(id, userId);
-      
+
       if (!result.success) {
         return res.status(409).json({ message: result.message });
       }
-      
+
       await auditService.log(userId, 'student_lock_for_edit', 'students', id, {
         studentName: result.student?.name,
         appNo: result.student?.appNo
       }, req.ip, req.get('User-Agent'));
-      
+
       res.json(result.student);
     } catch (error) {
       console.error("Lock student for edit error:", error);
@@ -1139,7 +1139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const preferences = req.body;
-      
+
       // Get the student to find their academic year
       const student = await storage.getStudent(id);
       if (!student) {
@@ -1155,19 +1155,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           preferences.counselingRoundNumber = activeRound.roundNumber;
         }
       }
-      
+
       // Update preferencesUpdatedAt timestamp
       preferences.preferencesUpdatedAt = new Date();
       const user = await storage.getUser(req.session.userId);
-      
+
       // Check if user can edit this student (exclusive lock check)
       const canEdit = await storage.canEditStudent(id, req.session.userId);
       if (!canEdit) {
-        return res.status(409).json({ 
-          message: "This student is currently being edited by another admin. Please try again later." 
+        return res.status(409).json({
+          message: "This student is currently being edited by another admin. Please try again later."
         });
       }
-      
+
       // Validate deadline hasn't passed
       const deadline = await storage.getSetting('allocation_deadline');
       if (deadline && new Date() > new Date(deadline.value)) {
@@ -1178,7 +1178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (preferences.counselingDistrict) {
         const conflict = await storage.checkStudentDistrictConflict(id, preferences.counselingDistrict);
         if (conflict.hasConflict) {
-          return res.status(409).json({ 
+          return res.status(409).json({
             message: `Student is already selected by ${conflict.currentDistrict} district. Cannot select the same student in multiple districts.`,
             currentDistrict: conflict.currentDistrict
           });
@@ -1190,7 +1190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         preferences.counselingDistrict = user.district;
         preferences.districtAdmin = user.username;
       }
-      
+
       // Set central admin info when central admin edits preferences
       if (user?.role === 'central_admin') {
         preferences.counselingDistrict = 'Mohali';
@@ -1198,7 +1198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedStudent = await storage.updateStudent(id, preferences);
-      
+
       await auditService.log(req.session.userId, 'student_preferences_update', 'students', id, {
         preferences,
         userDistrict: user?.district,
@@ -1218,17 +1218,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { isLocked } = req.body;
-      
+
       // Validate request body
       if (typeof isLocked !== 'boolean') {
         return res.status(400).json({ message: "isLocked must be a boolean" });
       }
-      
+
       const user = await storage.getUser(req.session.userId);
       if (!user) {
         return res.status(401).json({ message: "User not found" });
       }
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -1238,7 +1238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deadlineSetting = await storage.getSetting('allocation_deadline');
       const deadlineDate = deadlineSetting?.value ? new Date(deadlineSetting.value) : null;
       const isDeadlinePassed = deadlineDate ? new Date() > deadlineDate : false;
-      
+
       if (isDeadlinePassed) {
         return res.status(403).json({ message: "Cannot modify student lock status after deadline" });
       }
@@ -1257,7 +1257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (student.counselingDistrict !== user.district) {
           return res.status(403).json({ message: "Can only lock/unlock students in your district" });
         }
-        
+
         // District admin can only lock students, only central admin can unlock
         if (!isLocked) {
           return res.status(403).json({ message: "Only central admin can unlock students" });
@@ -1267,26 +1267,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate that all preferences including stream are set before locking
       if (isLocked) {
         if (!student.stream) {
-          return res.status(400).json({ 
-            message: "Cannot lock student: Student stream must be set before locking" 
+          return res.status(400).json({
+            message: "Cannot lock student: Student stream must be set before locking"
           });
         }
 
-        const hasAllChoices = student.choice1 && student.choice2 && student.choice3 && 
-                             student.choice4 && student.choice5 && student.choice6 &&
-                             student.choice7 && student.choice8 && student.choice9 && student.choice10;
-        
+        const hasAllChoices = student.choice1 && student.choice2 && student.choice3 &&
+          student.choice4 && student.choice5 && student.choice6 &&
+          student.choice7 && student.choice8 && student.choice9 && student.choice10;
+
         if (!hasAllChoices) {
-          return res.status(400).json({ 
-            message: "Cannot lock student: All 10 district preferences must be set before locking" 
+          return res.status(400).json({
+            message: "Cannot lock student: All 10 district preferences must be set before locking"
           });
         }
       }
 
-      const updatedStudent = isLocked 
+      const updatedStudent = isLocked
         ? await storage.lockStudent(id, req.session.userId)
         : await storage.unlockStudent(id);
-      
+
       await auditService.log(req.session.userId, 'student_lock_status_change', 'students', id, {
         isLocked,
         studentName: student.name,
@@ -1307,9 +1307,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { preferences, reason } = req.body;
-      
+
       const student = await storage.updateStudent(id, preferences);
-      
+
       await auditService.log(req.session.userId, 'central_admin_override', 'students', id, {
         preferences,
         reason,
@@ -1328,7 +1328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -1343,9 +1343,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user?.role === 'district_admin' && student.counselingDistrict !== user.district) {
         return res.status(403).json({ message: "Can only release students from your district" });
       }
-      
+
       const updatedStudent = await storage.releaseStudentFromDistrict(id);
-      
+
       await auditService.log(req.session.userId, 'student_release', 'students', id, {
         releasedBy: req.session.userId,
         studentName: student.name,
@@ -1365,12 +1365,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       // Only central admin can use this endpoint
       if (user?.role !== 'central_admin') {
         return res.status(403).json({ message: "Only central admin can release assignments" });
       }
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -1378,20 +1378,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify student is currently assigned to central admin
       if (student.counselingDistrict !== 'Mohali' || student.districtAdmin !== 'Central_admin') {
-        return res.status(400).json({ 
-          message: "Student is not currently assigned to central admin" 
+        return res.status(400).json({
+          message: "Student is not currently assigned to central admin"
         });
       }
 
       // Check if student is locked - locked students cannot be released
       if (student.lockedBy && student.lockedBy !== req.session.userId) {
-        return res.status(409).json({ 
-          message: "Student is locked by another admin. Cannot release assignment." 
+        return res.status(409).json({
+          message: "Student is locked by another admin. Cannot release assignment."
         });
       }
-      
+
       const updatedStudent = await storage.releaseAssignment(id);
-      
+
       await auditService.log(req.session.userId, 'assignment_release', 'students', id, {
         releasedBy: req.session.userId,
         studentName: student.name,
@@ -1412,12 +1412,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       // Only central admin can lock students
       if (user?.role !== 'central_admin') {
         return res.status(403).json({ message: "Only central admin can lock students" });
       }
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -1425,15 +1425,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if student is already locked
       if (student.lockedBy && student.lockedBy !== req.session.userId) {
-        return res.status(409).json({ 
-          message: "Student is already locked by another admin" 
+        return res.status(409).json({
+          message: "Student is already locked by another admin"
         });
       }
-      
+
       const updatedStudent = await storage.updateStudent(id, {
         lockedBy: req.session.userId
       });
-      
+
       await auditService.log(req.session.userId, 'student_lock', 'students', id, {
         lockedBy: req.session.userId,
         studentName: student.name,
@@ -1452,12 +1452,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       // Only central admin can unlock students
       if (user?.role !== 'central_admin') {
         return res.status(403).json({ message: "Only central admin can unlock students" });
       }
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -1465,15 +1465,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if student is locked by current user or is unlocked
       if (student.lockedBy && student.lockedBy !== req.session.userId) {
-        return res.status(403).json({ 
-          message: "Student is locked by another admin" 
+        return res.status(403).json({
+          message: "Student is locked by another admin"
         });
       }
-      
+
       const updatedStudent = await storage.updateStudent(id, {
         lockedBy: null
       });
-      
+
       await auditService.log(req.session.userId, 'student_unlock', 'students', id, {
         unlockedBy: req.session.userId,
         studentName: student.name,
@@ -1491,24 +1491,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/allocation/finalize', isCentralAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.session.userId);
-      
+
       // Check if already finalized
       const settings = await storage.getSettings();
       const finalizedSetting = settings.find(s => s.key === 'allocation_finalized');
-      
+
       if (finalizedSetting && finalizedSetting.value === 'true') {
-        return res.status(400).json({ 
-          message: "Allocation process has already been finalized" 
+        return res.status(400).json({
+          message: "Allocation process has already been finalized"
         });
       }
 
       // Server-side validation: Check if there are locked students
       const students = await storage.getStudents(10000, 0);
       const lockedStudents = students.filter(s => s.isLocked && s.choice1);
-      
+
       if (lockedStudents.length === 0) {
-        return res.status(400).json({ 
-          message: "Cannot finalize allocation: No locked students found. At least one student must be locked with preferences." 
+        return res.status(400).json({
+          message: "Cannot finalize allocation: No locked students found. At least one student must be locked with preferences."
         });
       }
 
@@ -1526,15 +1526,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const eligibleDistrictStatuses = districtStatuses.filter(ds => eligibleDistricts.has(ds.district));
       const unfinalizedDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized);
-      
+
       if (unfinalizedDistricts.length > 0) {
-        return res.status(400).json({ 
-          message: `Cannot finalize allocation: ${unfinalizedDistricts.length} districts are not finalized yet: ${unfinalizedDistricts.map(d => d.district).join(', ')}` 
+        return res.status(400).json({
+          message: `Cannot finalize allocation: ${unfinalizedDistricts.length} districts are not finalized yet: ${unfinalizedDistricts.map(d => d.district).join(', ')}`
         });
       }
-      
+
       const currentTime = new Date().toISOString();
-      
+
       // Set allocation as finalized
       await storage.setSetting({
         key: 'allocation_finalized',
@@ -1555,7 +1555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const sasNagarStatus = await storage.getDistrictStatus('SAS Nagar');
         if (!sasNagarStatus?.isFinalized) {
           await storage.finalizeDistrict('SAS Nagar', req.session.userId);
-          
+
           await auditService.log(req.session.userId, 'district_finalized', 'district', 'SAS Nagar', {
             reason: 'Auto-finalized during allocation finalization',
             finalizedBy: req.session.userId,
@@ -1566,13 +1566,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn('Warning: Could not auto-finalize SAS Nagar district during allocation finalization:', error);
         // Continue with allocation finalization even if SAS Nagar finalization fails
       }
-      
+
       await auditService.log(req.session.userId, 'allocation_finalize', 'allocation', 'system', {
         finalizedBy: req.session.userId,
         finalizedAt: currentTime
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ 
+      res.json({
         message: "Allocation process finalized successfully",
         finalizedAt: currentTime,
         finalizedBy: user?.username
@@ -1589,7 +1589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       let { counselingDistrict, districtAdmin } = req.body;
       const user = await storage.getUser(req.session.userId);
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -1610,9 +1610,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user?.role === 'district_admin' && counselingDistrict !== user.district) {
         return res.status(403).json({ message: "Can only fetch students to your district" });
       }
-      
+
       const updatedStudent = await storage.fetchStudentToDistrict(id, counselingDistrict, districtAdmin);
-      
+
       await auditService.log(req.session.userId, 'student_fetch', 'students', id, {
         fetchedBy: req.session.userId,
         studentName: student.name,
@@ -1691,10 +1691,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
-      
+
       const results = await storage.getStudentsEntranceResults(limit, offset);
       const total = await storage.getStudentsEntranceResultsCount();
-      
+
       res.json({ students: results, total });
     } catch (error) {
       console.error("Get students entrance results error:", error);
@@ -1705,11 +1705,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/students-entrance-results/search', isDistrictAdmin, async (req, res) => {
     try {
       const query = req.query.q as string;
-      
+
       if (!query || query.trim().length < 2) {
         return res.json([]);
       }
-      
+
       const results = await storage.searchStudentsEntranceResults(query.trim());
       res.json(results);
     } catch (error) {
@@ -1722,7 +1722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const resultData = insertStudentsEntranceResultSchema.parse(req.body);
       const result = await storage.createStudentsEntranceResult(resultData);
-      
+
       await auditService.log(req.user.id, 'entrance_result_create', 'entrance_results', result.id, {
         meritNo: result.meritNo,
         studentName: result.studentName,
@@ -1740,14 +1740,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { stream } = req.body;
-      
+
       const existingResult = await storage.getStudentsEntranceResult(id);
       if (!existingResult) {
         return res.status(404).json({ message: "Entrance result not found" });
       }
 
       const updatedResult = await storage.updateStudentsEntranceResult(id, { stream });
-      
+
       await auditService.log(req.user.id, 'entrance_result_update', 'entrance_results', id, {
         field: 'stream',
         oldValue: existingResult.stream,
@@ -1767,7 +1767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { entranceResultId } = req.params;
       const { studentId, preferences } = req.body;
-      
+
       // Validate deadline hasn't passed
       const deadline = await storage.getSetting('allocation_deadline');
       if (deadline && new Date() > new Date(deadline.value)) {
@@ -1797,7 +1797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const updatedStudent = await storage.updateStudentPreferences(studentId, preferencesWithDistrict);
-      
+
       await auditService.log(req.user.id, 'student_preferences_set', 'students', studentId, {
         entranceResultId,
         preferences: preferencesWithDistrict,
@@ -1817,7 +1817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/students/from-entrance-result', isDistrictAdmin, async (req: any, res) => {
     try {
       const { entranceStudentId, preferences, stream, counselingDistrict, districtAdmin } = req.body;
-      
+
       // Validate deadline hasn't passed
       const deadline = await storage.getSetting('allocation_deadline');
       if (deadline && new Date() > new Date(deadline.value)) {
@@ -1833,7 +1833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if student already exists
       const existingStudent = await storage.getStudentByMeritNumber(entranceResult.meritNo);
       if (existingStudent) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Student already exists in the system",
           studentId: existingStudent.id
         });
@@ -1879,7 +1879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/counseling-titles', isCentralAdmin, async (req: any, res) => {
     try {
       const { academicYear, roundName } = req.body;
-      
+
       if (!academicYear || !roundName) {
         return res.status(400).json({ message: "Missing required fields: academicYear, roundName" });
       }
@@ -1893,12 +1893,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isCurrentSession(academicYear)) {
         const currentSession = getCurrentSession();
         if (isPreviousSession(academicYear)) {
-          return res.status(400).json({ 
-            message: `Cannot create counseling titles for previous sessions. Current session is ${currentSession}.` 
+          return res.status(400).json({
+            message: `Cannot create counseling titles for previous sessions. Current session is ${currentSession}.`
           });
         } else {
-          return res.status(400).json({ 
-            message: `Cannot create counseling titles for future sessions. Current session is ${currentSession}.` 
+          return res.status(400).json({
+            message: `Cannot create counseling titles for future sessions. Current session is ${currentSession}.`
           });
         }
       }
@@ -1906,34 +1906,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if counseling title already exists
       const titleExists = await storage.counselingTitleExists(academicYear, roundName);
       if (titleExists) {
-        return res.status(400).json({ 
-          message: `Counseling title "${roundName}" already exists for ${academicYear}. Please use a different name or edit the existing title.` 
+        return res.status(400).json({
+          message: `Counseling title "${roundName}" already exists for ${academicYear}. Please use a different name or edit the existing title.`
         });
       }
 
-      // Check prerequisites before creating first round
-      const prerequisites = await storage.getPrerequisitesStatus(academicYear, roundName);
-      
-      if (!prerequisites.allPrerequisitesMet) {
-        const missingPrerequisites: string[] = [];
-        if (!prerequisites.hasVacancyData) {
-          missingPrerequisites.push(`Vacancy data (${prerequisites.totalAvailableSeats} available seats)`);
-        }
-        if (!prerequisites.hasEntranceResults) {
-          missingPrerequisites.push(`Entrance results (${prerequisites.entranceResultsCount} found)`);
-        }
-        if (!prerequisites.hasStudentChoices) {
-          missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students with choices)`);
-        }
-        
-        return res.status(400).json({ 
-          message: `Cannot create counseling title. Prerequisites not met: ${missingPrerequisites.join(', ')}. Please upload the required data first.` 
-        });
-      }
+      // NOTE: Prerequisites check removed from title creation
+      // Prerequisites (vacancy, entrance results, student choices) are now only checked 
+      // when running allocation, not when creating the title/round.
+      // This allows admins to:
+      // 1. Create counseling title → Round 1 auto-created
+      // 2. Upload vacancy/entrance/choice files for that round
+      // 3. Run allocation (prerequisites checked at this step)
 
       // Auto-create first round with default datetime (current time)
       const defaultStartDate = new Date();
-      
+
       const firstRound = await storage.createCounselingRound({
         academicYear,
         roundNumber: 1,
@@ -1964,8 +1952,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get current session endpoint
+  // First checks database year_session table, falls back to calculated session
   app.get('/api/session/current', isAuthenticated, async (req: any, res) => {
     try {
+      // Try to get current session from database first
+      const dbSession = await storage.getCurrentYearSession();
+      if (dbSession) {
+        res.json({ currentSession: dbSession.sessionName });
+        return;
+      }
+
+      // Fallback to calculated session if no database session exists
       const currentSession = getCurrentSession();
       res.json({ currentSession });
     } catch (error) {
@@ -1978,7 +1975,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const academicYear = req.query.academicYear as string | undefined;
       console.log('📋 Fetching counseling rounds for academic year:', academicYear);
-      
+
       let rounds;
       try {
         rounds = await storage.getCounselingRounds(academicYear);
@@ -1987,16 +1984,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('❌ Error fetching rounds from database:', dbError);
         throw dbError;
       }
-      
+
       // Helper function to safely serialize a date
       const safeSerializeDate = (date: any, fieldName: string): string | null => {
         if (date == null || date === 'null' || date === '' || date === undefined) {
           return null;
         }
-        
+
         try {
           let dateObj: Date | null = null;
-          
+
           if (date instanceof Date) {
             const timeValue = date.getTime();
             if (!isNaN(timeValue)) {
@@ -2016,7 +2013,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               dateObj = parsed;
             }
           }
-          
+
           if (dateObj && !isNaN(dateObj.getTime())) {
             try {
               return dateObj.toISOString();
@@ -2025,14 +2022,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return String(date);
             }
           }
-          
+
           return String(date);
-    } catch (error) {
+        } catch (error) {
           console.error(`❌ Error serializing ${fieldName}:`, error);
           return String(date);
         }
       };
-      
+
       // Helper function to safely serialize a date as date-only (YYYY-MM-DD)
       const safeSerializeDateOnly = (date: any, fieldName: string): string | null => {
         const iso = safeSerializeDate(date, fieldName);
@@ -2041,7 +2038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         return null;
       };
-      
+
       // Serialize dates properly to ensure they're valid ISO strings
       // Wrap in try-catch to ensure rounds are returned even if date serialization fails
       const serializedRounds = rounds.map((round, index) => {
@@ -2051,12 +2048,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             roundName: round.roundName,
             roundNumber: round.roundNumber
           });
-          
+
           const startDate = round.startDate as any;
           const endDate = round.endDate as any;
           const createdAt = round.createdAt as any;
           const updatedAt = round.updatedAt as any;
-          
+
           console.log(`  Raw date values:`, {
             startDate: startDate,
             startDateType: typeof startDate,
@@ -2068,20 +2065,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updatedAt: updatedAt,
             updatedAtType: typeof updatedAt
           });
-          
+
           // Use helper functions to safely serialize all dates
           const serializedStartDate = safeSerializeDate(startDate, 'startDate');
           const serializedEndDate = safeSerializeDateOnly(endDate, 'endDate');
           const serializedCreatedAt = safeSerializeDate(createdAt, 'createdAt');
           const serializedUpdatedAt = safeSerializeDate(updatedAt, 'updatedAt');
-          
+
           console.log(`  Serialized dates:`, {
             startDate: serializedStartDate,
             endDate: serializedEndDate,
             createdAt: serializedCreatedAt,
             updatedAt: serializedUpdatedAt
           });
-          
+
           const result = {
             ...round,
             startDate: serializedStartDate,
@@ -2089,12 +2086,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             createdAt: serializedCreatedAt,
             updatedAt: serializedUpdatedAt,
           };
-          
+
           console.log(`  ✅ Round ${index + 1} serialized successfully`);
           return result;
         } catch (error) {
-          console.error(`❌ Error serializing round ${index + 1}:`, { 
-            roundId: round.id, 
+          console.error(`❌ Error serializing round ${index + 1}:`, {
+            roundId: round.id,
             roundName: round.roundName,
             error: error instanceof Error ? error.message : String(error),
             stack: error instanceof Error ? error.stack : undefined
@@ -2111,7 +2108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return fallback;
         }
       });
-      
+
       console.log(`✅ Serialized ${serializedRounds.length} rounds, sending to client`);
       res.json(serializedRounds);
     } catch (error) {
@@ -2119,9 +2116,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof Error) {
         console.error("Error details:", error.message, error.stack);
       }
-      res.status(500).json({ 
-        message: "Failed to fetch counseling rounds", 
-        error: error instanceof Error ? error.message : String(error) 
+      res.status(500).json({
+        message: "Failed to fetch counseling rounds",
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   });
@@ -2144,49 +2141,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const updates = req.body;
-      
+
       // Remove fields that shouldn't be updated directly
       delete updates.id;
       delete updates.createdAt;
-      
+
       // Only allow updating startDate
       if (updates.startDate) {
         const round = await storage.getCounselingRound(id);
         if (!round) {
           return res.status(404).json({ message: "Counseling round not found" });
         }
-        
+
         // Validate and parse startDate
         if (!updates.startDate || updates.startDate.trim() === '') {
           return res.status(400).json({ message: "Start date cannot be empty" });
         }
-        
+
         // Debug logging
         console.log('📅 Update - Received date:', {
           startDate: updates.startDate,
           startDateType: typeof updates.startDate,
           startDateLength: updates.startDate?.length
         });
-        
+
         // Validate date string format first
         if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(updates.startDate)) {
-          return res.status(400).json({ 
-            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${updates.startDate}` 
+          return res.status(400).json({
+            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${updates.startDate}`
           });
         }
-        
+
         // Parse date - datetime-local sends dates without timezone, treat as local time
         const [datePart, timePart] = updates.startDate.split('T');
         if (!datePart || !timePart) {
-          return res.status(400).json({ 
-            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm. Received: ${updates.startDate}` 
+          return res.status(400).json({
+            message: `Invalid start date format. Expected: YYYY-MM-DDTHH:mm. Received: ${updates.startDate}`
           });
         }
-        
+
         const [year, month, day] = datePart.split('-').map(Number);
         const [hours, minutes] = timePart.split(':').map(Number);
         const startDateObj = new Date(year, month - 1, day, hours, minutes);
-        
+
         // Debug logging - safely get ISO string
         const updateTimestamp = startDateObj.getTime();
         let updateParsedISO: string;
@@ -2195,7 +2192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (e) {
           updateParsedISO = 'Invalid Date';
         }
-        
+
         console.log('📅 Update - Parsed date:', {
           original: updates.startDate,
           datePart,
@@ -2206,7 +2203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           timestamp: updateTimestamp,
           yearCheck: startDateObj.getFullYear()
         });
-        
+
         if (isNaN(updateTimestamp) || startDateObj.getFullYear() < 2000) {
           console.error('❌ Update - Invalid date detected:', {
             startDate: updates.startDate,
@@ -2214,32 +2211,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             timestamp: updateTimestamp,
             year: startDateObj.getFullYear()
           });
-          return res.status(400).json({ 
-            message: `Invalid start date. Please provide a valid date after year 2000. Received: ${updates.startDate}` 
+          return res.status(400).json({
+            message: `Invalid start date. Please provide a valid date after year 2000. Received: ${updates.startDate}`
           });
         }
-        
+
         // Validate that new startDate falls within the session
         if (!isDateInSession(startDateObj, round.academicYear)) {
-          return res.status(400).json({ 
-            message: `Start date must fall within the current session (${round.academicYear})` 
+          return res.status(400).json({
+            message: `Start date must fall within the current session (${round.academicYear})`
           });
         }
-        
+
         // Validate that startDate is not in the past
         const now = new Date();
         if (startDateObj < now) {
-          return res.status(400).json({ 
-            message: `Start date cannot be set to a past date. Current time: ${now.toLocaleString()}` 
+          return res.status(400).json({
+            message: `Start date cannot be set to a past date. Current time: ${now.toLocaleString()}`
           });
         }
-        
+
         // If round is currently active and new startDate is in the future, deactivate it
         if (round.isActive && !round.isCompleted && startDateObj > now) {
           updates.isActive = false;
           console.log(`🔄 Deactivating round ${round.id} because start date was moved to future: ${startDateObj.toISOString()}`);
         }
-        
+
         // Database column is TIMESTAMP type (datetime), so store as Date object
         updates.startDate = startDateObj;
       } else {
@@ -2251,13 +2248,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updated = await storage.updateCounselingRound(id, updates);
-      
+
       // Serialize dates properly in response
       const startDate = updated.startDate as any;
       const endDate = updated.endDate as any;
       const createdAt = updated.createdAt as any;
       const updatedAt = updated.updatedAt as any;
-      
+
       // Safely serialize startDate
       let serializedStartDate: string | null = null;
       if (startDate instanceof Date) {
@@ -2280,7 +2277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           serializedStartDate = String(startDate);
         }
       }
-      
+
       // Safely serialize endDate
       let serializedEndDate: string | null = null;
       if (endDate) {
@@ -2294,7 +2291,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           serializedEndDate = String(endDate);
         }
       }
-      
+
       // Safely serialize createdAt
       let serializedCreatedAt: string | null = null;
       if (createdAt) {
@@ -2310,7 +2307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           serializedCreatedAt = String(createdAt);
         }
       }
-      
+
       // Safely serialize updatedAt
       let serializedUpdatedAt: string | null = null;
       if (updatedAt) {
@@ -2326,7 +2323,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           serializedUpdatedAt = String(updatedAt);
         }
       }
-      
+
       const serializedRound = {
         ...updated,
         startDate: serializedStartDate,
@@ -2350,7 +2347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const round = await storage.getCounselingRound(id);
-      
+
       if (!round) {
         return res.status(404).json({ message: "Counseling round not found" });
       }
@@ -2378,11 +2375,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { academicYear, roundName } = req.params;
       const { suspend } = req.body; // boolean: true to suspend, false to unsuspend
-      
+
       // Decode URL parameters
       const decodedAcademicYear = decodeURIComponent(academicYear);
       const decodedRoundName = decodeURIComponent(roundName);
-      
+
       if (typeof suspend !== 'boolean') {
         return res.status(400).json({ message: "suspend parameter must be a boolean (true/false)" });
       }
@@ -2399,7 +2396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         suspend,
-        message: suspend 
+        message: suspend
           ? `Subsequent rounds for "${decodedRoundName}" have been suspended. No new rounds will be auto-created.`
           : `Subsequent rounds for "${decodedRoundName}" have been unsuspended. New rounds will be auto-created when conditions are met.`,
         affectedRounds: updated.length,
@@ -2414,7 +2411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const round = await storage.getCounselingRound(id);
-      
+
       if (!round) {
         return res.status(404).json({ message: "Counseling round not found" });
       }
@@ -2428,8 +2425,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-create next round if seats are available and not suspended
       const nextRound = await storage.autoCreateNextRound(
-        round.academicYear, 
-        round.roundName, 
+        round.academicYear,
+        round.roundName,
         new Date() // Default start date (current time, admin can edit)
       );
 
@@ -2445,7 +2442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         completed,
         nextRound: nextRound || null,
-        message: nextRound 
+        message: nextRound
           ? `Round ${round.roundNumber} completed. Round ${nextRound.roundNumber} has been auto-created.`
           : `Round ${round.roundNumber} completed.${completed.isSuspended ? ' Next round creation is suspended.' : ' No next round created (no vacancies available or suspended).'}`
       });
@@ -2458,7 +2455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/counseling-rounds/bulk', isCentralAdmin, async (req: any, res) => {
     try {
       const { rounds } = req.body; // Array of { academicYear, roundName, startDate, endDate }
-      
+
       if (!Array.isArray(rounds) || rounds.length === 0) {
         return res.status(400).json({ message: "rounds array is required and must not be empty" });
       }
@@ -2479,22 +2476,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate prerequisites and round order for each counseling title
       for (const [key, counselingRounds] of Array.from(roundsByCounseling.entries())) {
         const [academicYear, roundName] = key.split('|');
-        
+
         // Get existing rounds for this counseling title
         const existingRounds = await storage.getCounselingRounds(academicYear);
-        const sameCounselingRounds = existingRounds.filter(r => 
-          r.roundName === roundName && 
+        const sameCounselingRounds = existingRounds.filter(r =>
+          r.roundName === roundName &&
           r.academicYear === academicYear
         ).sort((a, b) => a.roundNumber - b.roundNumber);
-        
-        const nextRoundNumber = sameCounselingRounds.length > 0 
-          ? Math.max(...sameCounselingRounds.map(r => r.roundNumber)) + 1 
+
+        const nextRoundNumber = sameCounselingRounds.length > 0
+          ? Math.max(...sameCounselingRounds.map(r => r.roundNumber)) + 1
           : 1;
-        
+
         // For first round: Check prerequisites
         if (nextRoundNumber === 1) {
           const prerequisites = await storage.getPrerequisitesStatus(academicYear, roundName);
-          
+
           if (!prerequisites.allPrerequisitesMet) {
             const missingPrerequisites: string[] = [];
             if (!prerequisites.hasVacancyData) {
@@ -2506,33 +2503,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!prerequisites.hasStudentChoices) {
               missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students with choices)`);
             }
-            
-            return res.status(400).json({ 
-              message: `Cannot create first round for "${roundName}". Prerequisites not met: ${missingPrerequisites.join(', ')}. Please upload the required data first.` 
+
+            return res.status(400).json({
+              message: `Cannot create first round for "${roundName}". Prerequisites not met: ${missingPrerequisites.join(', ')}. Please upload the required data first.`
             });
           }
         } else {
           // For subsequent rounds: Check previous round is completed AND vacancies exist
           const previousRound = sameCounselingRounds.find(r => r.roundNumber === nextRoundNumber - 1);
-          
+
           if (!previousRound) {
-            return res.status(400).json({ 
-              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". Previous round (Round ${nextRoundNumber - 1}) not found.` 
+            return res.status(400).json({
+              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". Previous round (Round ${nextRoundNumber - 1}) not found.`
             });
           }
-          
+
           if (!previousRound.isCompleted) {
-            return res.status(400).json({ 
-              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". Previous round (Round ${nextRoundNumber - 1}) must be completed first.` 
+            return res.status(400).json({
+              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". Previous round (Round ${nextRoundNumber - 1}) must be completed first.`
             });
           }
-          
+
           // Check if vacancies exist
           const vacancyAvailability = await storage.checkVacancyAvailability(academicYear, roundName);
-          
+
           if (!vacancyAvailability.hasVacancies) {
-            return res.status(400).json({ 
-              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". All vacancies are filled (${vacancyAvailability.totalAvailableSeats} available seats). No more rounds can be created.` 
+            return res.status(400).json({
+              message: `Cannot create Round ${nextRoundNumber} for "${roundName}". All vacancies are filled (${vacancyAvailability.totalAvailableSeats} available seats). No more rounds can be created.`
             });
           }
         }
@@ -2553,12 +2550,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Validate that academic year is for current session only
         if (!isCurrentSession(round.academicYear)) {
           if (isPreviousSession(round.academicYear)) {
-            return res.status(400).json({ 
-              message: `Cannot create counseling rounds for previous sessions. Current session is ${currentSession}.` 
+            return res.status(400).json({
+              message: `Cannot create counseling rounds for previous sessions. Current session is ${currentSession}.`
             });
           } else {
-            return res.status(400).json({ 
-              message: `Cannot create counseling rounds for future sessions. Current session is ${currentSession}.` 
+            return res.status(400).json({
+              message: `Cannot create counseling rounds for future sessions. Current session is ${currentSession}.`
             });
           }
         }
@@ -2566,47 +2563,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check if all seats are filled for this counseling title
         const allSeatsFilled = await storage.checkIfAllSeatsFilled(round.academicYear, round.roundName);
         if (allSeatsFilled) {
-          return res.status(400).json({ 
-            message: `Cannot create new rounds for "${round.roundName}". All seats are currently filled. Please wait for seats to become available or create a new counseling title.` 
+          return res.status(400).json({
+            message: `Cannot create new rounds for "${round.roundName}". All seats are currently filled. Please wait for seats to become available or create a new counseling title.`
           });
         }
 
         // Validate and parse startDate
         if (!round.startDate || round.startDate.trim() === '') {
-          return res.status(400).json({ 
-            message: `Start date is required for round "${round.roundName}"` 
+          return res.status(400).json({
+            message: `Start date is required for round "${round.roundName}"`
           });
         }
-        
+
         // Validate date string format first
         if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(round.startDate)) {
-          return res.status(400).json({ 
-            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${round.startDate}` 
+          return res.status(400).json({
+            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${round.startDate}`
           });
         }
-        
+
         // Parse date - datetime-local sends dates without timezone, treat as local time
         const [datePart, timePart] = round.startDate.split('T');
         if (!datePart || !timePart) {
-          return res.status(400).json({ 
-            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm. Received: ${round.startDate}` 
+          return res.status(400).json({
+            message: `Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm. Received: ${round.startDate}`
           });
         }
-        
+
         const [year, month, day] = datePart.split('-').map(Number);
         const [hours, minutes] = timePart.split(':').map(Number);
         const startDateObj = new Date(year, month - 1, day, hours, minutes);
-        
+
         if (isNaN(startDateObj.getTime()) || startDateObj.getFullYear() < 2000) {
-          return res.status(400).json({ 
-            message: `Invalid start date for round "${round.roundName}". Please provide a valid date after year 2000. Received: ${round.startDate}` 
+          return res.status(400).json({
+            message: `Invalid start date for round "${round.roundName}". Please provide a valid date after year 2000. Received: ${round.startDate}`
           });
         }
-        
+
         // Validate that startDate falls within the current session
         if (!isDateInSession(startDateObj, round.academicYear)) {
-          return res.status(400).json({ 
-            message: `Start date for round "${round.roundName}" must fall within the current session (${round.academicYear})` 
+          return res.status(400).json({
+            message: `Start date for round "${round.roundName}" must fall within the current session (${round.academicYear})`
           });
         }
       }
@@ -2617,26 +2614,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!round.startDate || round.startDate.trim() === '') {
           throw new Error(`Start date is required for round "${round.roundName}"`);
         }
-        
+
         // Validate date string format first
         if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(round.startDate)) {
           throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm (e.g., 2024-06-15T10:00). Received: ${round.startDate}`);
         }
-        
+
         // Parse date - datetime-local sends dates without timezone, treat as local time
         const [datePart, timePart] = round.startDate.split('T');
         if (!datePart || !timePart) {
           throw new Error(`Invalid start date format for round "${round.roundName}". Expected: YYYY-MM-DDTHH:mm. Received: ${round.startDate}`);
         }
-        
+
         const [year, month, day] = datePart.split('-').map(Number);
         const [hours, minutes] = timePart.split(':').map(Number);
         const startDateObj = new Date(year, month - 1, day, hours, minutes);
-        
+
         if (isNaN(startDateObj.getTime()) || startDateObj.getFullYear() < 2000) {
           throw new Error(`Invalid start date for round "${round.roundName}". Please provide a valid date after year 2000. Received: ${round.startDate}`);
         }
-        
+
         // Parse endDate if provided (convert to date string format YYYY-MM-DD)
         let endDateStr: string | undefined = undefined;
         if (round.endDate && round.endDate.trim() !== '') {
@@ -2647,7 +2644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Convert Date to date string (YYYY-MM-DD) for the date column
           endDateStr = endDateObj.toISOString().split('T')[0];
         }
-        
+
         return {
           academicYear: round.academicYear,
           roundNumber: 0, // Will be auto-incremented
@@ -2677,7 +2674,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const round = await storage.getCounselingRound(id);
-      
+
       if (!round) {
         return res.status(404).json({ message: "Counseling round not found" });
       }
@@ -2686,8 +2683,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = new Date(round.startDate);
       const now = new Date();
       if (startDate < now) {
-        return res.status(400).json({ 
-          message: "Cannot delete past counseling rounds. Only future rounds can be deleted." 
+        return res.status(400).json({
+          message: "Cannot delete past counseling rounds. Only future rounds can be deleted."
         });
       }
 
@@ -2711,13 +2708,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const round = await storage.getCounselingRound(id);
-      
+
       if (!round) {
         return res.status(404).json({ message: "Counseling round not found" });
       }
 
       const prerequisites = await storage.getPrerequisitesStatus(round.academicYear, round.roundName);
-      
+
       res.json(prerequisites);
     } catch (error: any) {
       console.error("Get prerequisites error:", error);
@@ -2729,7 +2726,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const round = await storage.getCounselingRound(id);
-      
+
       if (!round) {
         return res.status(404).json({ message: "Counseling round not found" });
       }
@@ -2738,12 +2735,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isCurrentSession(round.academicYear)) {
         const currentSession = getCurrentSession();
         if (isPreviousSession(round.academicYear)) {
-          return res.status(400).json({ 
-            message: `Cannot run allocation for previous sessions. Current session is ${currentSession}.` 
+          return res.status(400).json({
+            message: `Cannot run allocation for previous sessions. Current session is ${currentSession}.`
           });
         } else {
-          return res.status(400).json({ 
-            message: `Cannot run allocation for future sessions. Current session is ${currentSession}.` 
+          return res.status(400).json({
+            message: `Cannot run allocation for future sessions. Current session is ${currentSession}.`
           });
         }
       }
@@ -2754,24 +2751,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Validate round order: Cannot run round N before round N-1 is completed
       const allRounds = await storage.getCounselingRounds(round.academicYear);
-      const sameCounselingRounds = allRounds.filter(r => 
-        r.roundName === round.roundName && 
+      const sameCounselingRounds = allRounds.filter(r =>
+        r.roundName === round.roundName &&
         r.academicYear === round.academicYear
       ).sort((a, b) => a.roundNumber - b.roundNumber);
-      
+
       // Check if previous rounds exist and are completed
       for (let i = 1; i < round.roundNumber; i++) {
         const previousRound = sameCounselingRounds.find(r => r.roundNumber === i);
         if (previousRound && !previousRound.isCompleted) {
-          return res.status(400).json({ 
-            message: `Cannot run Round ${round.roundNumber} before Round ${i} is completed. Please complete Round ${i} first.` 
+          return res.status(400).json({
+            message: `Cannot run Round ${round.roundNumber} before Round ${i} is completed. Please complete Round ${i} first.`
           });
         }
       }
 
       // Check prerequisites before allowing allocation
       const prerequisites = await storage.getPrerequisitesStatus(round.academicYear, round.roundName);
-      
+
       if (!prerequisites.allPrerequisitesMet) {
         const missingPrerequisites: string[] = [];
         if (!prerequisites.hasVacancyData) {
@@ -2783,15 +2780,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!prerequisites.hasStudentChoices) {
           missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students with choices)`);
         }
-        
-        return res.status(400).json({ 
-          message: `Cannot run allocation. Prerequisites not met: ${missingPrerequisites.join(', ')}. Please ensure all required data is uploaded.` 
+
+        return res.status(400).json({
+          message: `Cannot run allocation. Prerequisites not met: ${missingPrerequisites.join(', ')}. Please ensure all required data is uploaded.`
         });
       }
 
       // Create allocation service with audit logging
       const allocationService = new AllocationService(storage, auditService, req.session.userId);
-      
+
       const result = await allocationService.runAllocation(
         round.academicYear,
         round.roundNumber,
@@ -2820,7 +2817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/counseling-rounds/auto-activate', isCentralAdmin, async (req: any, res) => {
     try {
       const result = await roundActivationService.processRounds();
-      
+
       await auditService.log(req.session.userId, 'round_auto_activation_triggered', 'counseling_round', 'system', {
         activated: result.activated.map(r => ({ id: r.id, roundName: r.roundName, roundNumber: r.roundNumber })),
         completed: result.completed.map(r => ({ id: r.id, roundName: r.roundName, roundNumber: r.roundNumber })),
@@ -2858,7 +2855,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Create allocation service with audit logging
       const allocationService = new AllocationService(storage, auditService, req.session.userId);
-      
+
       // Note: We allow re-running allocation after reset, so we don't check allocation_completed here
       // The reset endpoint will clear the allocation_completed flag
 
@@ -2876,7 +2873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the counseling round
       const rounds = await storage.getCounselingRounds(academicYear);
       const round = rounds.find(r => r.roundNumber === roundNumber);
-      
+
       if (!round) {
         return res.status(404).json({ message: `Counseling round ${roundNumber} not found for academic year ${academicYear}` });
       }
@@ -2892,7 +2889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if all districts with eligible students are finalized
       const allDistrictStatuses = await storage.getAllDistrictStatuses();
       const studentsData = await storage.getStudents(10000, 0, academicYear);
-      
+
       // Get list of districts that have students with district admin assignments and preferences
       const districtsWithEligibleStudents = new Set<string>();
       studentsData.forEach((student) => {
@@ -2912,7 +2909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       if (unfinalizedDistricts.length > 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: `Cannot run allocation: ${unfinalizedDistricts.length} districts with eligible students are not finalized. All districts must finalize their data before allocation can be run.`,
           unfinalizedDistricts,
           totalDistricts: districtsWithEligibleStudents.size
@@ -2920,14 +2917,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await allocationService.runAllocation(academicYear, roundNumber, round.id);
-      
+
       // Mark allocation as completed
       await storage.setSetting({
         key: 'allocation_completed',
         value: 'true',
         description: 'Indicates if the final allocation has been run'
       });
-      
+
       await storage.setSetting({
         key: 'allocation_completed_at',
         value: new Date().toISOString(),
@@ -2968,16 +2965,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create allocation service with audit logging
       const allocationService = new AllocationService(storage, auditService, req.session.userId);
-      
+
       const result = await allocationService.resetAllocation(academicYear);
-      
+
       // Clear allocation completed flag
       await storage.setSetting({
         key: 'allocation_completed',
         value: 'false',
         description: 'Indicates if the final allocation has been run'
       });
-      
+
       await storage.setSetting({
         key: 'allocation_completed_at',
         value: '',
@@ -3007,7 +3004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allocationCompleted = await storage.getSetting('allocation_completed');
       const allocationCompletedAt = await storage.getSetting('allocation_completed_at');
       const deadline = await storage.getSetting('allocation_deadline');
-      
+
       res.json({
         completed: allocationCompleted?.value === 'true',
         completedAt: allocationCompletedAt?.value || null,
@@ -3023,16 +3020,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Get total students from entrance results (all students)
       const totalEntranceResults = await storage.getStudentsEntranceResultsCount();
-      
+
       // Get students with allocation data (only those with preferences set)
       const students = await storage.getStudents(10000, 0);
       const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
       const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
       const pendingStudents = students.filter(s => s.allocationStatus === 'pending');
-      
+
       // Calculate students without preferences (in entrance results but not in students table)
       const studentsWithoutPreferences = totalEntranceResults - students.length;
-      
+
       // Group allotted students by district
       const allocationsByDistrict: Record<string, number> = {};
       allottedStudents.forEach(student => {
@@ -3060,7 +3057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/csv', isCentralAdmin, async (req: any, res) => {
     try {
       const csvData = await exportService.exportResultsAsCSV();
-      
+
       await auditService.log(req.user.id, 'export_csv', 'export', 'results', {
         format: 'csv',
       }, req.ip, req.get('User-Agent'));
@@ -3078,7 +3075,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/vacancies/csv', isCentralAdmin, async (req: any, res) => {
     try {
       const csvData = await exportService.exportVacanciesAsCSV();
-      
+
       await auditService.log(req.user.id, 'export_vacancies_csv', 'export', 'vacancies', {
         format: 'csv',
       }, req.ip, req.get('User-Agent'));
@@ -3096,7 +3093,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/vacancies/pdf', isCentralAdmin, async (req: any, res) => {
     try {
       const pdfBuffer = await exportService.exportVacanciesAsPDF();
-      
+
       await auditService.log(req.user.id, 'export_vacancies_pdf', 'export', 'vacancies', {
         format: 'pdf',
       }, req.ip, req.get('User-Agent'));
@@ -3113,7 +3110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/pdf', isCentralAdmin, async (req: any, res) => {
     try {
       const pdfBuffer = await exportService.exportResultsAsPDF();
-      
+
       await auditService.log(req.user.id, 'export_pdf', 'export', 'results', {
         format: 'pdf',
       }, req.ip, req.get('User-Agent'));
@@ -3131,7 +3128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/export/flow-diagram/pdf', isCentralAdmin, async (req: any, res) => {
     try {
       const pdfBuffer = await exportService.exportFlowDiagramAsPDF();
-      
+
       await auditService.log(req.user.id, 'export_flow_diagram_pdf', 'export', 'flow_diagram', {
         format: 'pdf',
       }, req.ip, req.get('User-Agent'));
@@ -3149,14 +3146,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/district-status', isDistrictAdmin, async (req: any, res) => {
     try {
       const user = req.user;
-      
+
       if (user.role === 'central_admin') {
         // Central admin can see all district statuses
         let statuses = await storage.getAllDistrictStatuses();
-        
+
         // Get all students to identify districts with eligible students
         const studentsData = await storage.getStudents(10000, 0);
-        
+
         // Get list of districts that have students with district admin assignments and preferences
         const districtsWithEligibleStudents = new Set<string>();
         studentsData.forEach((student) => {
@@ -3167,7 +3164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create status records for districts that have eligible students but no status record
         const existingDistricts = new Set(statuses.map(status => status.district));
-        const missingDistricts = Array.from(districtsWithEligibleStudents).filter(district => 
+        const missingDistricts = Array.from(districtsWithEligibleStudents).filter(district =>
           !existingDistricts.has(district)
         );
 
@@ -3186,7 +3183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (missingDistricts.length > 0) {
           statuses = await storage.getAllDistrictStatuses();
         }
-        
+
         res.json(statuses);
       } else if (user.role === 'district_admin') {
         // District admin can only see their own district status
@@ -3216,13 +3213,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { district } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       // Permission check: District admins can only finalize their own district
       // Central admin can finalize SAS Nagar/Mohali district (which they manage directly)
       if (user?.role === 'district_admin' && normalizeDistrict(user.district || '') !== normalizeDistrict(district)) {
         return res.status(403).json({ message: "Can only finalize your own district" });
       }
-      
+
       // Central admin can only finalize SAS Nagar/Mohali district
       if (user?.role === 'central_admin' && normalizeDistrict(district) !== 'SAS Nagar') {
         return res.status(403).json({ message: "Central admin can only finalize SAS Nagar district" });
@@ -3230,16 +3227,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if all eligible students in district are locked
       const districtStudents = await storage.getStudentsByDistrict(district);
-      
+
       // Only consider students that belong to this district AND have district admin assigned AND have preference data for finalization
-      const eligibleStudents = districtStudents.students.filter(s => 
+      const eligibleStudents = districtStudents.students.filter(s =>
         s.counselingDistrict === district && s.districtAdmin && s.choice1 // Must belong to district, have district admin and at least first choice
       );
-      
+
       const unlockedEligibleStudents = eligibleStudents.filter(s => !s.isLocked);
-      
+
       if (unlockedEligibleStudents.length > 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: `Cannot finalize district: ${unlockedEligibleStudents.length} eligible students are not locked. All students with district admin assignments and preferences must be locked before finalization.`,
           unlockedCount: unlockedEligibleStudents.length,
           eligibleTotal: eligibleStudents.length
@@ -3247,7 +3244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const status = await storage.finalizeDistrict(district, req.session.userId);
-      
+
       await auditService.log(req.session.userId, 'district_finalized', 'district', district, {
         totalStudents: districtStudents.total,
         lockedStudents: districtStudents.students.length
@@ -3266,7 +3263,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       const { isLocked } = req.body;
       const user = await storage.getUser(req.session.userId);
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -3284,22 +3281,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Business rule validation: Students with no district admin and no preference data cannot be locked
       if (isLocked && !student.districtAdmin && !student.choice1) {
-        return res.status(400).json({ 
-          message: "Cannot lock student: Student has no district admin assigned and no preference data. Only students with district admin assignments and preferences can be locked." 
+        return res.status(400).json({
+          message: "Cannot lock student: Student has no district admin assigned and no preference data. Only students with district admin assignments and preferences can be locked."
         });
       }
 
-      const updatedStudent = isLocked 
+      const updatedStudent = isLocked
         ? await storage.lockStudent(id, req.session.userId)
         : await storage.unlockStudent(id);
-      
-      await auditService.log(req.session.userId, 
-        isLocked ? 'student_locked' : 'student_unlocked', 
+
+      await auditService.log(req.session.userId,
+        isLocked ? 'student_locked' : 'student_unlocked',
         'student', id, {
-          studentName: student.name,
-          meritNumber: student.meritNumber,
-          district: student.counselingDistrict
-        }, req.ip, req.get('User-Agent'));
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        district: student.counselingDistrict
+      }, req.ip, req.get('User-Agent'));
 
       res.json(updatedStudent);
     } catch (error) {
@@ -3313,22 +3310,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const userId = req.session.userId;
-      
+
       // Check if this user has the lock
       const canEdit = await storage.canEditStudent(id, userId);
       if (!canEdit) {
-        return res.status(403).json({ 
-          message: "You don't have edit permissions for this student" 
+        return res.status(403).json({
+          message: "You don't have edit permissions for this student"
         });
       }
-      
+
       const updatedStudent = await storage.unlockStudent(id);
-      
+
       await auditService.log(userId, 'student_unlock_edit', 'students', id, {
         studentName: updatedStudent.name,
         appNo: updatedStudent.appNo
       }, req.ip, req.get('User-Agent'));
-      
+
       res.json(updatedStudent);
     } catch (error) {
       console.error("Unlock student edit error:", error);
@@ -3340,7 +3337,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       const student = await storage.getStudent(id);
       if (!student) {
         return res.status(404).json({ message: "Student not found" });
@@ -3352,7 +3349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedStudent = await storage.releaseStudentFromDistrict(id);
-      
+
       await auditService.log(req.session.userId, 'student_released', 'student', id, {
         studentName: student.name,
         meritNumber: student.meritNumber,
@@ -3371,7 +3368,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { studentId, reason } = req.body;
       const user = await storage.getUser(req.session.userId);
-      
+
       if (!studentId || !reason) {
         return res.status(400).json({ message: "Student ID and reason are required" });
       }
@@ -3505,20 +3502,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { district } = req.params;
       const user = await storage.getUser(req.session.userId);
-      
+
       // Check if the district admin has access to this district
       if (user?.role === 'district_admin' && user?.district !== district) {
         return res.status(403).json({ message: "You can only load students for your own district" });
       }
-      
+
       const result = await storage.autoLoadEntranceStudents(district);
-      
+
       await auditService.log(req.session.userId, 'students_auto_loaded', 'students', 'bulk', {
         district,
         loaded: result.loaded,
         skipped: result.skipped
       }, req.ip, req.get('User-Agent'));
-      
+
       res.json(result);
     } catch (error) {
       console.error("Auto-load students error:", error);
@@ -3533,7 +3530,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.session.userId);
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
-      
+
       // District admin can only view students in their district
       if (user?.role === 'district_admin' && user.district !== district) {
         return res.status(403).json({ message: "Can only view students in your district" });
@@ -3586,7 +3583,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { key, value, description } = req.body;
       const setting = await storage.setSetting({ key, value, description });
-      
+
       await auditService.log(req.user.id, 'setting_update', 'settings', setting.id, {
         key,
         value,
@@ -3596,6 +3593,169 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Set setting error:", error);
       res.status(500).json({ message: "Failed to update setting" });
+    }
+  });
+
+  // ========================================================================
+  // Year Session Routes
+  // ========================================================================
+
+  // Helper function to calculate session name from start date
+  function calculateSessionName(startDate: Date): string {
+    const month = startDate.getMonth(); // 0-11
+    const year = startDate.getFullYear();
+
+    // Academic year starts in April (month 3)
+    if (month >= 3) { // April or later
+      return `${year}-${year + 1}`;
+    } else { // January to March
+      return `${year - 1}-${year}`;
+    }
+  }
+
+  // Helper function to calculate session end date
+  function calculateSessionEndDate(startDate: Date): string {
+    const sessionName = calculateSessionName(startDate);
+    const endYear = parseInt(sessionName.split('-')[1]);
+    // Return March 31 of end year
+    return `${endYear}-03-31`;
+  }
+
+  // Get all year sessions
+  app.get('/api/year-sessions', isAuthenticated, async (req, res) => {
+    try {
+      const sessions = await storage.getYearSessions();
+      res.json(sessions);
+    } catch (error) {
+      console.error("Get year sessions error:", error);
+      res.status(500).json({ message: "Failed to fetch year sessions" });
+    }
+  });
+
+  // Get current year session
+  app.get('/api/year-sessions/current', isAuthenticated, async (req, res) => {
+    try {
+      const session = await storage.getCurrentYearSession();
+      if (!session) {
+        return res.status(404).json({ message: "No current session set" });
+      }
+      res.json(session);
+    } catch (error) {
+      console.error("Get current year session error:", error);
+      res.status(500).json({ message: "Failed to fetch current year session" });
+    }
+  });
+
+  // Get specific year session
+  app.get('/api/year-sessions/:id', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const session = await storage.getYearSession(id);
+      if (!session) {
+        return res.status(404).json({ message: "Year session not found" });
+      }
+      res.json(session);
+    } catch (error) {
+      console.error("Get year session error:", error);
+      res.status(500).json({ message: "Failed to fetch year session" });
+    }
+  });
+
+  // Create new year session (Central Admin only)
+  app.post('/api/year-sessions', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { startDate } = req.body;
+
+      if (!startDate) {
+        return res.status(400).json({ message: "Start date is required" });
+      }
+
+      const parsedStartDate = new Date(startDate);
+      if (isNaN(parsedStartDate.getTime())) {
+        return res.status(400).json({ message: "Invalid start date format" });
+      }
+
+      // Auto-calculate session name and end date
+      const sessionName = calculateSessionName(parsedStartDate);
+      const endDate = calculateSessionEndDate(parsedStartDate);
+
+      // Check if session already exists
+      const existing = await storage.getYearSessionByName(sessionName);
+      if (existing) {
+        return res.status(409).json({
+          message: `Session ${sessionName} already exists`,
+          existingSession: existing
+        });
+      }
+
+      const session = await storage.createYearSession({
+        sessionName,
+        startDate: startDate.split('T')[0], // Store as date string (YYYY-MM-DD)
+        endDate,
+        isCurrent: false,
+        isActive: true,
+        createdBy: req.user.id,
+      });
+
+      await auditService.log(req.user.id, 'year_session_create', 'year_session', session.id, {
+        sessionName,
+        startDate,
+        endDate,
+      }, req.ip, req.get('User-Agent'));
+
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Create year session error:", error);
+      res.status(500).json({ message: "Failed to create year session" });
+    }
+  });
+
+  // Set year session as current (Central Admin only)
+  app.put('/api/year-sessions/:id/set-current', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      const session = await storage.getYearSession(id);
+      if (!session) {
+        return res.status(404).json({ message: "Year session not found" });
+      }
+
+      const updated = await storage.setCurrentYearSession(id);
+
+      await auditService.log(req.user.id, 'year_session_set_current', 'year_session', id, {
+        sessionName: updated.sessionName,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Set current year session error:", error);
+      res.status(500).json({ message: "Failed to set current year session" });
+    }
+  });
+
+  // Update year session (Central Admin only)
+  app.put('/api/year-sessions/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+
+      const session = await storage.getYearSession(id);
+      if (!session) {
+        return res.status(404).json({ message: "Year session not found" });
+      }
+
+      // Only allow updating isActive flag
+      const updated = await storage.updateYearSession(id, { isActive });
+
+      await auditService.log(req.user.id, 'year_session_update', 'year_session', id, {
+        sessionName: session.sessionName,
+        isActive,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update year session error:", error);
+      res.status(500).json({ message: "Failed to update year session" });
     }
   });
 

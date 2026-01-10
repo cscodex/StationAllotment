@@ -10,6 +10,7 @@ import {
   fileUploads,
   districtStatus,
   unlockRequests,
+  yearSession,
   type User,
   type InsertUser,
   type Student,
@@ -32,6 +33,8 @@ import {
   type InsertDistrictStatus,
   type UnlockRequest,
   type InsertUnlockRequest,
+  type YearSession,
+  type InsertYearSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, asc, sql, or, ilike, isNull } from "drizzle-orm";
@@ -74,7 +77,7 @@ export interface IStorage {
     counselingRoundNumber?: number;
     preferencesUpdatedAt?: Date;
   }): Promise<Student>;
-  checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{hasConflict: boolean, currentDistrict?: string}>;
+  checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{ hasConflict: boolean, currentDistrict?: string }>;
   releaseAssignment(studentId: string): Promise<Student>;
 
   // School operations
@@ -150,7 +153,7 @@ export interface IStorage {
   unlockStudent(studentId: string): Promise<Student>;
   canEditStudent(studentId: string, userId: string): Promise<boolean>;
   lockStudentForEdit(studentId: string, userId: string): Promise<{ success: boolean; message: string; student?: Student }>;
-  getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{students: Student[], total: number}>;
+  getStudentsByDistrict(district: string, limit?: number, offset?: number): Promise<{ students: Student[], total: number }>;
   autoLoadEntranceStudents(district: string): Promise<{ loaded: number; skipped: number }>;
   releaseStudentFromDistrict(studentId: string): Promise<Student>;
   fetchStudentToDistrict(studentId: string, counselingDistrict: string, districtAdmin: string): Promise<Student>;
@@ -169,6 +172,15 @@ export interface IStorage {
     pendingAllocations: number;
     completionRate: number;
   }>;
+
+  // Year Session operations
+  getYearSessions(): Promise<YearSession[]>;
+  getYearSession(id: string): Promise<YearSession | undefined>;
+  getCurrentYearSession(): Promise<YearSession | undefined>;
+  getYearSessionByName(sessionName: string): Promise<YearSession | undefined>;
+  createYearSession(session: InsertYearSession): Promise<YearSession>;
+  updateYearSession(id: string, updates: Partial<InsertYearSession>): Promise<YearSession>;
+  setCurrentYearSession(id: string): Promise<YearSession>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -222,13 +234,13 @@ export class DatabaseStorage implements IStorage {
     if (roundNumber !== undefined) {
       conditions.push(eq(students.counselingRoundNumber, roundNumber));
     }
-    
+
     const query = db.select().from(students);
-    
+
     if (conditions.length > 0) {
       query.where(and(...conditions));
     }
-    
+
     return query
       .orderBy(asc(students.meritNumber))
       .limit(limit || 50)
@@ -276,7 +288,7 @@ export class DatabaseStorage implements IStorage {
     const results = [];
     const total = studentsList.length;
     const BATCH_SIZE = 50; // Process in batches of 50
-    
+
     for (let i = 0; i < studentsList.length; i += BATCH_SIZE) {
       const batch = studentsList.slice(i, i + BATCH_SIZE);
       for (const student of batch) {
@@ -310,7 +322,7 @@ export class DatabaseStorage implements IStorage {
           .returning();
         results.push(result);
       }
-      
+
       // Report progress after each batch
       if (onProgress) {
         onProgress(results.length, total);
@@ -394,7 +406,7 @@ export class DatabaseStorage implements IStorage {
     const inserted = [];
     const total = results.length;
     const BATCH_SIZE = 50; // Process in batches of 50
-    
+
     for (let i = 0; i < results.length; i += BATCH_SIZE) {
       const batch = results.slice(i, i + BATCH_SIZE);
       for (const result of batch) {
@@ -437,7 +449,7 @@ export class DatabaseStorage implements IStorage {
           inserted.push(newRecord);
         }
       }
-      
+
       // Report progress after each batch
       if (onProgress) {
         onProgress(inserted.length, total);
@@ -465,10 +477,10 @@ export class DatabaseStorage implements IStorage {
   }): Promise<Student> {
     const [updated] = await db
       .update(students)
-      .set({ 
-        ...preferences, 
+      .set({
+        ...preferences,
         preferencesUpdatedAt: preferences.preferencesUpdatedAt || new Date(),
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
       .returning();
@@ -478,10 +490,10 @@ export class DatabaseStorage implements IStorage {
   async releaseAssignment(studentId: string): Promise<Student> {
     const [updated] = await db
       .update(students)
-      .set({ 
-        counselingDistrict: null, 
+      .set({
+        counselingDistrict: null,
         districtAdmin: null,
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
       .returning();
@@ -499,7 +511,7 @@ export class DatabaseStorage implements IStorage {
       rounds = await db.select().from(counselingRounds)
         .orderBy(desc(counselingRounds.academicYear), asc(counselingRounds.roundName), asc(counselingRounds.roundNumber));
     }
-    
+
     // Debug: Log what Drizzle returns
     if (rounds.length > 0) {
       console.log('🔍 Drizzle returned rounds:', rounds.map(r => {
@@ -517,7 +529,7 @@ export class DatabaseStorage implements IStorage {
         } catch (e) {
           startDateValue = `Error: ${String(e)}`;
         }
-        
+
         return {
           id: r.id,
           startDate: r.startDate,
@@ -527,7 +539,7 @@ export class DatabaseStorage implements IStorage {
         };
       }));
     }
-    
+
     return rounds;
   }
 
@@ -561,9 +573,9 @@ export class DatabaseStorage implements IStorage {
   async toggleSuspendCounseling(academicYear: string, roundName: string, suspend: boolean): Promise<CounselingRound[]> {
     const updated = await db
       .update(counselingRounds)
-      .set({ 
+      .set({
         isSuspended: suspend,
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(and(
         eq(counselingRounds.academicYear, academicYear),
@@ -601,7 +613,7 @@ export class DatabaseStorage implements IStorage {
         ))
         .orderBy(desc(counselingRounds.roundNumber))
         .limit(1);
-      
+
       if (existingRounds.length > 0) {
         finalRoundNumber = (existingRounds[0].roundNumber || 0) + 1;
       } else {
@@ -619,12 +631,12 @@ export class DatabaseStorage implements IStorage {
       endDate: round.endDate,
       endDateType: typeof round.endDate
     });
-    
+
     const [created] = await db
       .insert(counselingRounds)
       .values({ ...round, roundNumber: finalRoundNumber, updatedAt: new Date() })
       .returning();
-    
+
     // Debug logging after creation
     console.log('✅ Created counseling round:', {
       id: created.id,
@@ -633,7 +645,7 @@ export class DatabaseStorage implements IStorage {
       startDateValue: created.startDate instanceof Date ? created.startDate.toISOString() : String(created.startDate),
       endDate: created.endDate
     });
-    
+
     return created;
   }
 
@@ -668,10 +680,10 @@ export class DatabaseStorage implements IStorage {
   async completeCounselingRound(id: string): Promise<CounselingRound> {
     const [completed] = await db
       .update(counselingRounds)
-      .set({ 
+      .set({
         isCompleted: true,
         isActive: false,
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(eq(counselingRounds.id, id))
       .returning();
@@ -681,7 +693,7 @@ export class DatabaseStorage implements IStorage {
   async autoCreateNextRound(academicYear: string, roundName: string, defaultStartDate: Date): Promise<CounselingRound | null> {
     // Get the latest round for this counseling
     const latestRound = await this.getLatestRoundForCounseling(academicYear, roundName);
-    
+
     if (!latestRound) {
       return null; // No existing rounds, should create first round instead
     }
@@ -731,7 +743,7 @@ export class DatabaseStorage implements IStorage {
 
   async bulkCreateCounselingRounds(rounds: InsertCounselingRound[]): Promise<CounselingRound[]> {
     const createdRounds: CounselingRound[] = [];
-    
+
     for (const round of rounds) {
       // Validate that roundName is provided
       if (!round.roundName) {
@@ -749,7 +761,7 @@ export class DatabaseStorage implements IStorage {
           ))
           .orderBy(desc(counselingRounds.roundNumber))
           .limit(1);
-        
+
         if (existingRounds.length > 0) {
           finalRoundNumber = (existingRounds[0].roundNumber || 0) + 1;
         } else {
@@ -761,7 +773,7 @@ export class DatabaseStorage implements IStorage {
         .insert(counselingRounds)
         .values({ ...round, roundNumber: finalRoundNumber, updatedAt: new Date() })
         .returning();
-      
+
       createdRounds.push(created);
     }
 
@@ -798,7 +810,7 @@ export class DatabaseStorage implements IStorage {
     if (roundName) {
       conditions.push(eq(vacancies.roundName, roundName));
     }
-    
+
     if (conditions.length > 0) {
       return db.select().from(vacancies)
         .where(and(...conditions))
@@ -833,15 +845,15 @@ export class DatabaseStorage implements IStorage {
   async checkIfAllSeatsFilled(academicYear: string, roundName: string): Promise<boolean> {
     // Get all vacancies for this academic year and round name
     const allVacancies = await this.getVacancies(academicYear, roundName);
-    
+
     // If no vacancies exist, allow creating rounds (vacancies can be uploaded later)
     if (allVacancies.length === 0) {
       return false;
     }
-    
+
     // Check if any vacancy has available seats
     const hasAvailableSeats = allVacancies.some(v => (v.availableSeats || 0) > 0);
-    
+
     // If no vacancies have available seats, all seats are filled
     return !hasAvailableSeats;
   }
@@ -853,7 +865,7 @@ export class DatabaseStorage implements IStorage {
   }> {
     const allVacancies = await this.getVacancies(academicYear, roundName);
     const totalAvailableSeats = allVacancies.reduce((sum, v) => sum + (v.availableSeats || 0), 0);
-    
+
     return {
       hasVacancies: totalAvailableSeats > 0,
       totalAvailableSeats,
@@ -923,14 +935,14 @@ export class DatabaseStorage implements IStorage {
     const results = [];
     const total = vacanciesList.length;
     const BATCH_SIZE = 50; // Process in batches of 50
-    
+
     for (let i = 0; i < vacanciesList.length; i += BATCH_SIZE) {
       const batch = vacanciesList.slice(i, i + BATCH_SIZE);
       for (const vacancy of batch) {
         // Use the constraint that doesn't include nullable columns: district, stream, gender, category
         // Note: udiseCode, academicYear, and roundName are nullable, so we can't use them in ON CONFLICT
         // We'll use district-based constraint and handle academicYear/roundName/udiseCode in the SET clause
-        
+
         if (!vacancy.district || !vacancy.stream || !vacancy.gender || !vacancy.category) {
           console.warn('Skipping vacancy with missing required fields:', vacancy);
           continue;
@@ -944,20 +956,20 @@ export class DatabaseStorage implements IStorage {
           eq(vacancies.gender, vacancy.gender),
           eq(vacancies.category, vacancy.category),
         ];
-        
+
         // Add nullable field conditions
         if (vacancy.academicYear) {
           conditions.push(eq(vacancies.academicYear, vacancy.academicYear));
         } else {
           conditions.push(isNull(vacancies.academicYear));
         }
-        
+
         if (vacancy.roundName) {
           conditions.push(eq(vacancies.roundName, vacancy.roundName));
         } else {
           conditions.push(isNull(vacancies.roundName));
         }
-        
+
         if (vacancy.udiseCode) {
           conditions.push(eq(vacancies.udiseCode, vacancy.udiseCode));
         } else {
@@ -993,7 +1005,7 @@ export class DatabaseStorage implements IStorage {
           results.push(inserted);
         }
       }
-      
+
       // Report progress after each batch
       if (onProgress) {
         onProgress(results.length, total);
@@ -1065,7 +1077,7 @@ export class DatabaseStorage implements IStorage {
           .values({ ...school, updatedAt: new Date() })
           .onConflictDoUpdate({
             target: [schools.udiseCode],
-            set: { 
+            set: {
               schoolName: school.schoolName,
               district: school.district,
               updatedAt: new Date(),
@@ -1185,7 +1197,7 @@ export class DatabaseStorage implements IStorage {
   }> {
     // Get total students from entrance results (all students who took the entrance exam)
     const [entranceResultsCount] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
-    
+
     // Get allocation status counts from students table (only those with preferences set)
     const [studentsWithPreferencesCount] = await db.select({ count: sql<number>`count(*)` }).from(students);
     const [pendingCount] = await db.select({ count: sql<number>`count(*)` })
@@ -1229,7 +1241,7 @@ export class DatabaseStorage implements IStorage {
 
   async createOrUpdateDistrictStatus(status: InsertDistrictStatus): Promise<DistrictStatus> {
     const existing = await this.getDistrictStatus(status.district);
-    
+
     if (existing) {
       const [updated] = await db
         .update(districtStatus)
@@ -1249,12 +1261,12 @@ export class DatabaseStorage implements IStorage {
   async finalizeDistrict(district: string, userId: string): Promise<DistrictStatus> {
     // Get current district student stats for the status record
     const districtStudents = await this.getStudentsByDistrict(district);
-    
+
     // Only consider students that belong to this district AND have district admin assigned AND have preference data
-    const eligibleStudents = districtStudents.students.filter(s => 
+    const eligibleStudents = districtStudents.students.filter(s =>
       s.counselingDistrict === district && s.districtAdmin && s.choice1 // Must belong to district, have district admin and at least first choice
     );
-    
+
     const lockedEligibleStudents = eligibleStudents.filter(s => s.isLocked).length;
     const studentsWithChoices = districtStudents.students.filter(s => s.choice1).length;
 
@@ -1276,11 +1288,11 @@ export class DatabaseStorage implements IStorage {
   async lockStudent(studentId: string, userId: string): Promise<Student> {
     const [updated] = await db
       .update(students)
-      .set({ 
-        isLocked: true, 
-        lockedBy: userId, 
+      .set({
+        isLocked: true,
+        lockedBy: userId,
         lockedAt: new Date(),
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
       .returning();
@@ -1290,11 +1302,11 @@ export class DatabaseStorage implements IStorage {
   async unlockStudent(studentId: string): Promise<Student> {
     const [updated] = await db
       .update(students)
-      .set({ 
-        isLocked: false, 
-        lockedBy: null, 
+      .set({
+        isLocked: false,
+        lockedBy: null,
         lockedAt: null,
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
       .returning();
@@ -1305,7 +1317,7 @@ export class DatabaseStorage implements IStorage {
   async canEditStudent(studentId: string, userId: string): Promise<boolean> {
     const [student] = await db.select().from(students).where(eq(students.id, studentId));
     if (!student) return false;
-    
+
     // Student can be edited if:
     // 1. Not locked by anyone (lockedBy is null)
     // 2. OR locked by the same user requesting to edit
@@ -1324,21 +1336,21 @@ export class DatabaseStorage implements IStorage {
       const [lockingUser] = await db.select({ username: users.username })
         .from(users)
         .where(eq(users.id, student.lockedBy));
-      
-      return { 
-        success: false, 
-        message: `Student is currently being edited by ${lockingUser?.username || 'another admin'}. Please try again later.` 
+
+      return {
+        success: false,
+        message: `Student is currently being edited by ${lockingUser?.username || 'another admin'}. Please try again later.`
       };
     }
 
     // Lock the student for this user
     const [updated] = await db
       .update(students)
-      .set({ 
-        isLocked: true, 
-        lockedBy: userId, 
+      .set({
+        isLocked: true,
+        lockedBy: userId,
         lockedAt: new Date(),
-        updatedAt: new Date() 
+        updatedAt: new Date()
       })
       .where(eq(students.id, studentId))
       .returning();
@@ -1346,7 +1358,7 @@ export class DatabaseStorage implements IStorage {
     return { success: true, message: "Student locked for editing", student: updated };
   }
 
-  async getStudentsByDistrict(district: string, limit = 50, offset = 0): Promise<{students: Student[], total: number}> {
+  async getStudentsByDistrict(district: string, limit = 50, offset = 0): Promise<{ students: Student[], total: number }> {
     // District admins can see:
     // 1. Students assigned to their district (counselingDistrict = district)
     // 2. Students not assigned to any district (counselingDistrict is null)
@@ -1362,7 +1374,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(students.meritNumber))
       .limit(limit)
       .offset(offset);
-    
+
     const [countResult] = await db.select({ count: sql<number>`count(*)` })
       .from(students)
       .where(and(
@@ -1372,7 +1384,7 @@ export class DatabaseStorage implements IStorage {
         ),
         eq(students.isReleased, false)
       ));
-    
+
     return {
       students: studentsResult,
       total: countResult.count
@@ -1427,9 +1439,9 @@ export class DatabaseStorage implements IStorage {
       .values(studentsToInsert)
       .returning();
 
-    return { 
-      loaded: inserted.length, 
-      skipped: entranceResults.length - newStudents.length 
+    return {
+      loaded: inserted.length,
+      skipped: entranceResults.length - newStudents.length
     };
   }
 
@@ -1465,26 +1477,26 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{hasConflict: boolean, currentDistrict?: string}> {
+  async checkStudentDistrictConflict(studentId: string, newDistrict: string): Promise<{ hasConflict: boolean, currentDistrict?: string }> {
     const student = await this.getStudent(studentId);
-    
+
     if (!student) {
       return { hasConflict: false };
     }
 
     // Check if student is already allotted to a district
     if (student.allottedDistrict) {
-      return { 
-        hasConflict: true, 
-        currentDistrict: student.allottedDistrict 
+      return {
+        hasConflict: true,
+        currentDistrict: student.allottedDistrict
       };
     }
 
     // Check if student is already selected by another district (and not released)
     if (student.counselingDistrict && student.counselingDistrict !== newDistrict && !student.isReleased) {
-      return { 
-        hasConflict: true, 
-        currentDistrict: student.counselingDistrict 
+      return {
+        hasConflict: true,
+        currentDistrict: student.counselingDistrict
       };
     }
 
@@ -1532,6 +1544,63 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(unlockRequests)
       .where(eq(unlockRequests.status, 'pending'))
       .orderBy(desc(unlockRequests.createdAt));
+  }
+
+  // Year Session operations
+  async getYearSessions(): Promise<YearSession[]> {
+    return db.select().from(yearSession)
+      .orderBy(desc(yearSession.startDate));
+  }
+
+  async getYearSession(id: string): Promise<YearSession | undefined> {
+    const [session] = await db.select().from(yearSession)
+      .where(eq(yearSession.id, id));
+    return session;
+  }
+
+  async getCurrentYearSession(): Promise<YearSession | undefined> {
+    const [session] = await db.select().from(yearSession)
+      .where(eq(yearSession.isCurrent, true));
+    return session;
+  }
+
+  async getYearSessionByName(sessionName: string): Promise<YearSession | undefined> {
+    const [session] = await db.select().from(yearSession)
+      .where(eq(yearSession.sessionName, sessionName));
+    return session;
+  }
+
+  async createYearSession(session: InsertYearSession): Promise<YearSession> {
+    const [created] = await db
+      .insert(yearSession)
+      .values({ ...session, updatedAt: new Date() })
+      .returning();
+    return created;
+  }
+
+  async updateYearSession(id: string, updates: Partial<InsertYearSession>): Promise<YearSession> {
+    const [updated] = await db
+      .update(yearSession)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(yearSession.id, id))
+      .returning();
+    return updated;
+  }
+
+  async setCurrentYearSession(id: string): Promise<YearSession> {
+    // First, unset all current sessions
+    await db
+      .update(yearSession)
+      .set({ isCurrent: false, updatedAt: new Date() })
+      .where(eq(yearSession.isCurrent, true));
+
+    // Then set the specified session as current
+    const [updated] = await db
+      .update(yearSession)
+      .set({ isCurrent: true, updatedAt: new Date() })
+      .where(eq(yearSession.id, id))
+      .returning();
+    return updated;
   }
 }
 

@@ -261,5 +261,26 @@ CREATE TABLE IF NOT EXISTS unlock_requests (
 CREATE INDEX IF NOT EXISTS idx_unlock_requests_status ON unlock_requests(status);
 
 -- ================================================================================
+-- Year Session Table
+-- ================================================================================
+CREATE TABLE IF NOT EXISTS year_session (
+    id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_name VARCHAR NOT NULL UNIQUE,  -- e.g., "2025-2026"
+    start_date DATE NOT NULL,              -- e.g., April 1, 2025
+    end_date DATE NOT NULL,                -- e.g., March 31, 2026
+    is_current BOOLEAN DEFAULT FALSE,      -- Only one session can be current
+    is_active BOOLEAN DEFAULT TRUE,        -- Whether session is active for operations
+    created_by VARCHAR REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_year_session_current_unique 
+    ON year_session(is_current) WHERE is_current = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_year_session_session_name ON year_session(session_name);
+CREATE INDEX IF NOT EXISTS idx_year_session_active ON year_session(is_active);
+
+-- ================================================================================
 -- Schema Creation Complete
 -- ================================================================================

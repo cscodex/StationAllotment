@@ -16,21 +16,18 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
-import { 
-  Calendar, 
-  Plus, 
-  Play, 
-  CheckCircle, 
-  Clock, 
+import {
+  Calendar,
+  Plus,
+  Play,
+  CheckCircle,
+  Clock,
   Edit,
   AlertTriangle,
-  XCircle,
   Trash2,
   Rocket,
-  Minus,
   Pause,
-  PlayCircle,
-  X
+  PlayCircle
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -66,12 +63,12 @@ interface PrerequisitesStatus {
 }
 
 // Component to handle prerequisites checking and display for Run Allocation button
-function PrerequisitesButton({ 
-  round, 
-  onRunAllocation, 
-  isPending 
-}: { 
-  round: CounselingRound; 
+function PrerequisitesButton({
+  round,
+  onRunAllocation,
+  isPending
+}: {
+  round: CounselingRound;
   onRunAllocation: (round: CounselingRound) => void;
   isPending: boolean;
 }) {
@@ -86,7 +83,7 @@ function PrerequisitesButton({
 
   const canRunAllocation = prerequisites?.allPrerequisitesMet ?? false;
   const missingPrerequisites: string[] = [];
-  
+
   if (prerequisites) {
     if (!prerequisites.hasVacancyData) {
       missingPrerequisites.push(`Vacancy data (${prerequisites.totalAvailableSeats} seats)`);
@@ -108,11 +105,11 @@ function PrerequisitesButton({
         disabled={isPending || isLoading || !canRunAllocation}
         className="bg-green-600 hover:bg-green-700"
         title={
-          isLoading 
-            ? "Checking prerequisites..." 
-            : !canRunAllocation 
-            ? `Prerequisites not met: ${missingPrerequisites.join(", ")}`
-            : "Run allocation"
+          isLoading
+            ? "Checking prerequisites..."
+            : !canRunAllocation
+              ? `Prerequisites not met: ${missingPrerequisites.join(", ")}`
+              : "Run allocation"
         }
       >
         <Rocket className="w-3 h-3 mr-1" />
@@ -142,6 +139,13 @@ export default function CounselingRounds() {
   });
   const currentSession = currentSessionData?.currentSession || "";
 
+  // Set selected academic year to current session when loaded
+  useEffect(() => {
+    if (currentSession && !selectedAcademicYear) {
+      setSelectedAcademicYear(currentSession);
+    }
+  }, [currentSession, selectedAcademicYear]);
+
   const form = useForm<CreateTitleForm>({
     resolver: zodResolver(createTitleSchema),
     defaultValues: {
@@ -149,7 +153,7 @@ export default function CounselingRounds() {
       roundName: "",
     },
   });
-  
+
   // Sync form when selectedAcademicYear changes
   useEffect(() => {
     if (selectedAcademicYear) {
@@ -325,7 +329,7 @@ export default function CounselingRounds() {
       setEditStartDate("");
       toast({
         title: "Success",
-        description: wasDeactivated 
+        description: wasDeactivated
           ? "Start date updated successfully. Round has been deactivated because the new date is in the future."
           : "Start date updated successfully",
       });
@@ -379,11 +383,11 @@ export default function CounselingRounds() {
     } else {
       startDate = new Date(round.startDate as string);
     }
-    
+
     if (isNaN(startDate.getTime())) {
       return false; // Invalid date, don't consider it past
     }
-    
+
     const now = new Date();
     return startDate < now;
   };
@@ -394,14 +398,14 @@ export default function CounselingRounds() {
     if (round.roundNumber === 1) {
       return true;
     }
-    
+
     // For subsequent rounds, check if previous round is completed
     const previousRound = rounds?.find(
-      r => r.roundName === round.roundName && 
-           r.academicYear === round.academicYear && 
-           r.roundNumber === round.roundNumber - 1
+      r => r.roundName === round.roundName &&
+        r.academicYear === round.academicYear &&
+        r.roundNumber === round.roundNumber - 1
     );
-    
+
     return previousRound?.isCompleted === true;
   };
 
@@ -416,7 +420,7 @@ export default function CounselingRounds() {
         icon: CheckCircle
       };
     }
-    
+
     if (round.isSuspended) {
       return {
         text: "Suspended",
@@ -425,7 +429,7 @@ export default function CounselingRounds() {
         icon: Pause
       };
     }
-    
+
     if (round.isActive) {
       return {
         text: "Active",
@@ -434,7 +438,7 @@ export default function CounselingRounds() {
         icon: Play
       };
     }
-    
+
     return {
       text: "Inactive",
       variant: "secondary",
@@ -461,11 +465,11 @@ export default function CounselingRounds() {
       });
       return;
     }
-    
+
     // Database column is TIMESTAMP type (datetime with time)
     // Handle both ISO timestamp strings and Date objects
     let startDate: Date;
-    
+
     if (typeof round.startDate === 'string') {
       // Parse ISO timestamp string (e.g., "2024-06-15T10:00:00.000Z" or "2024-06-15T10:00:00")
       startDate = new Date(round.startDate);
@@ -475,7 +479,7 @@ export default function CounselingRounds() {
       // Try to parse as Date
       startDate = new Date(round.startDate as string);
     }
-    
+
     // Check if date is valid
     if (isNaN(startDate.getTime()) || startDate.getFullYear() < 2000) {
       console.error('Invalid date received:', {
@@ -492,7 +496,7 @@ export default function CounselingRounds() {
       });
       return;
     }
-    
+
     // Convert to datetime-local format (YYYY-MM-DDTHH:mm)
     // datetime-local expects local time without timezone
     const year = startDate.getFullYear();
@@ -510,7 +514,7 @@ export default function CounselingRounds() {
       // Validate that the date is not in the past
       const selectedDate = new Date(editStartDate);
       const now = new Date();
-      
+
       if (selectedDate < now) {
         toast({
           title: "Error",
@@ -519,7 +523,7 @@ export default function CounselingRounds() {
         });
         return;
       }
-      
+
       updateRoundMutation.mutate({ id: editingRound.id, startDate: editStartDate });
     }
   };
@@ -541,8 +545,8 @@ export default function CounselingRounds() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Counseling Rounds Management" 
+      <Header
+        title="Counseling Rounds Management"
         breadcrumbs={[
           { name: "Home" },
           { name: "Operations" },
@@ -836,17 +840,17 @@ export default function CounselingRounds() {
                       </FormControl>
                       <FormMessage />
                       <p className="text-xs text-muted-foreground">
-                        Create a counseling title (e.g., "Meritorious School", "Regular Counseling"). 
+                        Create a counseling title (e.g., "Meritorious School", "Regular Counseling").
                         Round 1 will be automatically created with the current date/time. You can edit the start date/time later.
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        <strong>Note:</strong> Before the first round can run allocation, you must upload: 
+                        <strong>Note:</strong> Before the first round can run allocation, you must upload:
                         vacancy data, entrance results, and student choices for this counseling title.
                       </p>
                     </FormItem>
                   )}
                 />
-                
+
                 <DialogFooter>
                   <Button
                     type="button"

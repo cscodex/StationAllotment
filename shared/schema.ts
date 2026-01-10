@@ -228,6 +228,22 @@ export const unlockRequests = pgTable("unlock_requests", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Year Session table for tracking academic sessions
+export const yearSession = pgTable("year_session", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionName: varchar("session_name").notNull().unique(), // e.g., "2025-2026"
+  startDate: date("start_date").notNull(), // e.g., April 1, 2025
+  endDate: date("end_date").notNull(), // e.g., March 31, 2026
+  isCurrent: boolean("is_current").default(false), // Only one session can be current
+  isActive: boolean("is_active").default(true), // Whether session is active for operations
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_year_session_session_name").on(table.sessionName),
+  index("idx_year_session_active").on(table.isActive),
+]);
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   auditLogs: many(auditLogs),
@@ -346,6 +362,12 @@ export const insertCounselingRoundSchema = createInsertSchema(counselingRounds).
   updatedAt: true,
 });
 
+export const insertYearSessionSchema = createInsertSchema(yearSession).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -369,11 +391,13 @@ export type School = typeof schools.$inferSelect;
 export type InsertSchool = z.infer<typeof insertSchoolSchema>;
 export type CounselingRound = typeof counselingRounds.$inferSelect;
 export type InsertCounselingRound = z.infer<typeof insertCounselingRoundSchema>;
+export type YearSession = typeof yearSession.$inferSelect;
+export type InsertYearSession = z.infer<typeof insertYearSessionSchema>;
 
 // Constants - All 23 districts of Punjab (Counseling Districts)
 export const DISTRICTS = [
   'Amritsar',
-  'Barnala', 
+  'Barnala',
   'Bathinda',
   'Faridkot',
   'Fatehgarh Sahib',
@@ -400,7 +424,7 @@ export const DISTRICTS = [
 // School Districts - Only 10 districts have schools
 export const SCHOOL_DISTRICTS = [
   'Amritsar',
-  'Bathinda', 
+  'Bathinda',
   'Ferozepur',
   'Gurdaspur',
   'Jalandhar',
