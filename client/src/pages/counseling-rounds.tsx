@@ -292,29 +292,6 @@ export default function CounselingRounds() {
   });
 
 
-  // Complete round mutation
-  const completeRoundMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("POST", `/api/counseling-rounds/${id}/complete`);
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
-      refetch();
-      toast({
-        title: "Success",
-        description: data.message || "Counseling round completed successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to complete counseling round",
-        variant: "destructive",
-      });
-    },
-  });
-
   // Update round start date mutation
   const updateRoundMutation = useMutation({
     mutationFn: async ({ id, startDate }: { id: string; startDate: string }) => {
@@ -392,23 +369,6 @@ export default function CounselingRounds() {
     return startDate < now;
   };
 
-  // Check if previous round is completed (for showing Complete button)
-  const canCompleteRound = (round: CounselingRound): boolean => {
-    // Round 1 can always be completed
-    if (round.roundNumber === 1) {
-      return true;
-    }
-
-    // For subsequent rounds, check if previous round is completed
-    const previousRound = rounds?.find(
-      r => r.roundName === round.roundName &&
-        r.academicYear === round.academicYear &&
-        r.roundNumber === round.roundNumber - 1
-    );
-
-    return previousRound?.isCompleted === true;
-  };
-
   // Get round status display
   const getRoundStatus = (round: CounselingRound): { text: string; variant: "default" | "secondary" | "destructive"; className: string; icon: any } => {
     // Priority: Completed > Suspended > Active > Inactive
@@ -445,13 +405,6 @@ export default function CounselingRounds() {
       className: "",
       icon: Clock
     };
-  };
-
-
-  const handleComplete = (round: CounselingRound) => {
-    if (confirm(`Mark ${round.roundName || `Round ${round.roundNumber}`} as completed?`)) {
-      completeRoundMutation.mutate(round.id);
-    }
   };
 
   const handleEdit = (round: CounselingRound) => {
@@ -743,18 +696,6 @@ export default function CounselingRounds() {
                                       onRunAllocation={handleRunAllocation}
                                       isPending={runAllocationMutation.isPending}
                                     />
-                                    {canCompleteRound(round) && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleComplete(round)}
-                                        disabled={completeRoundMutation.isPending}
-                                        title={round.roundNumber === 1 ? "Complete this round" : "Previous round must be completed first"}
-                                      >
-                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                        Complete
-                                      </Button>
-                                    )}
                                   </>
                                 )}
                                 {canDelete(round) && (
