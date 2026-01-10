@@ -595,7 +595,7 @@ export default function CounselingRounds() {
                 <CardTitle>Counseling Rounds - {selectedAcademicYear}</CardTitle>
                 <Button onClick={() => setShowCreateDialog(true)}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Create Round
+                  New Counseling Title
                 </Button>
               </CardHeader>
               <CardContent>
