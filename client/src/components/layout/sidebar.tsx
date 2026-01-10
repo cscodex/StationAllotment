@@ -39,6 +39,7 @@ const navigation = [
     items: [
       { name: "Student Preferences", href: "/district-admin", icon: UserCog, roles: ["district_admin"] },
       { name: "Student Preference Management", href: "/student-preference-management", icon: UserCog, roles: ["central_admin"] },
+      { name: "Year Sessions", href: "/year-sessions", icon: Calendar, roles: ["central_admin"] },
       { name: "Counseling Rounds", href: "/counseling-rounds", icon: Calendar, roles: ["central_admin"] },
       { name: "Run Allocation", href: "/allocation", icon: Settings, roles: ["central_admin"] },
       { name: "District Analysis", href: "/district-analysis", icon: BarChart3, roles: ["central_admin"] },
@@ -61,23 +62,23 @@ export default function Sidebar({ className }: SidebarProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentTime, setCurrentTime] = useState(new Date());
-  
+
   // Update time every second
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, []);
-  
+
   // Get timezone name
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const timezoneOffset = -currentTime.getTimezoneOffset() / 60;
-  const timezoneOffsetString = timezoneOffset >= 0 
-    ? `UTC+${timezoneOffset}` 
+  const timezoneOffsetString = timezoneOffset >= 0
+    ? `UTC+${timezoneOffset}`
     : `UTC${timezoneOffset}`;
-  
+
   // Format date and time
   const formattedDate = currentTime.toLocaleDateString('en-US', {
     weekday: 'short',
@@ -160,8 +161,8 @@ export default function Sidebar({ className }: SidebarProps) {
             {section.items
               .filter((item) => item.roles.includes(user.role))
               .map((item) => (
-                <Link 
-                  key={item.name} 
+                <Link
+                  key={item.name}
                   href={item.href}
                   className={cn(
                     "flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm",
@@ -186,8 +187,8 @@ export default function Sidebar({ className }: SidebarProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate" data-testid="text-user-name">
-              {user.firstName && user.lastName 
-                ? `${user.firstName} ${user.lastName}` 
+              {user.firstName && user.lastName
+                ? `${user.firstName} ${user.lastName}`
                 : user.username}
             </p>
             <p className="text-xs text-muted-foreground" data-testid="text-user-role">

@@ -24,6 +24,7 @@ import StudentPreferenceManagement from "@/pages/student-preference-management";
 import Profile from "@/pages/profile";
 import Notifications from "@/pages/notifications";
 import DistrictAnalysis from "@/pages/district-analysis";
+import YearSessions from "@/pages/year-sessions";
 import MainLayout from "@/components/layout/main-layout";
 
 function Router() {
@@ -61,6 +62,7 @@ function Router() {
         <Route path="/notifications" component={Notifications} />
         <Route path="/district-analysis" component={DistrictAnalysis} />
         <Route path="/profile" component={Profile} />
+        <Route path="/year-sessions" component={YearSessions} />
         <Route path="/student/:id" component={StudentDetails} />
         <Route component={NotFound} />
       </Switch>
