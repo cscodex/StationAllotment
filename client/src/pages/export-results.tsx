@@ -5,11 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  Download, 
-  FileText, 
-  FileSpreadsheet, 
-  Check, 
+import {
+  Download,
+  FileText,
+  FileSpreadsheet,
+  Check,
   AlertTriangle,
   Calendar,
   Users,
@@ -21,11 +21,11 @@ export default function ExportResults() {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const { toast } = useToast();
 
-  const { data: allocationStatus } = useQuery({
+  const { data: allocationStatus } = useQuery<{ completed: boolean; deadline: string | null }>({
     queryKey: ["/api/allocation/status"],
   });
 
-  const { data: stats } = useQuery({
+  const { data: stats } = useQuery<{ totalStudents: number; pendingAllocations: number; completedAllocations: number; totalVacancies: number; completionRate: number }>({
     queryKey: ["/api/dashboard/stats"],
   });
 
@@ -36,7 +36,7 @@ export default function ExportResults() {
         method: 'GET',
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         throw new Error('Export failed');
       }
@@ -73,7 +73,7 @@ export default function ExportResults() {
         method: 'GET',
         credentials: 'include',
       });
-      
+
       if (!response.ok) {
         throw new Error('Export failed');
       }
@@ -94,7 +94,7 @@ export default function ExportResults() {
       });
     } catch (error) {
       toast({
-        title: "Export Failed", 
+        title: "Export Failed",
         description: "Failed to export PDF file",
         variant: "destructive",
       });
@@ -107,8 +107,8 @@ export default function ExportResults() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Export Results" 
+      <Header
+        title="Export Results"
         breadcrumbs={[
           { name: "Home" },
           { name: "Operations" },
@@ -140,7 +140,7 @@ export default function ExportResults() {
                     <p className="text-sm text-amber-600 mb-4">
                       Please complete the seat allocation process before exporting results.
                     </p>
-                    <Button 
+                    <Button
                       onClick={() => window.location.href = '/allocation'}
                       variant="outline"
                       data-testid="button-go-to-allocation"
@@ -167,7 +167,7 @@ export default function ExportResults() {
                           <div className="flex-1">
                             <h3 className="font-semibold mb-1">CSV Export</h3>
                             <p className="text-sm text-muted-foreground mb-3">
-                              Export complete allocation data as a CSV file. Includes all student records, 
+                              Export complete allocation data as a CSV file. Includes all student records,
                               choices, and allocation results. Perfect for further analysis or data processing.
                             </p>
                             <div className="flex items-center space-x-2 text-xs text-muted-foreground mb-3">
@@ -176,7 +176,7 @@ export default function ExportResults() {
                               <span>• Allocation status</span>
                               <span>• Merit numbers</span>
                             </div>
-                            <Button 
+                            <Button
                               onClick={handleExportCSV}
                               disabled={isExportingCSV}
                               data-testid="button-export-csv"
@@ -199,7 +199,7 @@ export default function ExportResults() {
                           <div className="flex-1">
                             <h3 className="font-semibold mb-1">PDF Report</h3>
                             <p className="text-sm text-muted-foreground mb-3">
-                              Generate a comprehensive PDF report with allocation summary, 
+                              Generate a comprehensive PDF report with allocation summary,
                               statistics, and detailed results. Ideal for official documentation and reports.
                             </p>
                             <div className="flex items-center space-x-2 text-xs text-muted-foreground mb-3">
@@ -208,7 +208,7 @@ export default function ExportResults() {
                               <span>• Student listings</span>
                               <span>• Official format</span>
                             </div>
-                            <Button 
+                            <Button
                               onClick={handleExportPDF}
                               disabled={isExportingPDF}
                               data-testid="button-export-pdf"
@@ -240,28 +240,28 @@ export default function ExportResults() {
                       {canExport ? "Ready" : "Pending"}
                     </Badge>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Total Records</span>
                     <span className="font-medium" data-testid="export-total-records">
                       {stats?.totalStudents || 0}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Allocated</span>
                     <span className="font-medium text-green-600" data-testid="export-allocated-count">
                       {stats ? stats.totalStudents - stats.pendingAllocations : 0}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Not Allocated</span>
                     <span className="font-medium text-red-600" data-testid="export-not-allocated-count">
                       {stats?.pendingAllocations || 0}
                     </span>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Completion Rate</span>
                     <span className="font-medium" data-testid="export-completion-rate">
@@ -283,15 +283,15 @@ export default function ExportResults() {
                     <div>
                       <p className="font-medium">Export Date</p>
                       <p className="text-muted-foreground">
-                        {new Date().toLocaleDateString('en-US', { 
-                          year: 'numeric', 
-                          month: 'long', 
-                          day: 'numeric' 
+                        {new Date().toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
                         })}
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start space-x-2">
                     <Users className="w-4 h-4 text-muted-foreground mt-0.5" />
                     <div>
@@ -301,7 +301,7 @@ export default function ExportResults() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start space-x-2">
                     <BarChart3 className="w-4 h-4 text-muted-foreground mt-0.5" />
                     <div>

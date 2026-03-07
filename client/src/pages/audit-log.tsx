@@ -15,11 +15,11 @@ export default function AuditLog() {
   const [page, setPage] = useState(0);
   const limit = 50;
 
-  const { data: auditLogs, isLoading } = useQuery({
+  const { data: auditLogs, isLoading } = useQuery<AuditLog[]>({
     queryKey: ["/api/audit-logs", { limit, offset: page * limit }],
   });
 
-  const filteredLogs = auditLogs?.filter((log: AuditLog) => 
+  const filteredLogs = auditLogs?.filter((log: AuditLog) =>
     log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.resource.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.details?.username?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -38,7 +38,7 @@ export default function AuditLog() {
     };
 
     const config = actionMap[action] || { variant: 'outline', className: '' };
-    
+
     return (
       <Badge variant={config.variant} className={config.className}>
         {action.replace(/_/g, ' ')}
@@ -73,8 +73,8 @@ export default function AuditLog() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Audit Log" 
+      <Header
+        title="Audit Log"
         breadcrumbs={[
           { name: "Home" },
           { name: "Operations" },

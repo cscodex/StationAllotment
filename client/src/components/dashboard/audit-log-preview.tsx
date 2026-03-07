@@ -7,7 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import type { AuditLog } from "@/types";
 
 export default function AuditLogPreview() {
-  const { data: auditLogs } = useQuery({
+  const { data: auditLogs } = useQuery<AuditLog[]>({
     queryKey: ["/api/audit-logs"],
   });
 
@@ -64,8 +64,8 @@ export default function AuditLogPreview() {
               </div>
             </div>
           )) || (
-            <p className="text-sm text-muted-foreground">No recent activity</p>
-          )}
+              <p className="text-sm text-muted-foreground">No recent activity</p>
+            )}
         </div>
         <Link href="/audit-log">
           <Button variant="ghost" className="w-full mt-4 text-primary" data-testid="button-view-full-audit-log">

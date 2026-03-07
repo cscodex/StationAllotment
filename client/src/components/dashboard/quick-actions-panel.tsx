@@ -11,7 +11,7 @@ export default function QuickActionsPanel() {
   const [showAllocationModal, setShowAllocationModal] = useState(false);
   const { user } = useAuth();
 
-  const { data: allocationStatus } = useQuery({
+  const { data: allocationStatus } = useQuery<{ completed: boolean; deadline: string | null }>({
     queryKey: ["/api/allocation/status"],
   });
 
@@ -23,7 +23,7 @@ export default function QuickActionsPanel() {
       color: "text-green-500",
     },
     {
-      title: "Validation", 
+      title: "Validation",
       status: "complete",
       icon: Check,
       color: "text-green-500",
@@ -57,10 +57,10 @@ export default function QuickActionsPanel() {
               </div>
             ))}
           </div>
-          
+
           {user?.role === 'central_admin' && !allocationStatus?.completed && (
-            <Button 
-              className="w-full mt-4" 
+            <Button
+              className="w-full mt-4"
               onClick={() => setShowAllocationModal(true)}
               data-testid="button-run-allocation"
             >
@@ -84,7 +84,7 @@ export default function QuickActionsPanel() {
                 Search Student
               </Button>
             </Link>
-            
+
             {user?.role === 'central_admin' && (
               <Link href="/export-results">
                 <Button variant="outline" className="w-full justify-start" data-testid="button-export-results">
@@ -93,7 +93,7 @@ export default function QuickActionsPanel() {
                 </Button>
               </Link>
             )}
-            
+
             {user?.role === 'central_admin' && (
               <Link href="/audit-log">
                 <Button variant="outline" className="w-full justify-start" data-testid="button-view-audit-log">
@@ -106,9 +106,9 @@ export default function QuickActionsPanel() {
         </CardContent>
       </Card>
 
-      <AllocationModal 
-        open={showAllocationModal} 
-        onOpenChange={setShowAllocationModal} 
+      <AllocationModal
+        open={showAllocationModal}
+        onOpenChange={setShowAllocationModal}
       />
     </div>
   );

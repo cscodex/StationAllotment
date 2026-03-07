@@ -33,9 +33,11 @@ export interface Student {
 export interface Vacancy {
   id: string;
   district: string;
-  medicalVacancies: number;
-  commerceVacancies: number;
-  nonMedicalVacancies: number;
+  stream: 'Medical' | 'Commerce' | 'NonMedical';
+  gender: 'Male' | 'Female' | 'Other';
+  category: 'Open' | 'WHH' | 'Disabled' | 'Private';
+  totalSeats: number;
+  availableSeats: number;
   createdAt: string;
   updatedAt: string;
 }
