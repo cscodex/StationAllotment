@@ -16,12 +16,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  Search, 
-  UserCog, 
-  Edit, 
-  Save, 
-  X, 
+import {
+  Search,
+  UserCog,
+  Edit,
+  Save,
+  X,
   Clock,
   AlertTriangle,
   CheckCircle,
@@ -29,6 +29,7 @@ import {
   Lock,
   Unlock,
   XCircle,
+  Loader2
 } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
@@ -56,7 +57,7 @@ export default function StudentPreferenceManagement() {
   const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
   const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
-  
+
   // Confirmation dialog states
   const [isLockConfirmDialogOpen, setIsLockConfirmDialogOpen] = useState(false);
   const [isUnlockConfirmDialogOpen, setIsUnlockConfirmDialogOpen] = useState(false);
@@ -64,7 +65,7 @@ export default function StudentPreferenceManagement() {
   const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
   const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
   const [selectedStudentForRelease, setSelectedStudentForRelease] = useState<Student | null>(null);
-  
+
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -72,12 +73,12 @@ export default function StudentPreferenceManagement() {
   // Helper function to check if student preferences are complete
   const areAllPreferencesFilled = (student: Student) => {
     if (!student.stream || !student.stream.trim()) return false;
-    
+
     const choices = [
       student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
       student.choice6, student.choice7, student.choice8, student.choice9, student.choice10
     ];
-    
+
     return choices.every(choice => choice && choice.trim());
   };
 
@@ -130,7 +131,7 @@ export default function StudentPreferenceManagement() {
     onSuccess: (updatedStudent: Student) => {
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
       toast({
-        title: "Success", 
+        title: "Success",
         description: "Student unlocked",
       });
     },
@@ -178,11 +179,11 @@ export default function StudentPreferenceManagement() {
   });
 
   // Check if allocation is finalized
-  const isAllocationFinalized = Array.isArray(settingsData) && settingsData.some((setting: any) => 
+  const isAllocationFinalized = Array.isArray(settingsData) && settingsData.some((setting: any) =>
     setting.key === 'allocation_finalized' && setting.value === 'true'
   );
 
-  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
+  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
     student.appNo?.includes(searchTerm) ||
@@ -239,7 +240,7 @@ export default function StudentPreferenceManagement() {
   // Confirmation functions for actions
   const confirmLockStudent = () => {
     if (!selectedStudentForLock) return;
-    
+
     lockForEditMutation.mutate(selectedStudentForLock.id);
     setIsLockConfirmDialogOpen(false);
     setSelectedStudentForLock(null);
@@ -247,7 +248,7 @@ export default function StudentPreferenceManagement() {
 
   const confirmUnlockStudent = () => {
     if (!selectedStudentForUnlock) return;
-    
+
     unlockEditMutation.mutate(selectedStudentForUnlock.id);
     setIsUnlockConfirmDialogOpen(false);
     setSelectedStudentForUnlock(null);
@@ -255,7 +256,7 @@ export default function StudentPreferenceManagement() {
 
   const confirmReleaseAssignment = () => {
     if (!selectedStudentForRelease) return;
-    
+
     releaseAssignmentMutation.mutate(selectedStudentForRelease.id);
     setIsReleaseConfirmDialogOpen(false);
     setSelectedStudentForRelease(null);
@@ -309,34 +310,34 @@ export default function StudentPreferenceManagement() {
   // Helper function to determine if current user can edit a specific student
   const canEditStudent = (student: Student) => {
     if (!user) return false;
-    
+
     // Central admin can edit all students
     if (user.role === 'central_admin') {
       return true;
     }
-    
+
     // District admin logic
     if (user.role === 'district_admin') {
       // If student has no assigned district admin (N/A), any district admin can edit
       if (!student.districtAdmin) {
         return true;
       }
-      
+
       // Check if student belongs to this district
       const belongsToDistrict = student.counselingDistrict === user.district;
-      
+
       // If student has an assigned district admin, only that specific admin can edit
       return student.districtAdmin === user.username && belongsToDistrict;
     }
-    
+
     return false;
   };
 
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Student Preference Management" 
+      <Header
+        title="Student Preference Management"
         breadcrumbs={[
           { name: "Home" },
           { name: "Student Preference Management" }
@@ -354,7 +355,7 @@ export default function StudentPreferenceManagement() {
                   Student Preferences - Central Admin View
                 </div>
                 {user?.role === 'central_admin' && (
-                  <Button 
+                  <Button
                     variant={isAllocationFinalized ? "outline" : "default"}
                     size="sm"
                     onClick={() => {
@@ -364,18 +365,19 @@ export default function StudentPreferenceManagement() {
                     }}
                     disabled={finalizeAllocationMutation.isPending || isAllocationFinalized}
                     data-testid="button-finalize-allocation"
-                    className={isAllocationFinalized 
-                      ? "bg-gray-100 text-gray-600 cursor-not-allowed" 
+                    className={isAllocationFinalized
+                      ? "bg-gray-100 text-gray-600 cursor-not-allowed"
                       : "bg-green-600 hover:bg-green-700 text-white"
                     }
                   >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    {finalizeAllocationMutation.isPending 
-                      ? "Finalizing..." 
-                      : isAllocationFinalized 
-                        ? "Allocation Finalized" 
-                        : "Finalize Allocation"
-                    }
+                    {finalizeAllocationMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Finalizing...</>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        {isAllocationFinalized ? "Allocation Finalized" : "Finalize Allocation"}
+                      </>
+                    )}
                   </Button>
                 )}
               </CardTitle>
@@ -504,10 +506,10 @@ export default function StudentPreferenceManagement() {
                                   <Unlock className="w-4 h-4 mr-1" />
                                   Unlock
                                 </Button>
-                              ) : user?.role === 'central_admin' && 
-                                        student.counselingDistrict === 'Mohali' && 
-                                        student.districtAdmin === 'Central_admin' && 
-                                        areAllPreferencesFilled(student) ? (
+                              ) : user?.role === 'central_admin' &&
+                                student.counselingDistrict === 'Mohali' &&
+                                student.districtAdmin === 'Central_admin' &&
+                                areAllPreferencesFilled(student) ? (
                                 /* Case 2: Central admin with filled preferences and not locked - show lock + release buttons */
                                 <>
                                   <Button
@@ -523,7 +525,7 @@ export default function StudentPreferenceManagement() {
                                     <Lock className="w-4 h-4 mr-1" />
                                     Lock
                                   </Button>
-                                  
+
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -583,7 +585,7 @@ export default function StudentPreferenceManagement() {
           <DialogHeader>
             <DialogTitle>Edit Student Preferences</DialogTitle>
           </DialogHeader>
-          
+
           {selectedStudentForEdit && (
             <Form {...form}>
               <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
@@ -671,7 +673,9 @@ export default function StudentPreferenceManagement() {
                     disabled={updatePreferencesMutation.isPending}
                     data-testid="button-save-preferences"
                   >
-                    {updatePreferencesMutation.isPending ? "Saving..." : "Save Preferences"}
+                    {updatePreferencesMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                    ) : "Save Preferences"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -686,14 +690,14 @@ export default function StudentPreferenceManagement() {
           <DialogHeader>
             <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-2">
               {selectedStudentForChoices && [
-                selectedStudentForChoices.choice1, selectedStudentForChoices.choice2, 
-                selectedStudentForChoices.choice3, selectedStudentForChoices.choice4, 
+                selectedStudentForChoices.choice1, selectedStudentForChoices.choice2,
+                selectedStudentForChoices.choice3, selectedStudentForChoices.choice4,
                 selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
-                selectedStudentForChoices.choice7, selectedStudentForChoices.choice8, 
+                selectedStudentForChoices.choice7, selectedStudentForChoices.choice8,
                 selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
               ].map((choice, index) => (
                 <div key={index} className="flex items-center justify-between p-3 border rounded">
@@ -704,7 +708,7 @@ export default function StudentPreferenceManagement() {
                 </div>
               ))}
             </div>
-            
+
             {selectedStudentForChoices && (
               <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -720,7 +724,7 @@ export default function StudentPreferenceManagement() {
           </div>
 
           <DialogFooter>
-            <Button 
+            <Button
               variant="outline"
               onClick={() => setIsChoicesModalOpen(false)}
             >
@@ -736,11 +740,11 @@ export default function StudentPreferenceManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Lock Student Preferences</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to lock {selectedStudentForLock?.name}'s preferences? 
+              Are you sure you want to lock {selectedStudentForLock?.name}'s preferences?
               This will prevent further edits to their district choices until unlocked by a central administrator.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
+
           {selectedStudentForLock && (
             <div className="space-y-3 py-4">
               <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
@@ -766,13 +770,13 @@ export default function StudentPreferenceManagement() {
                   <p className="text-sm font-medium text-muted-foreground">Total Choices</p>
                   <p className="font-semibold">
                     {[selectedStudentForLock.choice1, selectedStudentForLock.choice2, selectedStudentForLock.choice3,
-                      selectedStudentForLock.choice4, selectedStudentForLock.choice5, selectedStudentForLock.choice6,
-                      selectedStudentForLock.choice7, selectedStudentForLock.choice8, selectedStudentForLock.choice9,
-                      selectedStudentForLock.choice10].filter(Boolean).length} / 10
+                    selectedStudentForLock.choice4, selectedStudentForLock.choice5, selectedStudentForLock.choice6,
+                    selectedStudentForLock.choice7, selectedStudentForLock.choice8, selectedStudentForLock.choice9,
+                    selectedStudentForLock.choice10].filter(Boolean).length} / 10
                   </p>
                 </div>
               </div>
-              
+
               <div className="p-3 border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-950/20">
                 <p className="text-sm text-blue-800 dark:text-blue-200">
                   <strong>⚠️ Important:</strong> Once locked, only central administrators can unlock this student's preferences for further editing.
@@ -788,7 +792,9 @@ export default function StudentPreferenceManagement() {
               disabled={lockForEditMutation.isPending}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              {lockForEditMutation.isPending ? "Locking..." : "🔒 Lock Student"}
+              {lockForEditMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Locking...</>
+              ) : "🔒 Lock Student"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -800,11 +806,11 @@ export default function StudentPreferenceManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unlock Student Preferences</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to unlock {selectedStudentForUnlock?.name}'s preferences? 
+              Are you sure you want to unlock {selectedStudentForUnlock?.name}'s preferences?
               This will allow them or district administrators to edit their district choices again.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
+
           {selectedStudentForUnlock && (
             <div className="space-y-3 py-4">
               <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
@@ -833,7 +839,7 @@ export default function StudentPreferenceManagement() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="p-3 border-l-4 border-green-500 bg-green-50 dark:bg-green-950/20">
                 <p className="text-sm text-green-800 dark:text-green-200">
                   <strong>✅ Note:</strong> Unlocking will allow the student's preferences to be edited again by authorized users.
@@ -849,7 +855,9 @@ export default function StudentPreferenceManagement() {
               disabled={unlockEditMutation.isPending}
               className="bg-green-600 hover:bg-green-700"
             >
-              {unlockEditMutation.isPending ? "Unlocking..." : "🔓 Unlock Student"}
+              {unlockEditMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Unlocking...</>
+              ) : "🔓 Unlock Student"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -861,11 +869,11 @@ export default function StudentPreferenceManagement() {
           <AlertDialogHeader>
             <AlertDialogTitle>Release Student Assignment</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to release {selectedStudentForRelease?.name}'s assignment? 
+              Are you sure you want to release {selectedStudentForRelease?.name}'s assignment?
               This will clear their district and district admin assignment and make them available for reassignment.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
+
           {selectedStudentForRelease && (
             <div className="space-y-3 py-4">
               <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
@@ -894,7 +902,7 @@ export default function StudentPreferenceManagement() {
                   </p>
                 </div>
               </div>
-              
+
               <div className="p-3 border-l-4 border-red-500 bg-red-50 dark:bg-red-950/20">
                 <p className="text-sm text-red-800 dark:text-red-200">
                   <strong>⚠️ Warning:</strong> This action will remove the student's current district assignment and make them available for reassignment. Their preferences will remain intact.
@@ -910,7 +918,9 @@ export default function StudentPreferenceManagement() {
               disabled={releaseAssignmentMutation.isPending}
               className="bg-red-600 hover:bg-red-700"
             >
-              {releaseAssignmentMutation.isPending ? "Releasing..." : "🔄 Release Assignment"}
+              {releaseAssignmentMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Releasing...</>
+              ) : "🔄 Release Assignment"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

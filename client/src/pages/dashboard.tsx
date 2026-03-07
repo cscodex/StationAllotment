@@ -7,18 +7,27 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Upload, Users, Play, FileText, BarChart3, Settings } from "lucide-react";
+import { Upload, Users, Play, FileText, BarChart3, Settings, Maximize2, UploadCloud } from "lucide-react";
+import FlowDiagramModal from "@/components/dashboard/flow-diagram-modal";
+import CounselingProgress from "@/components/dashboard/counseling-progress";
+
+import { useState, useRef } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingDiagram, setIsUploadingDiagram] = useState(false);
+  const [isFlowModalOpen, setIsFlowModalOpen] = useState(false);
+  const { data: stats, isLoading: statsLoading } = useQuery<any>({
     queryKey: ["/api/dashboard/stats"],
   });
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Dashboard" 
+      <Header
+        title="Dashboard"
         breadcrumbs={[
           { name: "Home" },
           { name: "Dashboard" }
@@ -28,107 +37,102 @@ export default function Dashboard() {
       <main className="flex-1 p-6 overflow-auto">
         <StatsCards stats={stats} isLoading={statsLoading} />
 
-        {/* Quick Links Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-          {user?.role === 'central_admin' && (
-            <>
-              <Card className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Upload className="w-5 h-5 mr-2 text-primary" />
-                    File Management
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Upload student data and vacancy files
-                  </p>
-                  <Link href="/file-management">
-                    <Button className="w-full" data-testid="button-file-management">
-                      Manage Files
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
+        {/* Progress Tracker */}
+        {user?.role === 'central_admin' && (
+          <div className="mt-8">
+            <CounselingProgress />
+          </div>
+        )}
 
-              <Card className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Play className="w-5 h-5 mr-2 text-primary" />
-                    Allocation Process
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Run seat allocation algorithm
-                  </p>
-                  <Link href="/allocation">
-                    <Button className="w-full" data-testid="button-allocation">
-                      Manage Allocation
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
 
-              <Card className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Users className="w-5 h-5 mr-2 text-primary" />
-                    District Admins
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Manage district administrator accounts
+
+        {/* Counseling Flow Diagram Preview */}
+        {user?.role === 'central_admin' && (
+          <div className="mt-8">
+            <Card className="overflow-hidden border-2 border-primary/20">
+              <CardHeader className="bg-primary/5 pb-4 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Counseling Flow Diagram</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Visual guide of the complete counseling process for Central and District Admins
                   </p>
-                  <Link href="/district-admin-list">
-                    <Button className="w-full" data-testid="button-district-admins">
-                      View Admins
+                </div>
+                <div className="flex space-x-2">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+
+                      setIsUploadingDiagram(true);
+                      const formData = new FormData();
+                      formData.append('diagram', file);
+
+                      try {
+                        const res = await fetch('/api/upload-diagram', { method: 'POST', body: formData });
+                        if (res.ok) {
+                          toast({ title: "Success", description: "Diagram updated" });
+                          // Force refresh iframe by updating timestamp if needed, but a page reload is safest.
+                          window.location.reload();
+                        } else throw new Error(await res.text());
+                      } catch (err: any) {
+                        toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
+                      } finally {
+                        setIsUploadingDiagram(false);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }
+                    }}
+                  />
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    variant="outline"
+                    className="bg-white"
+                    disabled={isUploadingDiagram}
+                  >
+                    <UploadCloud className="w-4 h-4 mr-2" />
+                    Upload PDF
+                  </Button>
+                  <Button
+                    onClick={() => setIsFlowModalOpen(true)}
+                    variant="outline"
+                    className="bg-white"
+                  >
+                    <Maximize2 className="w-4 h-4 mr-2" />
+                    View Full Screen
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0 bg-white">
+                <div className="h-[400px] w-full relative group cursor-pointer" onClick={() => setIsFlowModalOpen(true)}>
+                  <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-10">
+                    <Button variant="secondary" className="pointer-events-none shadow-lg">
+                      <Maximize2 className="w-4 h-4 mr-2" />
+                      Click to Expand
                     </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            </>
-          )}
-          
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="w-5 h-5 mr-2 text-primary" />
-                Student Records
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Search and view student data
-              </p>
-              <Link href="/students">
-                <Button className="w-full" data-testid="button-students">
-                  View Students
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-          
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2 text-primary" />
-                Reports
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Generate allocation reports
-              </p>
-              <Link href="/reports">
-                <Button className="w-full" data-testid="button-reports">
-                  View Reports
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+                  </div>
+                  <object
+                    data="/counseling_flow_diagram.pdf#toolbar=0&navpanes=0&scrollbar=0"
+                    type="application/pdf"
+                    className="w-full h-full border-0 pointer-events-none object-cover"
+                    title="Counseling Flow Diagram View"
+                  >
+                    <div className="flex items-center justify-center h-full text-muted-foreground bg-slate-50">
+                      <p>Diagram preview not available. Click to upload or expand.</p>
+                    </div>
+                  </object>
+                </div>
+              </CardContent>
+            </Card>
+
+            <FlowDiagramModal
+              isOpen={isFlowModalOpen}
+              onClose={() => setIsFlowModalOpen(false)}
+            />
+          </div>
+        )}
 
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
           <AuditLogPreview />

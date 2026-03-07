@@ -415,7 +415,7 @@ export const DISTRICTS = [
   'Pathankot',
   'Patiala',
   'Rupnagar',
-  'SAS Nagar',
+  'SAS Nagar (Mohali)',
   'Sangrur',
   'Tarn Taran',
   'Talwara'
@@ -430,9 +430,9 @@ export const SCHOOL_DISTRICTS = [
   'Jalandhar',
   'Ludhiana',
   'Patiala',
-  'Pathankot',
-  'SAS Nagar',
-  'Sangrur'
+  'SAS Nagar (Mohali)',
+  'Sangrur',
+  'Talwara'
 ] as const;
 
 // Counseling Districts - All 23 districts with district admins

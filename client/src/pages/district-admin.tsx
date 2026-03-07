@@ -18,12 +18,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  Search, 
-  ShieldQuestion, 
-  Edit, 
-  Save, 
-  X, 
+import {
+  Search,
+  ShieldQuestion,
+  Edit,
+  Save,
+  X,
   Clock,
   AlertTriangle,
   CheckCircle,
@@ -32,7 +32,8 @@ import {
   Lock,
   Unlock,
   RotateCcw,
-  Shield
+  Shield,
+  Loader2
 } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
@@ -60,7 +61,7 @@ export default function DistrictAdmin() {
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [showBatchActions, setShowBatchActions] = useState(false);
-  
+
   // Modal states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
@@ -71,7 +72,7 @@ export default function DistrictAdmin() {
   const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
   const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
   const [unlockReason, setUnlockReason] = useState("");
-  
+
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -233,16 +234,16 @@ export default function DistrictAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/district-status", user?.district] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      
+
       // Force refetch with await to ensure immediate update
-      queryClient.refetchQueries({ 
+      queryClient.refetchQueries({
         queryKey: ["/api/district-status", user?.district],
-        type: 'active' 
+        type: 'active'
       });
-      
+
       // Also remove any cached data and force fresh fetch
       queryClient.removeQueries({ queryKey: ["/api/district-status", user?.district] });
-      
+
       toast({
         title: "🎉 District Finalized Successfully!",
         description: `${user?.district} district data has been finalized at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', timeStyle: 'short', dateStyle: 'short' })} and submitted for allocation processing.`,
@@ -281,7 +282,7 @@ export default function DistrictAdmin() {
   });
 
 
-  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) => 
+  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.meritNumber.toString().includes(searchTerm) ||
     student.appNo?.includes(searchTerm)
@@ -310,14 +311,14 @@ export default function DistrictAdmin() {
   // Batch operations
   const handleBatchLock = () => {
     if (selectedStudents.size === 0) return;
-    
+
     // Only lock students with current district that belong to this district admin
-    const selectedStudentObjects = filteredStudents.filter((s: Student) => 
-      selectedStudents.has(s.id) && 
-      s.counselingDistrict === user?.district && 
+    const selectedStudentObjects = filteredStudents.filter((s: Student) =>
+      selectedStudents.has(s.id) &&
+      s.counselingDistrict === user?.district &&
       s.districtAdmin === user?.username
     );
-    
+
     if (selectedStudentObjects.length === 0) {
       toast({
         title: "Cannot Lock Students",
@@ -326,13 +327,13 @@ export default function DistrictAdmin() {
       });
       return;
     }
-    
+
     const studentsWithoutStream = selectedStudentObjects.filter((s: Student) => !s.stream);
-    const studentsWithIncompleteChoices = selectedStudentObjects.filter((s: Student) => 
-      !s.choice1 || !s.choice2 || !s.choice3 || !s.choice4 || !s.choice5 || 
+    const studentsWithIncompleteChoices = selectedStudentObjects.filter((s: Student) =>
+      !s.choice1 || !s.choice2 || !s.choice3 || !s.choice4 || !s.choice5 ||
       !s.choice6 || !s.choice7 || !s.choice8 || !s.choice9 || !s.choice10
     );
-    
+
     if (studentsWithoutStream.length > 0) {
       toast({
         title: "Cannot Lock Students",
@@ -341,7 +342,7 @@ export default function DistrictAdmin() {
       });
       return;
     }
-    
+
     if (studentsWithIncompleteChoices.length > 0) {
       toast({
         title: "Cannot Lock Students",
@@ -350,7 +351,7 @@ export default function DistrictAdmin() {
       });
       return;
     }
-    
+
     batchLockMutation.mutate(selectedStudentObjects.map((s: Student) => s.id));
   };
 
@@ -360,20 +361,20 @@ export default function DistrictAdmin() {
   };
 
   // Calculate finalization readiness - only consider students with current district belonging to this admin
-  const eligibleStudents = filteredStudents.filter((s: Student) => 
+  const eligibleStudents = filteredStudents.filter((s: Student) =>
     s.counselingDistrict === user?.district && s.districtAdmin === user?.username
   );
   const totalEligibleStudents = eligibleStudents.length;
   const lockedEligibleStudents = eligibleStudents.filter((s: Student) => s.isLocked).length;
-  const studentsWithChoices = eligibleStudents.filter((s: Student) => 
-    s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 || 
+  const studentsWithChoices = eligibleStudents.filter((s: Student) =>
+    s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 ||
     s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10
   ).length;
 
   const canFinalize = lockedEligibleStudents === totalEligibleStudents && totalEligibleStudents > 0 && !isDeadlinePassed;
-  
+
   // districtStatus is an array, find the current district's status
-  const currentDistrictStatus = Array.isArray(districtStatus) 
+  const currentDistrictStatus = Array.isArray(districtStatus)
     ? districtStatus.find((status: any) => status.district === user?.district)
     : districtStatus;
   const isFinalized = currentDistrictStatus?.isFinalized || false;
@@ -418,14 +419,14 @@ export default function DistrictAdmin() {
 
   const handleModalSave = (data: any) => {
     if (!selectedStudentForEdit) return;
-    
+
     // If user is central admin, automatically set district and district admin
     const preferences: any = { ...data };
     if (user?.role === 'central_admin') {
       preferences.counselingDistrict = "Mohali";
       preferences.districtAdmin = "central_admin";
     }
-    
+
     updatePreferencesMutation.mutate({
       studentId: selectedStudentForEdit.id,
       preferences: preferences
@@ -472,7 +473,7 @@ export default function DistrictAdmin() {
         preferences.counselingDistrict = "Mohali";
         preferences.districtAdmin = "central_admin";
       }
-      
+
       updatePreferencesMutation.mutate({
         studentId: editingStudent,
         preferences: preferences,
@@ -528,10 +529,10 @@ export default function DistrictAdmin() {
       return;
     }
 
-    const hasAllChoices = selectedStudentForLock.choice1 && selectedStudentForLock.choice2 && selectedStudentForLock.choice3 && 
-                         selectedStudentForLock.choice4 && selectedStudentForLock.choice5 && selectedStudentForLock.choice6 &&
-                         selectedStudentForLock.choice7 && selectedStudentForLock.choice8 && selectedStudentForLock.choice9 && selectedStudentForLock.choice10;
-    
+    const hasAllChoices = selectedStudentForLock.choice1 && selectedStudentForLock.choice2 && selectedStudentForLock.choice3 &&
+      selectedStudentForLock.choice4 && selectedStudentForLock.choice5 && selectedStudentForLock.choice6 &&
+      selectedStudentForLock.choice7 && selectedStudentForLock.choice8 && selectedStudentForLock.choice9 && selectedStudentForLock.choice10;
+
     if (!hasAllChoices) {
       toast({
         title: "Cannot Lock Student",
@@ -579,9 +580,9 @@ export default function DistrictAdmin() {
           reason: unlockReason.trim(),
         }),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         toast({
           title: "Error",
@@ -639,41 +640,41 @@ export default function DistrictAdmin() {
   // Helper function to determine if current user can edit a specific student
   const canEditStudent = (student: Student) => {
     if (!user) return false;
-    
+
     // Central admin can edit all students
     if (user.role === 'central_admin') {
       return true;
     }
-    
+
     // District admin logic
     if (user.role === 'district_admin') {
       // If student has no assigned district admin (N/A), any district admin can edit
       if (!student.districtAdmin) {
         return true;
       }
-      
+
       // Check if student belongs to this district
       const belongsToDistrict = student.counselingDistrict === user.district;
-      
+
       // If student has an assigned district admin, only that specific admin can edit
       return student.districtAdmin === user.username && belongsToDistrict;
     }
-    
+
     return false;
   };
 
   // Helper function to check if all student preferences are filled
   const areAllPreferencesFilled = (student: Student) => {
-    return !!(student.choice1?.trim() && student.choice2?.trim() && student.choice3?.trim() && 
-              student.choice4?.trim() && student.choice5?.trim() && student.choice6?.trim() && 
-              student.choice7?.trim() && student.choice8?.trim() && student.choice9?.trim() && 
-              student.choice10?.trim() && student.stream);
+    return !!(student.choice1?.trim() && student.choice2?.trim() && student.choice3?.trim() &&
+      student.choice4?.trim() && student.choice5?.trim() && student.choice6?.trim() &&
+      student.choice7?.trim() && student.choice8?.trim() && student.choice9?.trim() &&
+      student.choice10?.trim() && student.stream);
   };
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="District Administration" 
+      <Header
+        title="District Administration"
         breadcrumbs={[
           { name: "Home" },
           { name: "District Administration" }
@@ -691,7 +692,7 @@ export default function DistrictAdmin() {
                   <div>
                     <h3 className="font-semibold">District: {user?.district || 'All Districts'}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {isFinalized ? 
+                      {isFinalized ?
                         "District data has been finalized and submitted for allocation" :
                         "You can modify student preferences until the deadline"
                       }
@@ -762,9 +763,9 @@ export default function DistrictAdmin() {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={selectAll}
                         disabled={filteredStudents.length === 0}
                         data-testid="button-select-all"
@@ -773,21 +774,21 @@ export default function DistrictAdmin() {
                       </Button>
                       {selectedStudents.size > 0 && (
                         <>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={clearSelection}
                             data-testid="button-clear-selection"
                           >
                             Clear
                           </Button>
-                          <Button 
-                            variant="secondary" 
-                            size="sm" 
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={handleBatchLock}
                             disabled={
-                              batchLockMutation.isPending || 
-                              isDeadlinePassed || 
+                              batchLockMutation.isPending ||
+                              isDeadlinePassed ||
                               isFinalized ||
                               Array.from(selectedStudents).every(id => {
                                 const student = filteredStudents.find((s: Student) => s.id === id);
@@ -796,7 +797,11 @@ export default function DistrictAdmin() {
                             }
                             data-testid="button-batch-lock"
                           >
-                            🔒 Lock Selected
+                            {batchLockMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Locking...</>
+                            ) : (
+                              <>🔒 Lock Selected</>
+                            )}
                           </Button>
                         </>
                       )}
@@ -948,8 +953,8 @@ export default function DistrictAdmin() {
                                         </Button>
                                       )
                                     )}
-                                    {/* Show release button only if user can edit student, student has current district and data is not locked */}
-                                    {canEditStudent(student) && student.counselingDistrict && !student.isLocked && (
+                                    {/* Show release button only if user is Central Admin, student has current district and data is not locked */}
+                                    {canEditStudent(student) && user?.role === 'central_admin' && student.counselingDistrict && !student.isLocked && (
                                       <Button
                                         variant="outline"
                                         size="sm"
@@ -983,86 +988,90 @@ export default function DistrictAdmin() {
             {/* District Finalization Tab */}
             <TabsContent value="district-finalization" className="space-y-6">
               {/* Finalization Status Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <CheckCircle className="w-5 h-5 mr-2 text-primary" />
-                    District Finalization Status
-                  </div>
-                  <Button
-                    variant={isFinalized ? "secondary" : (canFinalize ? "default" : "outline")}
-                    size="sm"
-                    onClick={handleFinalize}
-                    disabled={isFinalized || !canFinalize || finalizeDistrictMutation.isPending}
-                    data-testid="button-finalize-district"
-                  >
-                    {isFinalized ? "District Finalized" : (finalizeDistrictMutation.isPending ? "Finalizing..." : "Finalize District")}
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-3 border rounded-lg">
-                    <div className="text-2xl font-bold text-blue-600">{totalEligibleStudents}</div>
-                    <div className="text-sm text-muted-foreground">Total Students</div>
-                  </div>
-                  <div className="p-3 border rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">{lockedEligibleStudents}</div>
-                    <div className="text-sm text-muted-foreground">Locked Students</div>
-                  </div>
-                  <div className="p-3 border rounded-lg">
-                    <div className="text-2xl font-bold text-purple-600">{studentsWithChoices}</div>
-                    <div className="text-sm text-muted-foreground">Students with Choices</div>
-                  </div>
-                </div>
-                
-                {!canFinalize && totalEligibleStudents > 0 && (
-                  <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <p className="text-sm text-amber-800 dark:text-amber-300">
-                      <strong>To finalize:</strong> All students must be locked before you can finalize the district data.
-                      {lockedEligibleStudents < totalEligibleStudents && (
-                        <span> You need to lock {totalEligibleStudents - lockedEligibleStudents} more students.</span>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <CheckCircle className="w-5 h-5 mr-2 text-primary" />
+                      District Finalization Status
+                    </div>
+                    <Button
+                      variant={isFinalized ? "secondary" : (canFinalize ? "default" : "outline")}
+                      size="sm"
+                      onClick={handleFinalize}
+                      disabled={isFinalized || !canFinalize || finalizeDistrictMutation.isPending}
+                      data-testid="button-finalize-district"
+                    >
+                      {isFinalized ? "District Finalized" : (
+                        finalizeDistrictMutation.isPending ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Finalizing...</>
+                        ) : "Finalize District"
                       )}
-                    </p>
-                  </div>
-                )}
-
-                {canFinalize && (
-                  <div className="mt-4 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
-                    <p className="text-sm text-green-800 dark:text-green-300">
-                      <strong>Ready to finalize!</strong> All students are locked and your district is ready for allocation processing.
-                    </p>
-                    <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center">
-                      <Clock className="w-3 h-3 mr-1" />
-                      Status checked at: {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
-                    </p>
-                  </div>
-                )}
-
-                {isFinalized && (
-                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <div className="space-y-2">
-                      <p className="text-sm text-blue-800 dark:text-blue-300">
-                        <strong>District Finalized!</strong> Your district data has been successfully finalized and submitted for allocation processing.
-                      </p>
-                      {currentDistrictStatus?.finalizedAt && (
-                        <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Finalized at: {new Date(currentDistrictStatus.finalizedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
-                        </p>
-                      )}
-                      {currentDistrictStatus?.finalizedBy && (
-                        <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
-                          <Shield className="w-3 h-3 mr-1" />
-                          Finalized by: {currentDistrictStatus.finalizedBy}
-                        </p>
-                      )}
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-3 border rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{totalEligibleStudents}</div>
+                      <div className="text-sm text-muted-foreground">Total Students</div>
+                    </div>
+                    <div className="p-3 border rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{lockedEligibleStudents}</div>
+                      <div className="text-sm text-muted-foreground">Locked Students</div>
+                    </div>
+                    <div className="p-3 border rounded-lg">
+                      <div className="text-2xl font-bold text-purple-600">{studentsWithChoices}</div>
+                      <div className="text-sm text-muted-foreground">Students with Choices</div>
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+
+                  {!canFinalize && totalEligibleStudents > 0 && (
+                    <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <p className="text-sm text-amber-800 dark:text-amber-300">
+                        <strong>To finalize:</strong> All students must be locked before you can finalize the district data.
+                        {lockedEligibleStudents < totalEligibleStudents && (
+                          <span> You need to lock {totalEligibleStudents - lockedEligibleStudents} more students.</span>
+                        )}
+                      </p>
+                    </div>
+                  )}
+
+                  {canFinalize && (
+                    <div className="mt-4 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                      <p className="text-sm text-green-800 dark:text-green-300">
+                        <strong>Ready to finalize!</strong> All students are locked and your district is ready for allocation processing.
+                      </p>
+                      <p className="text-xs text-green-700 dark:text-green-400 mt-1 flex items-center">
+                        <Clock className="w-3 h-3 mr-1" />
+                        Status checked at: {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
+                      </p>
+                    </div>
+                  )}
+
+                  {isFinalized && (
+                    <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="space-y-2">
+                        <p className="text-sm text-blue-800 dark:text-blue-300">
+                          <strong>District Finalized!</strong> Your district data has been successfully finalized and submitted for allocation processing.
+                        </p>
+                        {currentDistrictStatus?.finalizedAt && (
+                          <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Finalized at: {new Date(currentDistrictStatus.finalizedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'medium' })}
+                          </p>
+                        )}
+                        {currentDistrictStatus?.finalizedBy && (
+                          <p className="text-xs text-blue-700 dark:text-blue-400 flex items-center">
+                            <Shield className="w-3 h-3 mr-1" />
+                            Finalized by: {currentDistrictStatus.finalizedBy}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
 
@@ -1073,7 +1082,7 @@ export default function DistrictAdmin() {
               <DialogHeader>
                 <DialogTitle>Edit Student Preferences - {selectedStudentForEdit?.name}</DialogTitle>
               </DialogHeader>
-              
+
               {/* Central Admin Notice */}
               {user?.role === 'central_admin' && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-4" data-testid="text-central-admin-edit-notice">
@@ -1082,7 +1091,7 @@ export default function DistrictAdmin() {
                   </p>
                 </div>
               )}
-              
+
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1114,7 +1123,7 @@ export default function DistrictAdmin() {
 
                   <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
                     <p className="text-sm text-amber-800 dark:text-amber-300">
-                      <strong>District Choices:</strong> Students can select up to 10 districts in order of preference. 
+                      <strong>District Choices:</strong> Students can select up to 10 districts in order of preference.
                       Only the 10 school districts where seats are available are shown. Students will be allocated to their highest available choice during the allocation process.
                     </p>
                   </div>
@@ -1151,20 +1160,23 @@ export default function DistrictAdmin() {
                   </div>
 
                   <DialogFooter>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={() => setIsEditModalOpen(false)}
                     >
                       Cancel
                     </Button>
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       disabled={updatePreferencesMutation.isPending}
                       data-testid="button-save-preferences"
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      {updatePreferencesMutation.isPending ? "Saving..." : "Save Changes"}
+                      {updatePreferencesMutation.isPending ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                      ) : (
+                        <><Save className="w-4 h-4 mr-2" /> Save Changes</>
+                      )}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -1178,14 +1190,14 @@ export default function DistrictAdmin() {
               <DialogHeader>
                 <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
               </DialogHeader>
-              
+
               <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2">
                   {selectedStudentForChoices && [
-                    selectedStudentForChoices.choice1, selectedStudentForChoices.choice2, 
-                    selectedStudentForChoices.choice3, selectedStudentForChoices.choice4, 
+                    selectedStudentForChoices.choice1, selectedStudentForChoices.choice2,
+                    selectedStudentForChoices.choice3, selectedStudentForChoices.choice4,
                     selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
-                    selectedStudentForChoices.choice7, selectedStudentForChoices.choice8, 
+                    selectedStudentForChoices.choice7, selectedStudentForChoices.choice8,
                     selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
                   ].map((choice, index) => (
                     <div key={index} className="flex items-center justify-between p-3 border rounded">
@@ -1196,7 +1208,7 @@ export default function DistrictAdmin() {
                     </div>
                   ))}
                 </div>
-                
+
                 {selectedStudentForChoices && (
                   <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
                     <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1210,7 +1222,7 @@ export default function DistrictAdmin() {
               </div>
 
               <DialogFooter>
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => setIsChoicesModalOpen(false)}
                 >
@@ -1226,7 +1238,7 @@ export default function DistrictAdmin() {
               <DialogHeader>
                 <DialogTitle>Request Unlock - {selectedStudentForUnlock?.name}</DialogTitle>
               </DialogHeader>
-              
+
               <div className="space-y-4">
                 <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
                   <div className="text-sm">
@@ -1235,7 +1247,7 @@ export default function DistrictAdmin() {
                     <div><strong>App Number:</strong> {selectedStudentForUnlock?.appNo}</div>
                   </div>
                 </div>
-                
+
                 <div>
                   <label htmlFor="unlock-reason" className="block text-sm font-medium mb-2">
                     Reason for Unlock Request <span className="text-red-500">*</span>
@@ -1252,7 +1264,7 @@ export default function DistrictAdmin() {
               </div>
 
               <DialogFooter>
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => {
                     setIsUnlockRequestModalOpen(false);
@@ -1262,7 +1274,7 @@ export default function DistrictAdmin() {
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   onClick={submitUnlockRequest}
                   disabled={!unlockReason.trim()}
                   data-testid="button-submit-unlock-request"
@@ -1279,11 +1291,11 @@ export default function DistrictAdmin() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Lock Student Preferences</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to lock {selectedStudentForLock?.name}'s preferences? 
+                  Are you sure you want to lock {selectedStudentForLock?.name}'s preferences?
                   This will prevent further edits to their district choices until unlocked by a central administrator.
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              
+
               {selectedStudentForLock && (
                 <div className="space-y-3 py-4">
                   <div className="grid grid-cols-2 gap-4 p-3 bg-muted rounded-lg">
@@ -1309,16 +1321,16 @@ export default function DistrictAdmin() {
                       <p className="text-sm font-medium text-muted-foreground">Total Choices</p>
                       <p className="font-semibold">
                         {[selectedStudentForLock.choice1, selectedStudentForLock.choice2, selectedStudentForLock.choice3,
-                          selectedStudentForLock.choice4, selectedStudentForLock.choice5, selectedStudentForLock.choice6,
-                          selectedStudentForLock.choice7, selectedStudentForLock.choice8, selectedStudentForLock.choice9,
-                          selectedStudentForLock.choice10].filter(Boolean).length} / 10
+                        selectedStudentForLock.choice4, selectedStudentForLock.choice5, selectedStudentForLock.choice6,
+                        selectedStudentForLock.choice7, selectedStudentForLock.choice8, selectedStudentForLock.choice9,
+                        selectedStudentForLock.choice10].filter(Boolean).length} / 10
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="p-3 border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-950/20">
                     <p className="text-sm text-amber-800 dark:text-amber-200">
-                      ⚠️ Once locked, only a central administrator can unlock this student's preferences. 
+                      ⚠️ Once locked, only a central administrator can unlock this student's preferences.
                       This action ensures data integrity during the allocation process.
                     </p>
                   </div>
@@ -1326,7 +1338,7 @@ export default function DistrictAdmin() {
               )}
 
               <AlertDialogFooter>
-                <AlertDialogCancel 
+                <AlertDialogCancel
                   onClick={() => {
                     setIsLockConfirmDialogOpen(false);
                     setSelectedStudentForLock(null);
@@ -1341,14 +1353,16 @@ export default function DistrictAdmin() {
                   data-testid="button-confirm-lock"
                   className="bg-red-600 hover:bg-red-700"
                 >
-                  {lockStudentMutation.isPending ? "Locking..." : "🔒 Lock Student"}
+                  {lockStudentMutation.isPending ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Locking...</>
+                  ) : "🔒 Lock Student"}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
 
-        </main>
+      </main>
     </div>
   );
 }

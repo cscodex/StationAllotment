@@ -1,50 +1,28 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AllocationModal from "@/components/modals/allocation-modal";
-import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { 
-  Settings, 
-  Play, 
-  Check, 
-  Clock, 
-  AlertTriangle, 
-  Users, 
+import {
+  Settings,
+  Play,
+  Check,
+  Clock,
+  AlertTriangle,
+  Users,
   MapPin,
   BarChart3,
-  Shield,
-  Rocket,
-  Calendar,
-  Filter
+  Shield
 } from "lucide-react";
 import type { DistrictStatus } from "@shared/schema";
-import { format } from "date-fns";
-
-interface CounselingRound {
-  id: string;
-  academicYear: string;
-  roundNumber: number;
-  roundName: string | null;
-  startDate: string;
-  isActive: boolean;
-  isCompleted: boolean;
-}
 
 export default function Allocation() {
   const [showAllocationModal, setShowAllocationModal] = useState(false);
-  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("");
-  const [selectedRoundNumber, setSelectedRoundNumber] = useState<number | null>(null);
-  const [selectedCounselingTitle, setSelectedCounselingTitle] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -64,18 +42,9 @@ export default function Allocation() {
     queryKey: ["/api/students"],
   });
 
-  const { data: allVacancies } = useQuery<any[]>({
+  const { data: vacancies } = useQuery<any[]>({
     queryKey: ["/api/vacancies"],
   });
-
-  // Filter vacancies by selected counseling title and academic year
-  const vacancies = selectedAcademicYear && selectedCounselingTitle
-    ? allVacancies?.filter((v: any) => {
-        const matchesYear = v.academicYear === selectedAcademicYear;
-        const matchesTitle = !v.roundName || v.roundName === selectedCounselingTitle;
-        return matchesYear && matchesTitle;
-      }) || []
-    : [];
 
   const { data: entranceResultsResponse } = useQuery<any>({
     queryKey: ["/api/students-entrance-results"],
@@ -85,35 +54,6 @@ export default function Allocation() {
   const { data: districtStatuses } = useQuery<DistrictStatus[]>({
     queryKey: ["/api/district-status"],
   });
-
-  // Fetch counseling rounds for selected academic year
-  const { data: rounds } = useQuery<CounselingRound[]>({
-    queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }],
-    enabled: !!selectedAcademicYear,
-    queryFn: async () => {
-      if (!selectedAcademicYear) return [];
-      const res = await fetch(`/api/counseling-rounds?academicYear=${selectedAcademicYear}`, { credentials: "include" });
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
-
-  // Get selected round details
-  const selectedRound = rounds?.find(r => r.id === selectedRoundId) || null;
-
-  // Get current session
-  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-    queryKey: ["/api/session/current"],
-    enabled: true,
-  });
-  const currentSession = currentSessionData?.currentSession || "";
-
-  // Set default academic year to current session
-  useEffect(() => {
-    if (currentSession && !selectedAcademicYear) {
-      setSelectedAcademicYear(currentSession);
-    }
-  }, [currentSession, selectedAcademicYear]);
 
   // Finalize allocation mutation
   const finalizeAllocationMutation = useMutation({
@@ -139,89 +79,30 @@ export default function Allocation() {
     },
   });
 
-  // Reset allocation mutation
-  const resetAllocationMutation = useMutation({
-    mutationFn: async (academicYear: string) => {
-      return await apiRequest("POST", "/api/allocation/reset", { academicYear });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
-      toast({
-        title: "Allocation Reset",
-        description: "Allocation has been reset successfully. You can now run a new allocation.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Reset Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Filter files by selected counseling title and academic year
-  const filteredFiles = selectedAcademicYear
-    ? (files as any[])?.filter((file: any) => {
-        const matchesSession = file.academicYear === selectedAcademicYear;
-        if (!selectedCounselingTitle) {
-          return matchesSession;
-        }
-        // Check if file is associated with the selected counseling title
-        const fileRoundName = file.roundName || 
-          (file.counselingRoundId && rounds?.find((r: any) => r.id === file.counselingRoundId)?.roundName);
-        return matchesSession && fileRoundName === selectedCounselingTitle;
-      }) || []
-    : files || [];
-
-  const studentFile = filteredFiles?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
-  const vacancyFile = filteredFiles?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
-  const entranceFile = filteredFiles?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
+  const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
+  const vacancyFile = files?.find((f: any) => f.type === 'vacancies' && f.status === 'processed');
+  const entranceFile = files?.find((f: any) => f.type === 'entrance_results' && f.status === 'processed');
 
   // Handle different API response formats
-  const allStudents = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
-  const allEntranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
-
-  // Filter students by selected counseling title and academic year
-  const students = selectedAcademicYear && selectedCounselingTitle
-    ? allStudents.filter((s: any) => {
-        const matchesYear = s.academicYear === selectedAcademicYear;
-        // Students are shared across rounds for the same counseling title
-        // Check if student is associated with the counseling title (via roundName or round)
-        const studentRoundName = s.roundName || 
-          (s.counselingRoundId && rounds?.find((r: any) => r.id === s.counselingRoundId)?.roundName);
-        return matchesYear && studentRoundName === selectedCounselingTitle;
-      })
-    : [];
-
-  // Filter entrance results by selected counseling title and academic year
-  const entranceResults = selectedAcademicYear && selectedCounselingTitle
-    ? allEntranceResults.filter((er: any) => {
-        const matchesYear = er.academicYear === selectedAcademicYear;
-        const matchesTitle = !er.roundName || er.roundName === selectedCounselingTitle;
-        return matchesYear && matchesTitle;
-      })
-    : [];
+  const students = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
+  const entranceResults = Array.isArray(entranceResultsResponse) ? entranceResultsResponse : entranceResultsResponse?.students || [];
 
   // Minimum data requirements for allocation
   const hasEntranceResults = entranceResults && entranceResults.length > 0;
   const hasVacancyData = vacancies && vacancies.length > 0;
   const totalVacancySeats = vacancies?.reduce((sum: number, v: any) => sum + (v.totalSeats || 0), 0) || 0;
-  
+
   // Check if students have valid preferences (stream and at least one district choice)
   const studentsWithCompleteData = students?.filter((s: any) => {
     // Must have stream and at least one district choice
     const hasStream = s.stream && ['Medical', 'Commerce', 'NonMedical'].includes(s.stream);
-    const hasDistrictChoice = s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 || 
-                             s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10;
+    const hasDistrictChoice = s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 ||
+      s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10;
     return hasStream && hasDistrictChoice;
   })?.length || 0;
-  
+
   // Check if students exist in entrance results (for merit-based allocation)
-  const studentsWithMeritData = students?.filter((s: any) => 
+  const studentsWithMeritData = students?.filter((s: any) =>
     entranceResults?.some((er: any) => er.applicationNo === s.appNo && er.meritNo)
   )?.length || 0;
 
@@ -235,20 +116,20 @@ export default function Allocation() {
   });
 
   // Always include SAS Nagar as it's managed by central admin
-  districtsWithEligibleStudents.add('SAS Nagar');
+  districtsWithEligibleStudents.add('SAS Nagar (Mohali)');
 
   // Only check finalization status for districts with eligible students (including SAS Nagar)
-  const eligibleDistrictStatuses = districtStatuses?.filter(ds => 
+  const eligibleDistrictStatuses = districtStatuses?.filter(ds =>
     districtsWithEligibleStudents.has(ds.district)
   ) || [];
-  
+
   const totalDistricts = eligibleDistrictStatuses.length;
   const finalizedDistricts = eligibleDistrictStatuses.filter(ds => ds.isFinalized).length;
   const allDistrictsFinalized = totalDistricts > 0 && finalizedDistricts === totalDistricts;
   const pendingDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized) || [];
 
   // Check if there are locked students in any district (including central admin managed districts)
-  const lockedStudents = students?.filter((student: any) => 
+  const lockedStudents = students?.filter((student: any) =>
     student.isLocked && student.choice1 // Only require student to be locked and have preferences
   ) || [];
   const hasLockedStudents = lockedStudents.length > 0;
@@ -258,28 +139,28 @@ export default function Allocation() {
 
   // Conditions for finalize allocation
   const canFinalizeAllocation = hasEntranceResults && // At least one entrance result
-                               hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
-                               studentsWithCompleteData > 0 && // At least one student with complete data
-                               studentsWithMeritData > 0 && // Students must have merit data
-                               allDistrictsFinalized && // All districts must be finalized
-                               hasLockedStudents && // At least one student must be locked
-                               !isAllocationFinalized && // Not already finalized
-                               !allocationStatus?.completed; // Not already completed
+    hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
+    studentsWithCompleteData > 0 && // At least one student with complete data
+    studentsWithMeritData > 0 && // Students must have merit data
+    allDistrictsFinalized && // All districts must be finalized
+    hasLockedStudents && // At least one student must be locked
+    !isAllocationFinalized && // Not already finalized
+    !allocationStatus?.completed; // Not already completed
 
   // Minimum requirements for allocation
   const canRunAllocation = hasEntranceResults && // At least one entrance result
-                          hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
-                          studentsWithCompleteData > 0 && // At least one student with complete data
-                          studentsWithMeritData > 0 && // Students must have merit data
-                          allDistrictsFinalized && // All districts must be finalized
-                          isAllocationFinalized && // Must be finalized first
-                          !allocationStatus?.completed; // Not already completed
+    hasVacancyData && totalVacancySeats > 0 && // At least one vacancy seat
+    studentsWithCompleteData > 0 && // At least one student with complete data
+    studentsWithMeritData > 0 && // Students must have merit data
+    allDistrictsFinalized && // All districts must be finalized
+    isAllocationFinalized && // Must be finalized first
+    !allocationStatus?.completed; // Not already completed
 
   const preflightChecks = [
     {
       title: "Entrance Results Data",
       status: hasEntranceResults ? "complete" : "missing",
-      description: hasEntranceResults 
+      description: hasEntranceResults
         ? `${entranceResults?.length || 0} entrance results with merit numbers available`
         : "No entrance results found - upload entrance results file first",
       icon: hasEntranceResults ? Check : AlertTriangle,
@@ -295,7 +176,7 @@ export default function Allocation() {
       color: hasVacancyData && totalVacancySeats > 0 ? "text-green-500" : "text-red-500",
     },
     {
-      title: "Student Choice Data", 
+      title: "Student Choice Data",
       status: studentsWithCompleteData > 0 ? "complete" : "missing",
       description: studentsWithCompleteData > 0
         ? `${studentsWithCompleteData} students have stream and district preferences set`
@@ -306,33 +187,33 @@ export default function Allocation() {
     {
       title: "Merit-Based Matching",
       status: studentsWithMeritData > 0 ? "complete" : studentsWithCompleteData > 0 && hasEntranceResults ? "error" : "pending",
-      description: studentsWithMeritData > 0 
+      description: studentsWithMeritData > 0
         ? `${studentsWithMeritData} students matched with entrance merit data`
         : studentsWithCompleteData > 0 && hasEntranceResults
-        ? "Students found but no merit matching - check application numbers between student choices and entrance results"
-        : "Waiting for student choice and entrance result data",
+          ? "Students found but no merit matching - check application numbers between student choices and entrance results"
+          : "Waiting for student choice and entrance result data",
       icon: studentsWithMeritData > 0 ? Check : studentsWithCompleteData > 0 && hasEntranceResults ? AlertTriangle : Clock,
       color: studentsWithMeritData > 0 ? "text-green-500" : studentsWithCompleteData > 0 && hasEntranceResults ? "text-red-500" : "text-amber-500",
     },
     {
       title: "District Data Finalization",
       status: allDistrictsFinalized ? "complete" : totalDistricts > 0 ? "error" : "pending",
-      description: allDistrictsFinalized 
+      description: allDistrictsFinalized
         ? `✓ All ${totalDistricts} districts with eligible students have finalized their data`
         : totalDistricts > 0
-        ? `⚠️ ${finalizedDistricts}/${totalDistricts} districts with eligible students finalized. Pending: ${pendingDistricts.map(d => d.district).slice(0, 3).join(', ')}${pendingDistricts.length > 3 ? ` (+${pendingDistricts.length - 3} more)` : ''}`
-        : "No districts with eligible students found - districts must have students with preferences and district admin assignments",
+          ? `⚠️ ${finalizedDistricts}/${totalDistricts} districts with eligible students finalized. Pending: ${pendingDistricts.map(d => d.district).slice(0, 3).join(', ')}${pendingDistricts.length > 3 ? ` (+${pendingDistricts.length - 3} more)` : ''}`
+          : "No districts with eligible students found - districts must have students with preferences and district admin assignments",
       icon: allDistrictsFinalized ? Check : totalDistricts > 0 ? AlertTriangle : Clock,
       color: allDistrictsFinalized ? "text-green-500" : totalDistricts > 0 ? "text-red-500" : "text-amber-500",
     },
     {
       title: "Locked Students Requirement",
       status: hasLockedStudents ? "complete" : lockedStudents.length === 0 && students?.length > 0 ? "error" : "pending",
-      description: hasLockedStudents 
+      description: hasLockedStudents
         ? `✓ ${lockedStudents.length} students are locked and ready for allocation`
         : lockedStudents.length === 0 && students?.length > 0
-        ? "⚠️ No students are locked yet. At least one student must be locked in any district before finalizing allocation"
-        : "Waiting for students to be added and locked by district admins",
+          ? "⚠️ No students are locked yet. At least one student must be locked in any district before finalizing allocation"
+          : "Waiting for students to be added and locked by district admins",
       icon: hasLockedStudents ? Check : lockedStudents.length === 0 && students?.length > 0 ? AlertTriangle : Clock,
       color: hasLockedStudents ? "text-green-500" : lockedStudents.length === 0 && students?.length > 0 ? "text-red-500" : "text-amber-500",
     },
@@ -350,9 +231,9 @@ export default function Allocation() {
       status: isAllocationFinalized ? "complete" : canFinalizeAllocation ? "ready" : "pending",
       description: isAllocationFinalized
         ? "✅ Allocation process has been finalized by central admin"
-        : canFinalizeAllocation 
-        ? "Ready to finalize allocation - all requirements met"
-        : "Prerequisites not met - complete all above steps before finalization",
+        : canFinalizeAllocation
+          ? "Ready to finalize allocation - all requirements met"
+          : "Prerequisites not met - complete all above steps before finalization",
       icon: isAllocationFinalized ? Check : canFinalizeAllocation ? Clock : AlertTriangle,
       color: isAllocationFinalized ? "text-green-500" : canFinalizeAllocation ? "text-blue-500" : "text-amber-500",
     },
@@ -361,9 +242,9 @@ export default function Allocation() {
       status: allocationStatus?.completed ? "complete" : canRunAllocation ? "ready" : "pending",
       description: allocationStatus?.completed
         ? "Seat allocation has been completed successfully"
-        : canRunAllocation 
-        ? "Ready to run allocation - finalization completed"
-        : "Prerequisites not met - need finalization before running allocation",
+        : canRunAllocation
+          ? "Ready to run allocation - finalization completed"
+          : "Prerequisites not met - need finalization before running allocation",
       icon: allocationStatus?.completed ? Check : canRunAllocation ? Clock : AlertTriangle,
       color: allocationStatus?.completed ? "text-green-500" : canRunAllocation ? "text-blue-500" : "text-amber-500",
     },
@@ -371,8 +252,8 @@ export default function Allocation() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Run Allocation" 
+      <Header
+        title="Run Allocation"
         breadcrumbs={[
           { name: "Home" },
           { name: "Operations" },
@@ -381,126 +262,9 @@ export default function Allocation() {
       />
 
       <main className="flex-1 p-6 overflow-auto">
-        <div className="space-y-6">
-          {/* Filters Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Filter className="w-5 h-5 mr-2" />
-                Filter by Counseling Round
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Select academic year, counseling title, and round number to view allocation status
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Academic Year</Label>
-                  <AcademicYearSelector
-                    value={selectedAcademicYear}
-                    onValueChange={(year) => {
-                      setSelectedAcademicYear(year);
-                      setSelectedRoundId(null);
-                      setSelectedRoundNumber(null);
-                      setSelectedCounselingTitle(null);
-                    }}
-                    showLabel={false}
-                  />
-                </div>
-                
-                {selectedAcademicYear && rounds && rounds.length > 0 && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Counseling Title</Label>
-                      <Select
-                        value={selectedCounselingTitle || ""}
-                        onValueChange={(value) => {
-                          setSelectedCounselingTitle(value);
-                          setSelectedRoundId(null);
-                          setSelectedRoundNumber(null);
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select counseling" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from(new Set(rounds.map(r => r.roundName).filter(Boolean))).map((title) => (
-                            <SelectItem key={title} value={title || ""}>
-                              {title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {selectedCounselingTitle && (
-                      <div className="space-y-2">
-                        <Label>Round Number</Label>
-                        <Select
-                          value={selectedRoundId || ""}
-                          onValueChange={(value) => {
-                            const round = rounds.find(r => r.id === value);
-                            setSelectedRoundId(value);
-                            setSelectedRoundNumber(round?.roundNumber || null);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select round" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {rounds
-                              .filter(r => r.roundName === selectedCounselingTitle)
-                              .sort((a, b) => a.roundNumber - b.roundNumber)
-                              .map((round) => (
-                                <SelectItem key={round.id} value={round.id}>
-                                  Round {round.roundNumber}
-                                  {round.isActive && !round.isCompleted && " (Active)"}
-                                  {round.isCompleted && " (Completed)"}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {selectedRound && (
-                <div className="mt-4 p-4 bg-muted rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">
-                        {selectedRound.roundName} - Round {selectedRound.roundNumber}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Academic Year: {selectedRound.academicYear} • 
-                        Start: {(() => {
-                          try {
-                            const date = new Date(selectedRound.startDate);
-                            if (!isNaN(date.getTime())) {
-                              return format(date, "MMM dd, yyyy HH:mm");
-                            }
-                          } catch (e) {
-                            console.error('Error formatting date:', selectedRound.startDate, e);
-                          }
-                          return String(selectedRound.startDate);
-                        })()}
-                      </p>
-                    </div>
-                    <Badge variant={selectedRound.isActive ? "default" : "secondary"}>
-                      {selectedRound.isActive ? "Active" : selectedRound.isCompleted ? "Completed" : "Inactive"}
-                    </Badge>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Allocation Controls */}
-            <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Allocation Controls */}
+          <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -513,90 +277,27 @@ export default function Allocation() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {allocationStatus?.completed ? (
-                  <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200 space-y-4">
+                  <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200">
                     <Check className="w-12 h-12 text-green-500 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-green-800 mb-2">
                       Allocation Completed
                     </h3>
                     <p className="text-sm text-green-600">
-                      The seat allocation process has been completed successfully. 
+                      The seat allocation process has been completed successfully.
                       You can now export the results.
                     </p>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          variant="destructive"
-                          disabled={resetAllocationMutation.isPending}
-                          data-testid="button-reset-allocation"
-                        >
-                          {resetAllocationMutation.isPending ? "Resetting..." : "Reset Allocation"}
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Reset Allocation</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will clear all student allocations and restore vacancy seats for the selected academic year.
-                            This action cannot be undone. Are you sure you want to proceed?
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => {
-                              // Get current academic year from allocation status or prompt user
-                              const academicYear = prompt("Enter academic year (e.g., 2024-2025):");
-                              if (academicYear && /^\d{4}-\d{4}$/.test(academicYear)) {
-                                resetAllocationMutation.mutate(academicYear);
-                              } else if (academicYear) {
-                                toast({
-                                  title: "Invalid Format",
-                                  description: "Academic year must be in format YYYY-YYYY (e.g., 2024-2025)",
-                                  variant: "destructive",
-                                });
-                              }
-                            }}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Reset
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
                   </div>
                 ) : (
                   <>
-                    {!selectedCounselingTitle || !selectedRoundId ? (
-                      <div className="text-center p-8 bg-muted rounded-lg border border-border">
-                        <AlertTriangle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">
-                          Select Counseling Title and Round
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Please select an academic year, counseling title, and round number above to view pre-flight checks and allocation status.
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        {selectedRound && (
-                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <p className="text-sm font-medium text-blue-900">
-                              Showing pre-condition status for: <strong>{selectedRound.roundName}</strong> - Round {selectedRound.roundNumber}
-                            </p>
-                          </div>
-                        )}
-                        <div className="space-y-4">
-                          <h3 className="font-semibold">
-                            Pre-flight Checks
-                            {selectedRound && ` (${selectedRound.roundName} - Round ${selectedRound.roundNumber})`}
-                          </h3>
-                          {preflightChecks.map((check, index) => (
+                    <div className="space-y-4">
+                      <h3 className="font-semibold">Pre-flight Checks</h3>
+                      {preflightChecks.map((check, index) => (
                         <div key={index} className="flex items-start space-x-3 p-3 border border-border rounded-lg">
                           <check.icon className={`w-5 h-5 mt-0.5 ${check.color}`} />
                           <div className="flex-1">
                             <div className="flex items-center space-x-2">
                               <p className="font-medium">{check.title}</p>
-                              <Badge 
+                              <Badge
                                 variant={check.status === 'complete' ? 'secondary' : check.status === 'missing' ? 'destructive' : 'outline'}
                                 className={check.status === 'complete' ? 'bg-green-100 text-green-800' : ''}
                               >
@@ -606,25 +307,25 @@ export default function Allocation() {
                             <p className="text-sm text-muted-foreground">{check.description}</p>
                           </div>
                         </div>
-                          ))}
-                        </div>
+                      ))}
+                    </div>
 
-                        <div className="space-y-4">
-                          {/* Finalize Allocation Section */}
-                          {!isAllocationFinalized && !allocationStatus?.completed && (
+                    <div className="space-y-4">
+                      {/* Finalize Allocation Section */}
+                      {!isAllocationFinalized && !allocationStatus?.completed && (
                         <div className="space-y-2">
                           <h4 className="font-medium text-sm">Step 1: Finalize Allocation</h4>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button 
+                              <Button
                                 disabled={!canFinalizeAllocation || finalizeAllocationMutation.isPending}
                                 variant="outline"
                                 className="w-full"
                                 data-testid="button-finalize-allocation"
                               >
                                 <Shield className="w-4 h-4 mr-2" />
-                                {finalizeAllocationMutation.isPending ? "Finalizing..." : 
-                                 canFinalizeAllocation ? "Finalize Allocation" : "Requirements Not Met"}
+                                {finalizeAllocationMutation.isPending ? "Finalizing..." :
+                                  canFinalizeAllocation ? "Finalize Allocation" : "Requirements Not Met"}
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -646,7 +347,7 @@ export default function Allocation() {
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
+                                <AlertDialogAction
                                   onClick={() => finalizeAllocationMutation.mutate()}
                                   data-testid="button-confirm-finalize"
                                 >
@@ -662,7 +363,7 @@ export default function Allocation() {
                       {isAllocationFinalized && !allocationStatus?.completed && (
                         <div className="space-y-2">
                           <h4 className="font-medium text-sm">Step 2: Run Allocation</h4>
-                          <Button 
+                          <Button
                             onClick={() => setShowAllocationModal(true)}
                             disabled={!canRunAllocation}
                             className="w-full"
@@ -677,7 +378,7 @@ export default function Allocation() {
                       {/* Flow Diagram Section */}
                       <div className="space-y-2">
                         <h4 className="font-medium text-sm">Process Documentation</h4>
-                        <Button 
+                        <Button
                           onClick={() => {
                             window.open('/api/export/flow-diagram/pdf', '_blank');
                           }}
@@ -692,30 +393,28 @@ export default function Allocation() {
 
                       {/* Fallback for when requirements not met */}
                       {!canFinalizeAllocation && !isAllocationFinalized && !allocationStatus?.completed && (
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           onClick={() => window.location.href = '/file-management'}
                           data-testid="button-upload-files"
                         >
                           Upload Required Files
                         </Button>
                       )}
-                      </div>
+                    </div>
 
-                      {!canRunAllocation && (
-                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                          <div className="flex items-start space-x-2">
-                            <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
-                            <div>
-                              <h4 className="font-medium text-amber-800">Action Required</h4>
-                              <p className="text-sm text-amber-700">
-                                Please upload and validate both student choices and vacancy data files before running the allocation.
-                              </p>
-                            </div>
+                    {!canRunAllocation && (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
+                          <div>
+                            <h4 className="font-medium text-amber-800">Action Required</h4>
+                            <p className="text-sm text-amber-700">
+                              Please upload and validate both student choices and vacancy data files before running the allocation.
+                            </p>
                           </div>
                         </div>
-                      )}
-                      </>
+                      </div>
                     )}
                   </>
                 )}
@@ -736,7 +435,7 @@ export default function Allocation() {
                     </p>
                     <p className="text-sm text-blue-600">Total Students</p>
                   </div>
-                  
+
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <MapPin className="w-8 h-8 text-green-500 mx-auto mb-2" />
                     <p className="text-2xl font-bold text-green-700" data-testid="total-vacancies-count">
@@ -744,7 +443,7 @@ export default function Allocation() {
                     </p>
                     <p className="text-sm text-green-600">Total Vacancies</p>
                   </div>
-                  
+
                   <div className="text-center p-4 bg-amber-50 rounded-lg">
                     <BarChart3 className="w-8 h-8 text-amber-500 mx-auto mb-2" />
                     <p className="text-2xl font-bold text-amber-700" data-testid="pending-allocations-count">
@@ -800,17 +499,10 @@ export default function Allocation() {
           </div>
         </div>
 
-        {showAllocationModal && (
-          <AllocationModal 
-            open={showAllocationModal} 
-            onOpenChange={(open: boolean) => {
-              setShowAllocationModal(open);
-              if (!open) setSelectedRoundId(null);
-            }}
-            roundId={selectedRoundId}
-          />
-        )}
-        </div>
+        <AllocationModal
+          open={showAllocationModal}
+          onOpenChange={setShowAllocationModal}
+        />
       </main>
     </div>
   );

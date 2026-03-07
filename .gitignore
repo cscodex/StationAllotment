@@ -7,8 +7,6 @@ vite.config.ts.*
 
 # Security: Credential files
 .env
-.env.local
-.env.*.local
 credentials.json
 secure-credentials.json
 secure-password-update.mjs
