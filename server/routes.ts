@@ -693,7 +693,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.processStudentFile(req.file, req.user.id);
+      const currentSession = await storage.getSetting('current_session');
+      const academicYear = req.body.academicYear || currentSession?.value || '2024-2025';
+      const result = await fileService.processStudentFile(req.file, req.user.id, academicYear);
 
       await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
         filename: result.originalName,
@@ -714,7 +716,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.processVacancyFile(req.file, req.user.id);
+      const currentSession = await storage.getSetting('current_session');
+      const academicYear = req.body.academicYear || currentSession?.value || '2024-2025';
+      const result = await fileService.processVacancyFile(req.file, req.user.id, academicYear);
 
       await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
         filename: result.originalName,
@@ -735,7 +739,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.processEntranceResultsFile(req.file, req.user.id);
+      const currentSession = await storage.getSetting('current_session');
+      const academicYear = req.body.academicYear || currentSession?.value || '2024-2025';
+      const result = await fileService.processEntranceResultsFile(req.file, req.user.id, academicYear);
 
       await auditService.log(req.user.id, 'file_upload', 'files', result.id, {
         filename: result.originalName,
@@ -1449,7 +1455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.validateStudentFile(req.file);
+      const result = await fileService.validateStudentFile(req.file, req.user.username);
       res.json(result);
     } catch (error) {
       console.error("Validate students file error:", error);
@@ -1463,7 +1469,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.validateVacancyFile(req.file);
+      const result = await fileService.validateVacancyFile(req.file, req.user.username);
       res.json(result);
     } catch (error) {
       console.error("Validate vacancies file error:", error);
@@ -1477,7 +1483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const result = await fileService.validateEntranceResultsFile(req.file);
+      const result = await fileService.validateEntranceResultsFile(req.file, req.user.username);
       res.json(result);
     } catch (error) {
       console.error("Validate entrance results file error:", error);
@@ -1697,7 +1703,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const result = await allocationService.runAllocation();
+      const currentSession = await storage.getSetting('current_session');
+      const academicYear = currentSession?.value || '2024-2025';
+      const result = await allocationService.runAllocation(academicYear, 1, 'mocked-round-id');
 
       await storage.setSetting({
         key: 'allocation_completed',

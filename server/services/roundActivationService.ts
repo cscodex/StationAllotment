@@ -3,7 +3,7 @@ import { CounselingRound } from '@shared/schema';
 import { getCurrentSession, isCurrentSession } from '../utils/sessionUtils';
 
 export class RoundActivationService {
-  constructor(private storage: IStorage) {}
+  constructor(private storage: IStorage) { }
 
   /**
    * Check and activate rounds whose start date has been reached
@@ -14,21 +14,21 @@ export class RoundActivationService {
     const currentSession = getCurrentSession();
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Today at midnight
-    
+
     // Get all rounds for current session that are not yet active and not completed
     const allRounds = await this.storage.getCounselingRounds(currentSession);
-    
+
     const roundsToActivate = allRounds.filter(round => {
       // Only process rounds for current session
       if (!isCurrentSession(round.academicYear)) return false;
-      
+
       // Skip if already active or completed
       if (round.isActive || round.isCompleted) return false;
-      
+
       // Check if start date has been reached
       const startDate = new Date(round.startDate);
       const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      
+
       // Activate if today >= start date
       return today >= startDateOnly;
     });
@@ -60,42 +60,42 @@ export class RoundActivationService {
     // Get today's date in local timezone (YYYY-MM-DD format for comparison)
     const todayStr = now.toISOString().split('T')[0];
     const today = new Date(todayStr + 'T00:00:00'); // Set to midnight in local time
-    
+
     // Get all active rounds for current session
     const allRounds = await this.storage.getCounselingRounds(currentSession);
-    
+
     const roundsToComplete = allRounds.filter(round => {
       // Only process rounds for current session
       if (!isCurrentSession(round.academicYear)) return false;
-      
+
       // Skip if already completed or not active
       if (round.isCompleted || !round.isActive) return false;
-      
+
       // Check if end date has passed
       // Handle null/undefined endDate (rounds may not have end dates)
       if (!round.endDate) return false;
-      
+
       // Dates from database come as strings (YYYY-MM-DD format) or Date objects
       let endDate: Date;
       if (typeof round.endDate === 'string') {
         const dateStr = round.endDate.split('T')[0]; // Get date part only
         endDate = new Date(dateStr + 'T00:00:00');
-      } else if (round.endDate instanceof Date) {
+      } else if ((round.endDate as any) instanceof Date) {
         endDate = round.endDate;
       } else {
         return false; // Invalid date format
       }
-      
+
       // Validate date
       if (isNaN(endDate.getTime())) {
         console.error('Invalid endDate for round:', round.id, round.endDate);
         return false;
       }
-      
+
       // Compare dates (ignoring time)
       const endDateStr = endDate.toISOString().split('T')[0];
       const todayDateStr = today.toISOString().split('T')[0];
-      
+
       // Complete if today > end date (round ended yesterday or earlier)
       return todayDateStr > endDateStr;
     });
@@ -124,7 +124,7 @@ export class RoundActivationService {
   async deactivatePreviousSessions(): Promise<number> {
     const currentSession = getCurrentSession();
     const allRounds = await this.storage.getCounselingRounds(); // Get all rounds
-    
+
     const roundsToDeactivate = allRounds.filter(round => {
       // Deactivate rounds from previous sessions that are still active
       return !isCurrentSession(round.academicYear) && round.isActive && !round.isCompleted;
@@ -153,21 +153,21 @@ export class RoundActivationService {
   async activateDueRoundsAll(): Promise<CounselingRound[]> {
     const currentSession = getCurrentSession();
     const now = new Date();
-    
+
     // Get ALL rounds to check (not just current session)
     const allRounds = await this.storage.getCounselingRounds();
-    
+
     const roundsToActivate = allRounds.filter(round => {
       // Only activate rounds for current session
       if (!isCurrentSession(round.academicYear)) return false;
-      
+
       // Skip if already active or completed
       if (round.isActive || round.isCompleted) return false;
-      
+
       // Check if start datetime has been reached
       // startDate is now a timestamp (datetime)
       const startDate = new Date(round.startDate);
-      
+
       // Activate if current time >= start datetime
       return now >= startDate;
     });
@@ -197,17 +197,17 @@ export class RoundActivationService {
     const currentSession = getCurrentSession();
     // Use local system time for comparison
     const now = new Date();
-    
+
     // Get all active rounds for current session
     const allRounds = await this.storage.getCounselingRounds(currentSession);
-    
+
     const roundsToDeactivate = allRounds.filter(round => {
       // Only process rounds for current session
       if (!isCurrentSession(round.academicYear)) return false;
-      
+
       // Skip if not active or already completed
       if (!round.isActive || round.isCompleted) return false;
-      
+
       // Check if start date is in the future
       let startDate: Date;
       if (typeof round.startDate === 'string') {
@@ -217,9 +217,9 @@ export class RoundActivationService {
       } else {
         startDate = new Date(round.startDate);
       }
-      
+
       if (isNaN(startDate.getTime())) return false;
-      
+
       // Deactivate if start date is in the future (using local timezone)
       return startDate > now;
     });
@@ -252,16 +252,16 @@ export class RoundActivationService {
   }> {
     // First, deactivate all previous session rounds
     const deactivated = await this.deactivatePreviousSessions();
-    
+
     // Deactivate active rounds whose start date is in the future
     const futureDeactivated = await this.deactivateFutureRounds();
-    
+
     // Then activate due rounds (checking all, but only activating current session)
     const activated = await this.activateDueRoundsAll();
-    
+
     // Finally, complete expired rounds
     const completed = await this.completeExpiredRounds();
-    
+
     return { activated, completed, deactivated, futureDeactivated };
   }
 }

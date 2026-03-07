@@ -7,7 +7,7 @@ import { InsertStudent, InsertVacancy, InsertStudentsEntranceResult, InsertSchoo
 import { progressStore } from '../utils/progressStore';
 
 export class FileService {
-  constructor(private storage: IStorage) {}
+  constructor(private storage: IStorage) { }
 
   async processStudentFile(file: Express.Multer.File, uploadedBy: string, academicYear: string, counselingRoundId?: string) {
     // Validate academic year format (YYYY-YYYY)
@@ -32,7 +32,7 @@ export class FileService {
     }
 
     // Validate upload order: Vacancies and Entrance Results must be uploaded first
-    const roundName = round?.roundName || null;
+    const roundName = round?.roundName || undefined;
     const vacancies = await this.storage.getVacancies(academicYear, roundName);
     if (vacancies.length === 0) {
       throw new Error('Upload order required: Please upload Vacancy Data file first before uploading Student Choices file.');
@@ -40,8 +40,8 @@ export class FileService {
 
     // Check if entrance results exist for this academic year and round name
     const entranceResults = await this.storage.getStudentsEntranceResults(10000, 0);
-    const relevantEntranceResults = entranceResults.filter(er => 
-      er.academicYear === academicYear && 
+    const relevantEntranceResults = entranceResults.filter(er =>
+      er.academicYear === academicYear &&
       (roundName ? er.roundName === roundName : true)
     );
     if (relevantEntranceResults.length === 0) {
@@ -112,21 +112,21 @@ export class FileService {
 
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'processed',
-        validationResults: { 
-          errors: [], 
+        validationResults: {
+          errors: [],
           processed: students.length,
-          message: `Successfully processed ${students.length} student records` 
+          message: `Successfully processed ${students.length} student records`
         },
       });
 
-      return { 
-        ...fileUpload, 
-        status: 'processed', 
-        validationResults: { 
-          errors: [], 
+      return {
+        ...fileUpload,
+        status: 'processed',
+        validationResults: {
+          errors: [],
           processed: students.length,
-          message: `Successfully processed ${students.length} student records` 
-        } 
+          message: `Successfully processed ${students.length} student records`
+        }
       };
     } catch (error) {
       // Mark progress as failed
@@ -137,9 +137,9 @@ export class FileService {
 
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'failed',
-        validationResults: { 
+        validationResults: {
           errors: [error instanceof Error ? error.message : 'Unknown error'],
-          processed: 0 
+          processed: 0
         },
       });
       throw error;
@@ -226,7 +226,7 @@ export class FileService {
 
       // Clear existing vacancies for this academic year and roundName, then insert new ones
       // Note: Vacancies are uploaded once per counseling title, shared across all rounds
-      const existingVacancies = await this.storage.getVacancies(academicYear, roundName);
+      const existingVacancies = await this.storage.getVacancies(academicYear, roundName || undefined);
       // Delete vacancies for this academic year and roundName only
       // For now, bulkUpsert will update existing ones based on unique constraint
       await this.storage.bulkUpsertVacancies(vacancies, (processed, total) => {
@@ -244,21 +244,21 @@ export class FileService {
 
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'processed',
-        validationResults: { 
-          errors: [], 
+        validationResults: {
+          errors: [],
           processed: vacancies.length,
-          message: `Successfully processed ${vacancies.length} vacancy records` 
+          message: `Successfully processed ${vacancies.length} vacancy records`
         },
       });
 
-      return { 
-        ...fileUpload, 
-        status: 'processed', 
-        validationResults: { 
-          errors: [], 
+      return {
+        ...fileUpload,
+        status: 'processed',
+        validationResults: {
+          errors: [],
           processed: vacancies.length,
-          message: `Successfully processed ${vacancies.length} vacancy records` 
-        } 
+          message: `Successfully processed ${vacancies.length} vacancy records`
+        }
       };
     } catch (error) {
       // Mark progress as failed
@@ -269,9 +269,9 @@ export class FileService {
 
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'failed',
-        validationResults: { 
+        validationResults: {
           errors: [error instanceof Error ? error.message : 'Unknown error'],
-          processed: 0 
+          processed: 0
         },
       });
       throw error;
@@ -302,7 +302,7 @@ export class FileService {
     }
 
     // Validate upload order: Vacancies must be uploaded first
-    const roundName = round?.roundName || null;
+    const roundName = round?.roundName || undefined;
     const vacancies = await this.storage.getVacancies(academicYear, roundName);
     if (vacancies.length === 0) {
       throw new Error('Upload order required: Please upload Vacancy Data file first before uploading Entrance Results file.');
@@ -361,11 +361,11 @@ export class FileService {
 
       // Auto-create student records from entrance results with common fields
       const studentsToCreate: InsertStudent[] = [];
-      
+
       for (const result of entranceResults) {
         // Check if student already exists
         const existingStudent = await this.storage.getStudentByMeritNumber(result.meritNo);
-        
+
         if (!existingStudent) {
           studentsToCreate.push({
             academicYear: academicYear,
@@ -410,21 +410,21 @@ export class FileService {
 
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'processed',
-        validationResults: { 
-          errors: [], 
+        validationResults: {
+          errors: [],
           processed: entranceResults.length,
-          message: `Successfully processed ${entranceResults.length} entrance result records and auto-created ${studentsToCreate.length} student records` 
+          message: `Successfully processed ${entranceResults.length} entrance result records and auto-created ${studentsToCreate.length} student records`
         },
       });
 
-      return { 
-        ...fileUpload, 
-        status: 'processed', 
-        validationResults: { 
-          errors: [], 
+      return {
+        ...fileUpload,
+        status: 'processed',
+        validationResults: {
+          errors: [],
           processed: entranceResults.length,
-          message: `Successfully processed ${entranceResults.length} entrance result records` 
-        } 
+          message: `Successfully processed ${entranceResults.length} entrance result records`
+        }
       };
     } catch (error) {
       // Mark progress as failed
@@ -435,9 +435,9 @@ export class FileService {
 
       await this.storage.updateFileUpload(fileUpload.id, {
         status: 'failed',
-        validationResults: { 
+        validationResults: {
           errors: [error instanceof Error ? error.message : 'Unknown error'],
-          processed: 0 
+          processed: 0
         },
       });
       throw error;
@@ -450,7 +450,7 @@ export class FileService {
   generateEntranceResultsTemplate(): string {
     const headers = [
       'Merit No',
-      'Application No', 
+      'Application No',
       'Roll No',
       'Student Name',
       'Marks',
@@ -570,11 +570,11 @@ export class FileService {
     // Group 1: Districts with 500 seats per school
     // Amritsar, Bathinda, Jalandhar, Ludhiana, SAS Nagar (Mohali), Patiala
     const group1Districts = ['Amritsar', 'Bathinda', 'Jalandhar', 'Ludhiana', 'SAS Nagar', 'Patiala'];
-    
+
     group1Districts.forEach((district) => {
       const udiseCode = districtUdiseCodes[district];
       const schoolName = `Government Senior Secondary School, ${district}`;
-      
+
       // Medical Stream
       rows.push([udiseCode, schoolName, district, 'Medical', 'Female', 'Open', '36', '36']);
       rows.push([udiseCode, schoolName, district, 'Medical', 'Female', 'Private', '6', '6']);
@@ -583,7 +583,7 @@ export class FileService {
       rows.push([udiseCode, schoolName, district, 'Medical', 'Male', 'Open', '34', '34']);
       rows.push([udiseCode, schoolName, district, 'Medical', 'Male', 'Private', '4', '4']);
       rows.push([udiseCode, schoolName, district, 'Medical', 'Male', 'Disabled', '2', '2']);
-      
+
       // Non-Medical Stream
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Female', 'Open', '108', '108']);
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Female', 'Private', '18', '18']);
@@ -592,7 +592,7 @@ export class FileService {
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Male', 'Open', '102', '102']);
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Male', 'Private', '12', '12']);
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Male', 'Disabled', '6', '6']);
-      
+
       // Commerce Stream
       rows.push([udiseCode, schoolName, district, 'Commerce', 'Female', 'Open', '36', '36']);
       rows.push([udiseCode, schoolName, district, 'Commerce', 'Female', 'Private', '6', '6']);
@@ -606,11 +606,11 @@ export class FileService {
     // Group 2: Districts with 500 seats per school (different distribution)
     // Ferozepur, Gurdaspur, Sangrur
     const group2Districts = ['Ferozepur', 'Gurdaspur', 'Sangrur'];
-    
+
     group2Districts.forEach((district) => {
       const udiseCode = districtUdiseCodes[district];
-            const schoolName = `Government Senior Secondary School, ${district}`;
-            
+      const schoolName = `Government Senior Secondary School, ${district}`;
+
       // Medical Stream
       rows.push([udiseCode, schoolName, district, 'Medical', 'Female', 'Open', '40', '40']);
       rows.push([udiseCode, schoolName, district, 'Medical', 'Female', 'Private', '7', '7']);
@@ -619,7 +619,7 @@ export class FileService {
       rows.push([udiseCode, schoolName, district, 'Medical', 'Male', 'Open', '27', '27']);
       rows.push([udiseCode, schoolName, district, 'Medical', 'Male', 'Private', '3', '3']);
       rows.push([udiseCode, schoolName, district, 'Medical', 'Male', 'Disabled', '2', '2']);
-      
+
       // Non-Medical Stream
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Female', 'Open', '113', '113']);
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Female', 'Private', '19', '19']);
@@ -628,7 +628,7 @@ export class FileService {
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Male', 'Open', '94', '94']);
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Male', 'Private', '11', '11']);
       rows.push([udiseCode, schoolName, district, 'NonMedical', 'Male', 'Disabled', '6', '6']);
-      
+
       // Commerce Stream
       rows.push([udiseCode, schoolName, district, 'Commerce', 'Female', 'Open', '40', '40']);
       rows.push([udiseCode, schoolName, district, 'Commerce', 'Female', 'Private', '7', '7']);
@@ -643,25 +643,25 @@ export class FileService {
     const talwaraDistrict = 'Talwara';
     const talwaraUdiseCode = districtUdiseCodes[talwaraDistrict];
     const talwaraSchoolName = `Government Senior Secondary School, ${talwaraDistrict}`;
-    
+
     // Class 11 - Medical
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Medical', 'Female', 'Open', '20', '20']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Medical', 'Female', 'Private', '4', '4']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Medical', 'Female', 'WHH', '7', '7']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Medical', 'Female', 'Disabled', '4', '4']);
-    
+
     // Class 11 - Non-Medical
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'NonMedical', 'Female', 'Open', '20', '20']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'NonMedical', 'Female', 'Private', '4', '4']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'NonMedical', 'Female', 'WHH', '7', '7']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'NonMedical', 'Female', 'Disabled', '4', '4']);
-    
+
     // Class 11 - Commerce
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Commerce', 'Female', 'Open', '18', '18']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Commerce', 'Female', 'Private', '3', '3']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Commerce', 'Female', 'WHH', '6', '6']);
     rows.push([talwaraUdiseCode, talwaraSchoolName, talwaraDistrict, 'Commerce', 'Female', 'Disabled', '3', '3']);
-    
+
     // Note: Class 9 seats (50 total) are not included as they are for a different class level
     // The system currently handles Class 11 only
 
@@ -676,7 +676,7 @@ export class FileService {
   generateEntranceResultsTestData(): string {
     const headers = [
       'Merit No',
-      'Application No', 
+      'Application No',
       'Roll No',
       'Student Name',
       'Marks',
@@ -686,14 +686,14 @@ export class FileService {
     ];
 
     const rows: string[][] = [];
-    
+
     // Calculate total seats to determine student count (3-4x seats)
     // Group 1: 6 districts × 500 = 3000 seats
     // Group 2: 3 districts × 500 = 1500 seats
     // Talwara: 100 seats
     // Total: 4600 seats
     // Target: ~3.5x = ~16,100 students
-    
+
     // Seat distribution by stream, gender, and category (per district)
     // Group 1 (Amritsar, Bathinda, Jalandhar, Ludhiana, SAS Nagar, Patiala)
     const group1Seats = {
@@ -701,49 +701,49 @@ export class FileService {
       NonMedical: { Female: { Open: 108, Private: 18, WHH: 36, Disabled: 18 }, Male: { Open: 102, Private: 12, Disabled: 6 } },
       Commerce: { Female: { Open: 36, Private: 6, WHH: 12, Disabled: 6 }, Male: { Open: 34, Private: 4, Disabled: 2 } }
     };
-    
+
     // Group 2 (Ferozepur, Gurdaspur, Sangrur)
     const group2Seats = {
       Medical: { Female: { Open: 40, Private: 7, WHH: 14, Disabled: 7 }, Male: { Open: 27, Private: 3, Disabled: 2 } },
       NonMedical: { Female: { Open: 113, Private: 19, WHH: 38, Disabled: 19 }, Male: { Open: 94, Private: 11, Disabled: 6 } },
       Commerce: { Female: { Open: 40, Private: 7, WHH: 14, Disabled: 7 }, Male: { Open: 27, Private: 3, Disabled: 2 } }
     };
-    
+
     // Talwara (Girls only)
     const talwaraSeats = {
       Medical: { Female: { Open: 20, Private: 4, WHH: 7, Disabled: 4 } },
       NonMedical: { Female: { Open: 20, Private: 4, WHH: 7, Disabled: 4 } },
       Commerce: { Female: { Open: 18, Private: 3, WHH: 6, Disabled: 3 } }
     };
-    
+
     let meritNo = 1;
     const firstNames = ['Aman', 'Priya', 'Rahul', 'Kavita', 'Sandeep', 'Neha', 'Vikram', 'Anjali', 'Rohit', 'Pooja', 'Arjun', 'Simran', 'Karan', 'Deepika', 'Manish', 'Radha', 'Ajay', 'Meera', 'Nikhil', 'Shreya'];
     const lastNames = ['Singh', 'Kaur', 'Sharma', 'Kumar', 'Verma', 'Gupta', 'Malhotra', 'Chopra', 'Bedi', 'Sood', 'Gill', 'Dhillon', 'Brar', 'Sidhu', 'Randhawa'];
-    
+
     // Helper function to generate students for a seat configuration
     const generateStudents = (seats: any, stream: string, gender: string, multiplier: number = 3.5) => {
-      const categories = gender === 'Female' 
+      const categories = gender === 'Female'
         ? ['Open', 'Private', 'WHH', 'Disabled']
         : ['Open', 'Private', 'Disabled'];
-      
+
       categories.forEach(category => {
         const seatCount = seats[gender]?.[category] || 0;
         if (seatCount > 0) {
           const studentCount = Math.ceil(seatCount * multiplier);
-          
+
           for (let i = 0; i < studentCount; i++) {
             const firstName = firstNames[(meritNo - 1) % firstNames.length];
             const lastName = lastNames[Math.floor((meritNo - 1) / firstNames.length) % lastNames.length];
             const studentName = `${firstName} ${lastName} ${meritNo}`;
-            
+
             // Generate marks: Higher merit = higher marks (0-500 range)
             // Distribute marks so top students have higher marks
             // Merit 1 gets ~500, lower merit gets lower marks
             const marks = 500 - Math.floor((meritNo - 1) / 50) - (i % 30);
-            
+
             const appNo = `APP2024${String(meritNo).padStart(5, '0')}`;
             const rollNo = `ROLL${String(meritNo).padStart(5, '0')}`;
-            
+
             rows.push([
               String(meritNo),
               appNo,
@@ -754,27 +754,27 @@ export class FileService {
               category,
               stream
             ]);
-            
+
             meritNo++;
           }
         }
       });
     };
-    
+
     // Generate students for Group 1 (6 districts × multiplier)
     const group1Multiplier = 3.5;
     ['Medical', 'NonMedical', 'Commerce'].forEach(stream => {
       generateStudents(group1Seats[stream as keyof typeof group1Seats], stream, 'Female', group1Multiplier * 6);
       generateStudents(group1Seats[stream as keyof typeof group1Seats], stream, 'Male', group1Multiplier * 6);
     });
-    
+
     // Generate students for Group 2 (3 districts × multiplier)
     const group2Multiplier = 3.5;
     ['Medical', 'NonMedical', 'Commerce'].forEach(stream => {
       generateStudents(group2Seats[stream as keyof typeof group2Seats], stream, 'Female', group2Multiplier * 3);
       generateStudents(group2Seats[stream as keyof typeof group2Seats], stream, 'Male', group2Multiplier * 3);
     });
-    
+
     // Generate students for Talwara (Girls only)
     const talwaraMultiplier = 3.5;
     ['Medical', 'NonMedical', 'Commerce'].forEach(stream => {
@@ -817,7 +817,7 @@ export class FileService {
       'Nawanshahr', 'Pathankot', 'Patiala', 'Rupnagar', 'SAS Nagar',
       'Sangrur', 'Tarn Taran', 'Talwara'
     ];
-    
+
     // First, generate entrance results data to get the student list
     // This matches the logic from generateEntranceResultsTestData
     const entranceResultsStudents: Array<{
@@ -830,50 +830,50 @@ export class FileService {
       category: string;
       stream: string;
     }> = [];
-    
+
     // Seat distribution by stream, gender, and category (per district)
     const group1Seats = {
       Medical: { Female: { Open: 36, Private: 6, WHH: 12, Disabled: 6 }, Male: { Open: 34, Private: 4, Disabled: 2 } },
       NonMedical: { Female: { Open: 108, Private: 18, WHH: 36, Disabled: 18 }, Male: { Open: 102, Private: 12, Disabled: 6 } },
       Commerce: { Female: { Open: 36, Private: 6, WHH: 12, Disabled: 6 }, Male: { Open: 34, Private: 4, Disabled: 2 } }
     };
-    
+
     const group2Seats = {
       Medical: { Female: { Open: 40, Private: 7, WHH: 14, Disabled: 7 }, Male: { Open: 27, Private: 3, Disabled: 2 } },
       NonMedical: { Female: { Open: 113, Private: 19, WHH: 38, Disabled: 19 }, Male: { Open: 94, Private: 11, Disabled: 6 } },
       Commerce: { Female: { Open: 40, Private: 7, WHH: 14, Disabled: 7 }, Male: { Open: 27, Private: 3, Disabled: 2 } }
     };
-    
+
     const talwaraSeats = {
       Medical: { Female: { Open: 20, Private: 4, WHH: 7, Disabled: 4 } },
       NonMedical: { Female: { Open: 20, Private: 4, WHH: 7, Disabled: 4 } },
       Commerce: { Female: { Open: 18, Private: 3, WHH: 6, Disabled: 3 } }
     };
-    
+
     let meritNo = 1;
     const firstNames = ['Aman', 'Priya', 'Rahul', 'Kavita', 'Sandeep', 'Neha', 'Vikram', 'Anjali', 'Rohit', 'Pooja', 'Arjun', 'Simran', 'Karan', 'Deepika', 'Manish', 'Radha', 'Ajay', 'Meera', 'Nikhil', 'Shreya'];
     const lastNames = ['Singh', 'Kaur', 'Sharma', 'Kumar', 'Verma', 'Gupta', 'Malhotra', 'Chopra', 'Bedi', 'Sood', 'Gill', 'Dhillon', 'Brar', 'Sidhu', 'Randhawa'];
-    
+
     // Helper function to generate students for a seat configuration
     const generateEntranceStudents = (seats: any, stream: string, gender: string, multiplier: number = 3.5) => {
-      const categories = gender === 'Female' 
+      const categories = gender === 'Female'
         ? ['Open', 'Private', 'WHH', 'Disabled']
         : ['Open', 'Private', 'Disabled'];
-      
+
       categories.forEach(category => {
         const seatCount = seats[gender]?.[category] || 0;
         if (seatCount > 0) {
           const studentCount = Math.ceil(seatCount * multiplier);
-          
+
           for (let i = 0; i < studentCount; i++) {
             const firstName = firstNames[(meritNo - 1) % firstNames.length];
             const lastName = lastNames[Math.floor((meritNo - 1) / firstNames.length) % lastNames.length];
             const studentName = `${firstName} ${lastName} ${meritNo}`;
-            
+
             const marks = 500 - Math.floor((meritNo - 1) / 50) - (i % 30);
             const appNo = `APP2024${String(meritNo).padStart(5, '0')}`;
             const rollNo = `ROLL${String(meritNo).padStart(5, '0')}`;
-            
+
             entranceResultsStudents.push({
               meritNo,
               appNo,
@@ -884,52 +884,52 @@ export class FileService {
               category,
               stream
             });
-            
+
             meritNo++;
           }
         }
       });
     };
-    
+
     // Generate students for Group 1 (6 districts × multiplier)
     const group1Multiplier = 3.5;
     ['Medical', 'NonMedical', 'Commerce'].forEach(stream => {
       generateEntranceStudents(group1Seats[stream as keyof typeof group1Seats], stream, 'Female', group1Multiplier * 6);
       generateEntranceStudents(group1Seats[stream as keyof typeof group1Seats], stream, 'Male', group1Multiplier * 6);
     });
-    
+
     // Generate students for Group 2 (3 districts × multiplier)
     const group2Multiplier = 3.5;
     ['Medical', 'NonMedical', 'Commerce'].forEach(stream => {
       generateEntranceStudents(group2Seats[stream as keyof typeof group2Seats], stream, 'Female', group2Multiplier * 3);
       generateEntranceStudents(group2Seats[stream as keyof typeof group2Seats], stream, 'Male', group2Multiplier * 3);
     });
-    
+
     // Generate students for Talwara (Girls only)
     const talwaraMultiplier = 3.5;
     ['Medical', 'NonMedical', 'Commerce'].forEach(stream => {
       generateEntranceStudents(talwaraSeats[stream as keyof typeof talwaraSeats], stream, 'Female', talwaraMultiplier);
     });
-    
+
     // Calculate how many students to use from entrance results (at least 70%)
     const totalEntranceStudents = entranceResultsStudents.length;
     const minStudentsFromEntrance = Math.ceil(totalEntranceStudents * 0.7);
     const studentsToUse = Math.min(minStudentsFromEntrance, totalEntranceStudents);
-    
+
     // Use at least 70% of entrance results students
     const selectedEntranceStudents = entranceResultsStudents.slice(0, studentsToUse);
-    
+
     // Generate choices for students from entrance results
     selectedEntranceStudents.forEach(student => {
       const choices: string[] = [];
       // Shuffle districts for variety
       const shuffledDistricts = [...districts].sort(() => Math.random() - 0.5);
-      
+
       // Fill all 10 choices with different districts
       for (let j = 0; j < 10; j++) {
         choices.push(shuffledDistricts[j % shuffledDistricts.length]);
       }
-      
+
       rows.push([
         student.appNo,
         String(student.meritNo),
@@ -940,7 +940,7 @@ export class FileService {
         ...choices
       ]);
     });
-    
+
     // Generate remaining students (up to 30%) if needed
     const remainingCount = totalEntranceStudents - studentsToUse;
     if (remainingCount > 0) {
@@ -948,26 +948,26 @@ export class FileService {
       const genders = ['Male', 'Female'];
       const maleCategories = ['Open', 'Disabled', 'Private'];
       const femaleCategories = ['Open', 'WHH', 'Disabled', 'Private'];
-      
+
       for (let i = 0; i < remainingCount; i++) {
         const stream = streams[i % streams.length];
         const gender = genders[i % genders.length];
         const categories = gender === 'Female' ? femaleCategories : maleCategories;
         const category = categories[i % categories.length];
-        
+
         const firstName = firstNames[(meritNo - 1) % firstNames.length];
         const lastName = lastNames[Math.floor((meritNo - 1) / firstNames.length) % lastNames.length];
         const studentName = `${firstName} ${lastName} ${meritNo}`;
-        
+
         const appNo = `APP2024${String(meritNo).padStart(5, '0')}`;
-        
+
         const choices: string[] = [];
         const shuffledDistricts = [...districts].sort(() => Math.random() - 0.5);
-        
+
         for (let j = 0; j < 10; j++) {
           choices.push(shuffledDistricts[j % shuffledDistricts.length]);
         }
-        
+
         rows.push([
           appNo,
           String(meritNo),
@@ -977,7 +977,7 @@ export class FileService {
           stream,
           ...choices
         ]);
-        
+
         meritNo++;
       }
     }
@@ -1073,7 +1073,7 @@ export class FileService {
       // Ensure school is created even if schoolName is missing (use a default)
       if (udiseCode && district) {
         const finalSchoolName = schoolName || `School ${udiseCode}`;
-        
+
         // Check if this school name already exists in the database (school_name is unique)
         if (existingSchoolsByName && existingSchoolsByName.has(finalSchoolName)) {
           const existingSchool = existingSchoolsByName.get(finalSchoolName)!;
@@ -1097,7 +1097,7 @@ export class FileService {
             schoolNameDistrictToUdiseMap.set(schoolKey, udiseCode);
           }
         }
-        
+
         // Create/update school entry (UDISE code is primary key, school_name is unique)
         if (!schoolsMap.has(udiseCode)) {
           schoolsMap.set(udiseCode, {
@@ -1112,8 +1112,8 @@ export class FileService {
             schoolsMap.set(udiseCode, {
               udiseCode,
               schoolName: finalSchoolName, // Use the most recent school name
-            district,
-          });
+              district,
+            });
           }
         }
       }
@@ -1121,7 +1121,7 @@ export class FileService {
       // Create vacancy entry - academicYear comes from form, not file
       // Only read file columns: UDISE Code, School Name, District, Stream, Gender, Category, Total Seats, Available Seats
       const totalSeats = parseInt(row['Total Seats'] || row.totalSeats || row.total_seats || row.TotalSeats) || 0;
-      
+
       vacancies.push({
         academicYear: academicYear, // Set from form selection, not from file
         udiseCode: udiseCode, // Already normalized to 11 digits with leading zeros
@@ -1189,7 +1189,7 @@ export class FileService {
     vacancies.forEach((vacancy, index) => {
       const row = index + 1;
       // New unique combination: udiseCode-stream-gender-category
-      const combination = vacancy.udiseCode 
+      const combination = vacancy.udiseCode
         ? `${vacancy.udiseCode}-${vacancy.stream}-${vacancy.gender}-${vacancy.category}`
         : `${vacancy.district}-${vacancy.stream}-${vacancy.gender}-${vacancy.category}`;
 
@@ -1201,7 +1201,7 @@ export class FileService {
         if (typeof vacancy.udiseCode === 'number') {
           // If it's a number, convert to string and pad to 11 digits
           udiseCodeStr = String(vacancy.udiseCode).padStart(11, '0');
-      } else {
+        } else {
           udiseCodeStr = String(vacancy.udiseCode).trim();
           // If it's a numeric string with less than 11 digits, pad with leading zeros
           if (/^\d+$/.test(udiseCodeStr) && udiseCodeStr.length < 11) {
@@ -1311,10 +1311,10 @@ export class FileService {
     try {
       const students = await this.parseStudentFile(file, academicYear);
       const validationResults = this.validateStudents(students);
-      
+
       return {
         isValid: validationResults.errors.length === 0,
-        message: validationResults.errors.length === 0 
+        message: validationResults.errors.length === 0
           ? `File is valid. Found ${students.length} student records.`
           : `Found ${validationResults.errors.length} validation errors.`,
         errors: validationResults.errors,
@@ -1368,10 +1368,10 @@ export class FileService {
     try {
       const { vacancies, schools } = await this.parseVacancyFile(file, academicYear);
       const validationResults = this.validateVacancies(vacancies);
-      
+
       return {
         isValid: validationResults.errors.length === 0,
-        message: validationResults.errors.length === 0 
+        message: validationResults.errors.length === 0
           ? `File is valid. Found ${vacancies.length} vacancy records and ${schools.length} unique schools.`
           : `Found ${validationResults.errors.length} validation errors.`,
         errors: validationResults.errors,
@@ -1416,10 +1416,10 @@ export class FileService {
     try {
       const entranceResults = await this.parseEntranceResultsFile(file, academicYear);
       const validationResults = this.validateEntranceResults(entranceResults);
-      
+
       return {
         isValid: validationResults.errors.length === 0,
-        message: validationResults.errors.length === 0 
+        message: validationResults.errors.length === 0
           ? `File is valid. Found ${entranceResults.length} entrance result records.`
           : `Found ${validationResults.errors.length} validation errors.`,
         errors: validationResults.errors,
