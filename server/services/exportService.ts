@@ -94,11 +94,12 @@ export class ExportService {
     // Statistics Cards
     const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
     const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
+    const vacatedStudents = students.filter(s => s.allocationStatus === 'vacated');
 
     this.drawStatsCard(doc, 50, 150, 'Total Candidates', students.length.toString(), '#3b82f6');
     this.drawStatsCard(doc, 200, 150, 'Students Allotted', allottedStudents.length.toString(), '#10b981');
     this.drawStatsCard(doc, 350, 150, 'Students Not Allotted', notAllottedStudents.length.toString(), '#ef4444');
-    this.drawStatsCard(doc, 500, 150, 'Total Vacancies', (stats?.totalVacancies || 0).toString(), '#8b5cf6');
+    this.drawStatsCard(doc, 500, 150, 'Vacated Seats', vacatedStudents.length.toString(), '#ef4444');
     this.drawStatsCard(doc, 650, 150, 'Completion Rate', `${Math.round((allottedStudents.length / (students.length || 1)) * 100)}%`, '#f59e0b');
 
     // District-wise allocation table
@@ -464,10 +465,13 @@ export class ExportService {
   }
 
   async exportFlowDiagramAsPDF(): Promise<Buffer> {
-    const districtStatuses = await this.storage.getAllDistrictStatuses();
-    const settings = await this.storage.getSettings();
-    const allocationFinalized = settings.find(s => s.key === 'allocation_finalized')?.value === 'true';
-    const allocationCompleted = settings.find(s => s.key === 'allocation_completed')?.value === 'true';
+    const currentSessionSetting = await this.storage.getSetting('current_session');
+    const academicYear = currentSessionSetting?.value || '2024-2025';
+    const activeRound = await this.storage.getActiveCounselingRound(academicYear);
+
+    const districtStatuses = await this.storage.getAllDistrictStatuses(activeRound?.id);
+    const allocationFinalized = activeRound?.isAllocationFinalized || false;
+    const allocationCompleted = activeRound?.isAllocationCompleted || false;
     const students = await this.storage.getStudents(10000, 0);
 
     return new Promise((resolve, reject) => {

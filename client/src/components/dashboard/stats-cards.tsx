@@ -11,8 +11,8 @@ interface StatsCardsProps {
 export default function StatsCards({ stats, isLoading }: StatsCardsProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {Array.from({ length: 4 }).map((_, i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        {Array.from({ length: 5 }).map((_, i) => (
           <Card key={i}>
             <CardContent className="p-6">
               <Skeleton className="h-4 w-24 mb-2" />
@@ -34,7 +34,7 @@ export default function StatsCards({ stats, isLoading }: StatsCardsProps) {
       trend: { value: 12.5, isPositive: true, label: "from last year" },
     },
     {
-      title: "Total Vacancies", 
+      title: "Total Vacancies",
       value: stats?.totalVacancies || 0,
       icon: MapPin,
       color: "bg-green-500/10 text-green-500",
@@ -54,10 +54,17 @@ export default function StatsCards({ stats, isLoading }: StatsCardsProps) {
       color: "bg-blue-500/10 text-blue-500",
       trend: { value: 4.3, isPositive: true, label: "improvement" },
     },
+    {
+      title: "Vacated Seats",
+      value: stats?.vacatedSeats || 0,
+      icon: TrendingDown,
+      color: "bg-red-500/10 text-red-500",
+      trend: { value: 0, isPositive: false, label: "cancelled placements" },
+    },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
       {cards.map((card, index) => (
         <Card key={index}>
           <CardContent className="p-6">

@@ -17,7 +17,9 @@ import {
   Users,
   MapPin,
   BarChart3,
-  Shield
+  Shield,
+  RefreshCw,
+  Lock
 } from "lucide-react";
 import type { DistrictStatus } from "@shared/schema";
 
@@ -77,6 +79,40 @@ export default function Allocation() {
         variant: "destructive",
       });
     },
+  });
+
+  const nextRoundMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/counseling-rounds/next");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({
+        title: "New Round Started",
+        description: "The next counseling round has begun. You may now continue placing available seats.",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to Start Next Round", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const closeSessionMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/sessions/close");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
+      toast({
+        title: "Session Closed",
+        description: "The academic session has been permanently closed.",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed to Close Session", description: error.message, variant: "destructive" });
+    }
   });
 
   const studentFile = files?.find((f: any) => f.type === 'student_choices' && f.status === 'processed');
@@ -277,15 +313,59 @@ export default function Allocation() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {allocationStatus?.completed ? (
-                  <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200">
-                    <Check className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                  <div className="text-center p-8 bg-green-50 rounded-lg border border-green-200 flex flex-col items-center">
+                    <Check className="w-12 h-12 text-green-500 mb-4" />
                     <h3 className="text-lg font-semibold text-green-800 mb-2">
                       Allocation Completed
                     </h3>
-                    <p className="text-sm text-green-600">
+                    <p className="text-sm text-green-600 mb-8 max-w-md">
                       The seat allocation process has been completed successfully.
-                      You can now export the results.
+                      You can trace and export the final list. Once ready, you can either trigger the next iteration or permanently close the session.
                     </p>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center w-full">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" className="flex-1 max-w-[250px]" disabled={nextRoundMutation.isPending}>
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            {nextRoundMutation.isPending ? "Spawning..." : "Start Next Round"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Start Next Counseling Round?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This unfreezes editing allocations for district admins and spawns a new iterative sub-round for remaining seats and unallocated students.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => nextRoundMutation.mutate()}>Start Round</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" className="flex-1 max-w-[250px]" disabled={closeSessionMutation.isPending}>
+                            <Lock className="w-4 h-4 mr-2" />
+                            {closeSessionMutation.isPending ? "Closing..." : "Close Session permanently"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Close Academic Session</AlertDialogTitle>
+                            <AlertDialogDescription className="text-red-600 font-medium">
+                              WARNING: This is completely irreversible and closes out the academic session for the entire application.
+                              Are you completely done with admissions for this year?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction className="bg-destructive" onClick={() => closeSessionMutation.mutate()}>Permanently Close</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 ) : (
                   <>

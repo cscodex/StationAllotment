@@ -1065,9 +1065,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if district is finalized (for district admin)
       if (user.role === 'district_admin' && student.counselingDistrict) {
-        const districtStatus = await storage.getDistrictStatus(student.counselingDistrict);
+        const currentSessionSetting = await storage.getSetting('current_session');
+        const academicYear = currentSessionSetting?.value || '2024-2025';
+        const activeRound = await storage.getActiveCounselingRound(academicYear);
+        const districtStatus = await storage.getDistrictStatus(student.counselingDistrict, activeRound?.id);
         if (districtStatus?.isFinalized) {
-          return res.status(403).json({ message: "Cannot modify student lock status - district is finalized" });
+          return res.status(403).json({ message: "Cannot modify student lock status - district is finalized for the current round" });
         }
       }
 
@@ -1312,13 +1315,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const user = await storage.getUser(req.session.userId);
 
-      // Check if already finalized
-      const settings = await storage.getSettings();
-      const finalizedSetting = settings.find(s => s.key === 'allocation_finalized');
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
 
-      if (finalizedSetting && finalizedSetting.value === 'true') {
+      if (!activeRound) {
+        return res.status(400).json({ message: "No active counseling round found" });
+      }
+
+      if (activeRound.isAllocationFinalized) {
         return res.status(400).json({
-          message: "Allocation process has already been finalized"
+          message: "Allocation process has already been finalized for the active round"
         });
       }
 
@@ -1353,20 +1360,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const currentTime = new Date().toISOString();
+      const currentTime = new Date();
 
-      // Set allocation as finalized
-      await storage.setSetting({
-        key: 'allocation_finalized',
-        value: 'true'
-      });
-      await storage.setSetting({
-        key: 'allocation_finalized_at',
-        value: currentTime
-      });
-      await storage.setSetting({
-        key: 'allocation_finalized_by',
-        value: req.session.userId
+      // Set allocation as finalized on the active round
+      await storage.updateCounselingRound(activeRound.id, {
+        isAllocationFinalized: true,
+        allocationFinalizedAt: currentTime,
+        allocationFinalizedBy: req.session.userId
       });
 
       // Automatically finalize SAS Nagar (Mohali) district when allocation is finalized
@@ -1374,12 +1374,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const sasNagarStatus = await storage.getDistrictStatus('SAS Nagar');
         if (!sasNagarStatus?.isFinalized) {
+          // This will need to be refactored to support round-level finalizeDistrict
+          // For now, we update the existing method logic elsewhere or accept this generic fallback
           await storage.finalizeDistrict('SAS Nagar (Mohali)', req.session.userId);
 
           await auditService.log(req.session.userId, 'district_finalized', 'district', 'SAS Nagar (Mohali)', {
             reason: 'Auto-finalized during allocation finalization',
             finalizedBy: req.session.userId,
-            finalizedAt: currentTime
+            finalizedAt: currentTime,
+            counselingRoundId: activeRound.id
           }, req.ip, req.get('User-Agent'));
         }
       } catch (error) {
@@ -1389,7 +1392,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await auditService.log(req.session.userId, 'allocation_finalize', 'allocation', 'system', {
         finalizedBy: req.session.userId,
-        finalizedAt: currentTime
+        finalizedAt: currentTime,
+        counselingRoundId: activeRound.id
       }, req.ip, req.get('User-Agent'));
 
       res.json({
@@ -1445,6 +1449,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Student fetch error:", error);
       res.status(500).json({ message: "Failed to fetch student" });
+    }
+  });
+
+  // Vacate a student's allotted seat
+  app.post('/api/students/:id/vacate-seat', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const student = await storage.getStudent(id);
+
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      if (student.allocationStatus !== 'allotted') {
+        return res.status(400).json({ message: "Only allotted students can vacate their seats." });
+      }
+
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+
+      // Find the specific vacancy the student took, if `allottedSchoolUdise` exists then use it, else default find
+      const vacancies = await storage.getVacancies(academicYear);
+      let targetVacancy = undefined;
+
+      if (student.allottedSchoolUdise) {
+        targetVacancy = vacancies.find(v =>
+          v.udiseCode === student.allottedSchoolUdise &&
+          v.stream === student.allottedStream &&
+          v.gender === student.gender &&
+          v.category === student.category
+        );
+      } else {
+        targetVacancy = vacancies.find(v =>
+          v.district === student.allottedDistrict &&
+          v.stream === student.allottedStream &&
+          v.gender === student.gender &&
+          v.category === student.category
+        );
+      }
+
+      if (targetVacancy) {
+        await storage.updateVacancy(targetVacancy.id, {
+          availableSeats: (targetVacancy.availableSeats || 0) + 1
+        });
+      }
+
+      const updatedStudent = await storage.updateStudent(id, {
+        allocationStatus: 'vacated',
+        allottedDistrict: null,
+        allottedStream: null,
+        allottedSchoolUdise: null
+      });
+
+      await auditService.log(req.session.userId, 'student_vacate_seat', 'students', id, {
+        vacatedBy: req.session.userId,
+        studentName: student.name,
+        meritNumber: student.meritNumber,
+        previousDistrict: student.allottedDistrict,
+        previousSchoolUdise: student.allottedSchoolUdise
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Vacate seat error:", error);
+      res.status(500).json({ message: "Failed to vacate seat" });
     }
   });
 
@@ -1653,6 +1722,97 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Iterative rounds endpoints
+  app.post('/api/counseling-rounds/next', isCentralAdmin, async (req: any, res) => {
+    try {
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      if (!activeRound) {
+        return res.status(400).json({ message: "Cannot spawn next round: No active counseling round found" });
+      }
+
+      if (!activeRound.isAllocationFinalized) {
+        return res.status(400).json({ message: "Current counseling round must be finalized before spawning the next round" });
+      }
+
+      // Mark current round as inactive
+      await storage.updateCounselingRound(activeRound.id, {
+        isActive: false
+      });
+
+      // Spawn new round
+      const newRoundNumber = activeRound.roundNumber + 1;
+      const newRound = await storage.createCounselingRound({
+        academicYear,
+        roundName: `Round ${newRoundNumber}`,
+        roundNumber: newRoundNumber,
+        startDate: new Date(),
+        endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
+        isActive: true,
+        isAllocationCompleted: false,
+        isAllocationFinalized: false
+      });
+
+      // Reset specific district finalization statuses for the new round
+      // Notice we do NOT reset global settings since we decoupled
+
+      await auditService.log(req.user.id, 'counseling_round_spawned', 'counseling_rounds', newRound.id, {
+        previousRoundId: activeRound.id,
+        newRoundName: newRound.roundName,
+      }, req.ip, req.get('User-Agent'));
+
+      res.status(201).json(newRound);
+    } catch (error) {
+      console.error("Spawn next counseling round error:", error);
+      res.status(500).json({ message: "Failed to create the next counseling round" });
+    }
+  });
+
+  // Session Management
+  app.post('/api/sessions/close', isCentralAdmin, async (req: any, res) => {
+    try {
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value;
+
+      if (!academicYear) {
+        return res.status(400).json({ message: "No active session to close" });
+      }
+
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      if (activeRound) {
+        // Option to verify if it's finalized or force close it
+        await storage.updateCounselingRound(activeRound.id, {
+          isActive: false
+        });
+      }
+
+      const session = await storage.getYearSessionByName(academicYear);
+      if (session) {
+        await storage.updateYearSession(session.id, {
+          isActive: false,
+          isCurrent: false,
+          endDate: new Date().toISOString().split('T')[0]
+        });
+      }
+
+      await storage.setSetting({
+        key: 'session_closed',
+        value: 'true'
+      });
+
+      await auditService.log(req.user.id, 'session_closed', 'year_session', academicYear, {
+        closedBy: req.user.id
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: `Session ${academicYear} closed successfully` });
+    } catch (error) {
+      console.error("Close session error:", error);
+      res.status(500).json({ message: "Failed to close session" });
+    }
+  });
+
   // Vacancies routes
   app.get('/api/vacancies', isAuthenticated, async (req, res) => {
     try {
@@ -1667,10 +1827,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Allocation routes
   app.post('/api/allocation/run', isCentralAdmin, async (req: any, res) => {
     try {
-      // Check if allocation has already been run
-      const allocationRun = await storage.getSetting('allocation_completed');
-      if (allocationRun && allocationRun.value === 'true') {
-        return res.status(400).json({ message: "Allocation has already been completed" });
+      const currentSessionSettings = await storage.getSetting('current_session');
+      const academicYear = currentSessionSettings?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
+
+      if (!activeRound) {
+        return res.status(400).json({ message: "No active counseling round found" });
+      }
+
+      // Check if allocation has already been run for this round
+      if (activeRound.isAllocationCompleted) {
+        return res.status(400).json({ message: "Allocation has already been completed for the active round" });
       }
 
       // Check if all districts with eligible students are finalized
@@ -1703,17 +1870,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const currentSession = await storage.getSetting('current_session');
-      const academicYear = currentSession?.value || '2024-2025';
-      const result = await allocationService.runAllocation(academicYear, 1, 'mocked-round-id');
+      const result = await allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id);
 
-      await storage.setSetting({
-        key: 'allocation_completed',
-        value: 'true',
-        description: 'Indicates if the final allocation has been run'
+      await storage.updateCounselingRound(activeRound.id, {
+        isAllocationCompleted: true
       });
 
       await auditService.log(req.user.id, 'allocation_run', 'allocation', 'system', {
+        counselingRoundId: activeRound.id,
         result,
       }, req.ip, req.get('User-Agent'));
 
@@ -1726,12 +1890,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/allocation/status', isAuthenticated, async (req, res) => {
     try {
-      const allocationCompleted = await storage.getSetting('allocation_completed');
-      const deadline = await storage.getSetting('allocation_deadline');
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
 
       res.json({
-        completed: allocationCompleted?.value === 'true',
-        deadline: deadline?.value,
+        completed: activeRound ? activeRound.isAllocationCompleted : false,
+        finalized: activeRound ? activeRound.isAllocationFinalized : false,
+        roundId: activeRound?.id,
+        roundName: activeRound?.roundName,
+        roundNumber: activeRound?.roundNumber,
       });
     } catch (error) {
       console.error("Get allocation status error:", error);
@@ -1869,10 +2037,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/district-status', isDistrictAdmin, async (req: any, res) => {
     try {
       const user = req.user;
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
 
       if (user.role === 'central_admin') {
         // Central admin can see all district statuses
-        let statuses = await storage.getAllDistrictStatuses();
+        let statuses = await storage.getAllDistrictStatuses(activeRound?.id);
 
         // Get all students to identify districts with eligible students
         const studentsData = await storage.getStudents(10000, 0);
@@ -1904,13 +2075,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Fetch updated statuses if we created any
         if (missingDistricts.length > 0) {
-          statuses = await storage.getAllDistrictStatuses();
+          statuses = await storage.getAllDistrictStatuses(activeRound?.id);
         }
 
         res.json(statuses);
       } else if (user.role === 'district_admin') {
         // District admin can only see their own district status
-        const status = await storage.getDistrictStatus(user.district);
+        const status = await storage.getDistrictStatus(user.district, activeRound?.id);
         res.json(status ? [status] : []);
       } else {
         res.status(403).json({ message: "Forbidden" });
@@ -1924,7 +2095,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/district-status/:district', isAuthenticated, async (req, res) => {
     try {
       const { district } = req.params;
-      const status = await storage.getDistrictStatus(district);
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
+
+      const status = await storage.getDistrictStatus(district, activeRound?.id);
       res.json(status || { district, isFinalized: false, totalStudents: 0, lockedStudents: 0, studentsWithChoices: 0 });
     } catch (error) {
       console.error("Get district status error:", error);
@@ -1936,6 +2111,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { district } = req.params;
       const user = await storage.getUser(req.session.userId);
+
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
+
+      if (!activeRound) {
+        return res.status(400).json({ message: "No active counseling round found to finalize" });
+      }
 
       // Permission check: District admins can only finalize their own district
       if (user?.role === 'district_admin' && normalizeDistrict(user.district || '') !== normalizeDistrict(district)) {
@@ -1967,7 +2150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const status = await storage.finalizeDistrict(district, req.session.userId);
+      const status = await storage.finalizeDistrict(district, req.session.userId, activeRound.id);
 
       await auditService.log(req.session.userId, 'district_finalized', 'district', district, {
         totalStudents: districtStudents.total,

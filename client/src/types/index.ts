@@ -59,4 +59,5 @@ export interface DashboardStats {
   totalVacancies: number;
   pendingAllocations: number;
   completionRate: number;
+  vacatedSeats: number;
 }

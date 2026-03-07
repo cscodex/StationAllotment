@@ -54,6 +54,10 @@ export const counselingRounds = pgTable("counseling_rounds", {
   isActive: boolean("is_active").default(false),
   isCompleted: boolean("is_completed").default(false),
   isSuspended: boolean("is_suspended").default(false), // Whether subsequent rounds are suspended for this counseling
+  isAllocationCompleted: boolean("is_allocation_completed").default(false), // Whether allocation has been run
+  isAllocationFinalized: boolean("is_allocation_finalized").default(false), // Whether allocation has been finalized by admin
+  allocationFinalizedAt: timestamp("allocation_finalized_at"), // When allocation was finalized
+  allocationFinalizedBy: varchar("allocation_finalized_by").references(() => users.id), // Admin who finalized allocation
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -161,7 +165,8 @@ export const vacancies = pgTable("vacancies", {
 // District status table for tracking finalization
 export const districtStatus = pgTable("district_status", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  district: varchar("district").notNull().unique(),
+  district: varchar("district").notNull(),
+  counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id), // Bind to a specific round
   isFinalized: boolean("is_finalized").default(false),
   totalStudents: integer("total_students").default(0),
   lockedStudents: integer("locked_students").default(0),
@@ -170,7 +175,11 @@ export const districtStatus = pgTable("district_status", {
   finalizedAt: timestamp("finalized_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  unique().on(table.district, table.counselingRoundId), // A district is finalized per round
+  index("idx_district_status_district").on(table.district),
+  index("idx_district_status_counseling_round_id").on(table.counselingRoundId)
+]);
 
 // Settings table for system configuration
 export const settings = pgTable("settings", {

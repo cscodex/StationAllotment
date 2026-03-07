@@ -143,10 +143,10 @@ export interface IStorage {
   getFileUploadsByType(type: string): Promise<FileUpload[]>;
 
   // District status operations
-  getDistrictStatus(district: string): Promise<DistrictStatus | undefined>;
-  getAllDistrictStatuses(): Promise<DistrictStatus[]>;
+  getDistrictStatus(district: string, counselingRoundId?: string): Promise<DistrictStatus | undefined>;
+  getAllDistrictStatuses(counselingRoundId?: string): Promise<DistrictStatus[]>;
   createOrUpdateDistrictStatus(status: InsertDistrictStatus): Promise<DistrictStatus>;
-  finalizeDistrict(district: string, userId: string): Promise<DistrictStatus>;
+  finalizeDistrict(district: string, userId: string, counselingRoundId?: string): Promise<DistrictStatus>;
 
   // Student locking operations
   lockStudent(studentId: string, userId: string): Promise<Student>;
@@ -1194,6 +1194,7 @@ export class DatabaseStorage implements IStorage {
     totalVacancies: number;
     pendingAllocations: number;
     completionRate: number;
+    vacatedSeats: number;
   }> {
     // Get total students from entrance results (all students who took the entrance exam)
     const [entranceResultsCount] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
@@ -1209,6 +1210,9 @@ export class DatabaseStorage implements IStorage {
     const [notAllottedCount] = await db.select({ count: sql<number>`count(*)` })
       .from(students)
       .where(eq(students.allocationStatus, 'not_allotted'));
+    const [vacatedCount] = await db.select({ count: sql<number>`count(*)` })
+      .from(students)
+      .where(eq(students.allocationStatus, 'vacated'));
 
     const vacancyResults = await db.select({
       total: sql<number>`sum(total_seats)`
@@ -1226,27 +1230,40 @@ export class DatabaseStorage implements IStorage {
       totalVacancies,
       pendingAllocations, // Students without preferences + pending students
       completionRate: Math.round(completionRate * 10) / 10,
+      vacatedSeats: vacatedCount.count,
     };
   }
 
   // District status operations
-  async getDistrictStatus(district: string): Promise<DistrictStatus | undefined> {
-    const [status] = await db.select().from(districtStatus).where(eq(districtStatus.district, district));
+  async getDistrictStatus(district: string, counselingRoundId?: string): Promise<DistrictStatus | undefined> {
+    const conditions = [eq(districtStatus.district, district)];
+    if (counselingRoundId) {
+      conditions.push(eq(districtStatus.counselingRoundId, counselingRoundId));
+    }
+    const [status] = await db.select().from(districtStatus)
+      .where(and(...conditions))
+      .orderBy(desc(districtStatus.updatedAt)); // Get the most recent if counselingRoundId is not provided
     return status;
   }
 
-  async getAllDistrictStatuses(): Promise<DistrictStatus[]> {
-    return db.select().from(districtStatus).orderBy(asc(districtStatus.district));
+  async getAllDistrictStatuses(counselingRoundId?: string): Promise<DistrictStatus[]> {
+    if (counselingRoundId) {
+      return db.select().from(districtStatus)
+        .where(eq(districtStatus.counselingRoundId, counselingRoundId))
+        .orderBy(asc(districtStatus.district));
+    }
+    return db.select().from(districtStatus)
+      .orderBy(asc(districtStatus.district), desc(districtStatus.updatedAt));
   }
 
   async createOrUpdateDistrictStatus(status: InsertDistrictStatus): Promise<DistrictStatus> {
-    const existing = await this.getDistrictStatus(status.district);
+    const existing = await this.getDistrictStatus(status.district, status.counselingRoundId || undefined);
 
     if (existing) {
       const [updated] = await db
         .update(districtStatus)
         .set({ ...status, updatedAt: new Date() })
-        .where(eq(districtStatus.district, status.district))
+        .where(eq(districtStatus.id, existing.id))
         .returning();
       return updated;
     } else {
@@ -1258,7 +1275,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async finalizeDistrict(district: string, userId: string): Promise<DistrictStatus> {
+  async finalizeDistrict(district: string, userId: string, counselingRoundId?: string): Promise<DistrictStatus> {
     // Get current district student stats for the status record
     const districtStudents = await this.getStudentsByDistrict(district);
 
@@ -1273,6 +1290,7 @@ export class DatabaseStorage implements IStorage {
     // Create or update district status with finalization
     const statusData: InsertDistrictStatus = {
       district,
+      counselingRoundId: counselingRoundId || null,
       isFinalized: true,
       totalStudents: eligibleStudents.length, // Only count eligible students
       lockedStudents: lockedEligibleStudents,
