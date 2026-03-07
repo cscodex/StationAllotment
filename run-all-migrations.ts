@@ -154,6 +154,7 @@ async function runAllMigrations() {
     { name: "Change start_date to TIMESTAMP", file: "migrations/change_start_date_to_timestamp.sql", path: path.join(__dirname, "migrations", "change_start_date_to_timestamp.sql") },
     { name: "Add is_suspended to Counseling Rounds", file: "migrations/add_is_suspended_to_counseling_rounds.sql", path: path.join(__dirname, "migrations", "add_is_suspended_to_counseling_rounds.sql") },
     { name: "Add Year Session Table", file: "migrations/add_year_session.sql", path: path.join(__dirname, "migrations", "add_year_session.sql") },
+    { name: "Add Multi-Round Fields", file: "migrations/0000_add_multi_round_fields.sql", path: path.join(__dirname, "migrations", "0000_add_multi_round_fields.sql") },
   ];
 
   console.log("\n📋 Migration Plan:");
@@ -200,6 +201,7 @@ async function runAllMigrations() {
     console.log("   ✅ end_date made nullable (optional)");
     console.log("   ✅ start_date changed to TIMESTAMP (datetime support)");
     console.log("   ✅ is_suspended column added to counseling_rounds");
+    console.log("   ✅ Add Multi-Round fields and constraints");
     console.log("\n🎉 Your database is ready for production!");
 
   } catch (error: any) {
