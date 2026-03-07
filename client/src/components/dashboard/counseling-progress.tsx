@@ -1,6 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function CounselingProgress() {
     const { data: stats } = useQuery<any>({ queryKey: ["/api/dashboard/stats"] });
@@ -8,6 +12,31 @@ export default function CounselingProgress() {
     const { data: files } = useQuery<any[]>({ queryKey: ["/api/files"] });
     const { data: districtStatuses } = useQuery<any[]>({ queryKey: ["/api/district-status"] });
     const { data: studentsResponse } = useQuery<any>({ queryKey: ["/api/students"] });
+
+    const { user } = useAuth();
+    const { toast } = useToast();
+    const queryClient = useQueryClient();
+
+    const forceFinalizeMutation = useMutation({
+        mutationFn: async (district: string) => {
+            await apiRequest("POST", `/api/district-status/${district}/finalize`, {});
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+            toast({
+                title: "District Force Finalized",
+                description: "The district has been finalized successfully and remaining students locked.",
+            });
+        },
+        onError: (error: Error) => {
+            toast({
+                title: "Finalization Failed",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    });
 
     const students = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
     const lockedStudents = students.filter((s: any) => s.isLocked).length;
@@ -108,13 +137,24 @@ export default function CounselingProgress() {
                                     <div key={i} className="flex flex-col gap-1 text-sm bg-slate-50 p-3 rounded-md border">
                                         <div className="flex justify-between items-center">
                                             <span className="font-semibold text-xs truncate max-w-[120px]" title={d.district}>{d.district}</span>
-                                            <div className="flex gap-2 text-xs">
+                                            <div className="flex gap-2 text-xs items-center">
                                                 <span className="text-muted-foreground" title="Students with choices filled / Total">
                                                     Choices: {d.studentsWithChoices}/{d.totalStudents}
                                                 </span>
                                                 <span className={`${d.isFinalized ? 'text-green-600 font-bold' : 'text-orange-500'}`}>
                                                     {d.isFinalized ? 'Final' : 'Pending'}
                                                 </span>
+                                                {!d.isFinalized && user?.role === 'central_admin' && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-6 text-[10px] px-2 ml-1"
+                                                        onClick={() => forceFinalizeMutation.mutate(d.district)}
+                                                        disabled={forceFinalizeMutation.isPending}
+                                                    >
+                                                        Force
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">

@@ -1938,14 +1938,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.session.userId);
 
       // Permission check: District admins can only finalize their own district
-      // Central admin can finalize SAS Nagar/Mohali district (which they manage directly)
       if (user?.role === 'district_admin' && normalizeDistrict(user.district || '') !== normalizeDistrict(district)) {
         return res.status(403).json({ message: "Can only finalize your own district" });
-      }
-
-      // Central admin can only finalize SAS Nagar/Mohali district
-      if (user?.role === 'central_admin' && normalizeDistrict(district) !== 'SAS Nagar (Mohali)') {
-        return res.status(403).json({ message: "Central admin can only finalize SAS Nagar (Mohali) district" });
       }
 
       // Check if all eligible students in district are locked
@@ -1959,11 +1953,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const unlockedEligibleStudents = eligibleStudents.filter(s => !s.isLocked);
 
       if (unlockedEligibleStudents.length > 0) {
-        return res.status(400).json({
-          message: `Cannot finalize district: ${unlockedEligibleStudents.length} eligible students are not locked. All students with district admin assignments and preferences must be locked before finalization.`,
-          unlockedCount: unlockedEligibleStudents.length,
-          eligibleTotal: eligibleStudents.length
-        });
+        if (user?.role === 'central_admin') {
+          // Central Admin override: Auto-lock remaining unlocked eligible students
+          for (const s of unlockedEligibleStudents) {
+            await storage.updateStudent(s.id, { isLocked: true });
+          }
+        } else {
+          return res.status(400).json({
+            message: `Cannot finalize district: ${unlockedEligibleStudents.length} eligible students are not locked. All students with district admin assignments and preferences must be locked before finalization.`,
+            unlockedCount: unlockedEligibleStudents.length,
+            eligibleTotal: eligibleStudents.length
+          });
+        }
       }
 
       const status = await storage.finalizeDistrict(district, req.session.userId);
