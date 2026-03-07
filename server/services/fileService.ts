@@ -1057,7 +1057,11 @@ export class FileService {
       // Handle UDISE code - preserve leading zeros by treating as string
       let rawUdiseCode = row['UDISE Code'] || row.udiseCode || row.UDISECode || row['UDISE_Code'] || '';
       const schoolName = String(row['School Name'] || row.schoolName || row.SchoolName || row['School_Name'] || '').trim();
-      const district = String(row.District || row.district || '').trim();
+      let district = String(row.District || row.district || '').trim();
+
+      if (district === 'SAS Nagar' || district === 'Mohali') {
+        district = 'SAS Nagar (Mohali)';
+      }
 
       // Normalize UDISE code: pad to 11 digits if it's numeric
       let udiseCode: string | null = null;
