@@ -245,11 +245,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Username is required" });
       }
 
-      // Only allow demo login in development
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ message: "Demo login not available in production" });
-      }
-
       // Check if demo credentials are available
       if (!cachedCredentials) {
         return res.status(500).json({ message: "Demo credentials not available" });
@@ -318,11 +313,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get available demo users
   app.get('/api/auth/demo-users', async (req, res) => {
     try {
-      // Only allow in development
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ message: "Demo users not available in production" });
-      }
-
       // Check if demo credentials are available
       if (!cachedCredentials) {
         return res.json([]); // Return empty array if no credentials available
