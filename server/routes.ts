@@ -1824,16 +1824,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Allocation routes
-  app.post('/api/allocation/run', isCentralAdmin, async (req: any, res) => {
+  // Counseling Rounds API
+  app.get('/api/counseling-rounds', isAuthenticated, async (req: any, res) => {
     try {
-      const currentSessionSettings = await storage.getSetting('current_session');
-      const academicYear = currentSessionSettings?.value || '2024-2025';
-      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      const { academicYear } = req.query;
+      const rounds = await storage.getCounselingRounds(academicYear as string);
+      res.json(rounds);
+    } catch (error) {
+      console.error("Fetch counseling rounds error:", error);
+      res.status(500).json({ message: "Failed to fetch rounds" });
+    }
+  });
 
-      if (!activeRound) {
+  app.get('/api/counseling-rounds/:id/prerequisites', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      if (!round) return res.status(404).json({ message: "Round not found" });
+
+      const vacancies = await storage.getVacancies(round.academicYear, round.roundName || '');
+      const results = await storage.getStudentsEntranceResultsByRound(round.academicYear, round.roundName || '');
+      const pendingStudents = await storage.getStudentsByStatus('pending', round.academicYear);
+      const notAllottedStudents = await storage.getStudentsByStatus('not_allotted', round.academicYear);
+      const studentsWithChoicesCount = pendingStudents.length + notAllottedStudents.length;
+      const hasStudentChoices = studentsWithChoicesCount > 0;
+
+      res.json({
+        hasVacancyData: vacancies.length > 0,
+        vacancyCount: vacancies.length,
+        totalAvailableSeats: vacancies.reduce((acc, v) => acc + (v.availableSeats || 0), 0),
+        hasEntranceResults: results.length > 0,
+        entranceResultsCount: results.length,
+        hasStudentChoices,
+        studentsWithChoicesCount,
+        allPrerequisitesMet: vacancies.length > 0 && results.length > 0 && hasStudentChoices
+      });
+    } catch (error) {
+      console.error("Prerequisites error:", error);
+      res.status(500).json({ message: "Failed to check prerequisites" });
+    }
+  });
+
+  app.put('/api/counseling-rounds/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { startDate, endDate, isActive, isSuspended } = req.body;
+      const updates: any = {};
+      if (startDate !== undefined) updates.startDate = startDate ? new Date(startDate) : null;
+      if (endDate !== undefined) updates.endDate = endDate ? new Date(endDate) : null;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (isSuspended !== undefined) updates.isSuspended = isSuspended;
+
+      const round = await storage.updateCounselingRound(id, updates);
+      res.json(round);
+    } catch (error) {
+      console.error("Update round error:", error);
+      res.status(500).json({ message: "Failed to update round" });
+    }
+  });
+
+  app.delete('/api/counseling-rounds/:id', isCentralAdmin, async (req: any, res) => {
+    try {
+      await storage.deleteCounselingRound(req.params.id);
+      res.json({ message: "Success" });
+    } catch (error) {
+      console.error("Delete round error:", error);
+      res.status(500).json({ message: "Failed to delete round" });
+    }
+  });
+
+  app.post('/api/counseling-titles', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { academicYear, roundName } = req.body;
+      if (!academicYear || !roundName) return res.status(400).json({ message: "Year and Title required" });
+
+      const newRound = await storage.createCounselingRound({
+        academicYear,
+        roundName,
+        roundNumber: 1,
+        startDate: new Date(),
+        isActive: false,
+        isCompleted: false,
+        isAllocationCompleted: false,
+        isAllocationFinalized: false
+      });
+      res.status(201).json({ message: "Counseling title created successfully", round: newRound });
+    } catch (error: any) {
+      console.error("Create title error:", error);
+      res.status(500).json({ message: error.message || "Failed to create title" });
+    }
+  });
+
+  app.post('/api/counseling-titles/:academicYear/:roundName/suspend', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { academicYear, roundName } = req.params;
+      const { suspend } = req.body;
+      const rounds = await storage.toggleSuspendCounseling(academicYear, roundName, suspend);
+      res.json({ message: "Success", rounds, suspend });
+    } catch (error) {
+      console.error("Suspend error:", error);
+      res.status(500).json({ message: "Failed to suspend" });
+    }
+  });
+
+  // Allocation routes
+  app.post('/api/counseling-rounds/:id/run-allocation', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const activeRound = await storage.getCounselingRound(id);
+
+      if (!activeRound || !activeRound.isActive) {
         return res.status(400).json({ message: "No active counseling round found" });
       }
+      const academicYear = activeRound.academicYear;
 
       // Check if allocation has already been run for this round
       if (activeRound.isAllocationCompleted) {

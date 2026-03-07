@@ -66,6 +66,7 @@ export interface IStorage {
   getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined>;
   getStudentsEntranceResultByMeritNumber(meritNumber: number): Promise<StudentsEntranceResult | undefined>;
   getStudentsEntranceResultsCount(): Promise<number>;
+  getStudentsEntranceResultsByRound(academicYear: string, roundName: string): Promise<StudentsEntranceResult[]>;
   searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]>;
   createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult>;
   bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[], onProgress?: (processed: number, total: number) => void): Promise<StudentsEntranceResult[]>;
@@ -376,7 +377,18 @@ export class DatabaseStorage implements IStorage {
 
   async getStudentsEntranceResultsCount(): Promise<number> {
     const [result] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
-    return result.count;
+    return Number(result.count);
+  }
+
+  async getStudentsEntranceResultsByRound(academicYear: string, roundName: string): Promise<StudentsEntranceResult[]> {
+    return db.select().from(studentsEntranceResult)
+      .where(
+        and(
+          eq(studentsEntranceResult.academicYear, academicYear),
+          eq(studentsEntranceResult.roundName, roundName)
+        )
+      )
+      .orderBy(asc(studentsEntranceResult.meritNo));
   }
 
   async searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]> {

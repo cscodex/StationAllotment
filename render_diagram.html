@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Station Allotment ER Diagram</title>
+    <!-- Include Mermaid.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Database Schema Architecture</h1>
+        <div class="mermaid">
+erDiagram
+    %% Core Entities
+    users {
+        varchar id PK
+        varchar username
+        varchar email
+        text password
+        varchar role "central_admin | district_admin"
+        varchar district
+        varchar first_name
+        boolean is_blocked
+    }
+
+    year_session {
+        varchar id PK
+        varchar session_name UK
+        date start_date
+        date end_date
+        boolean is_current
+        boolean is_active
+        varchar created_by FK
+    }
+
+    counseling_rounds {
+        varchar id PK
+        varchar academic_year
+        integer round_number
+        varchar round_name
+        timestamp start_date
+        date end_date
+        boolean is_active
+        boolean is_completed
+        boolean is_allocation_completed
+        boolean is_allocation_finalized
+        varchar allocation_finalized_by FK
+    }
+
+    schools {
+        varchar udise_code PK
+        varchar school_name UK
+        varchar district
+    }
+
+    students {
+        varchar id PK
+        varchar academic_year
+        varchar app_no UK
+        integer merit_number UK
+        varchar name
+        varchar gender
+        varchar category
+        varchar stream
+        varchar choice1
+        varchar choice2
+        varchar choice10
+        varchar counseling_district
+        varchar allotted_district
+        varchar allotted_stream
+        varchar allotted_school_udise FK
+        varchar counseling_round_id FK
+        varchar allocation_status "pending | allotted | vacated"
+        boolean is_locked
+        boolean is_released
+    }
+
+    vacancies {
+        varchar id PK
+        varchar academic_year
+        varchar round_name
+        varchar udise_code FK
+        varchar district
+        varchar stream
+        varchar gender
+        varchar category
+        integer total_seats
+        integer available_seats
+    }
+
+    students_entrance_result {
+        varchar id PK
+        varchar academic_year
+        varchar round_name
+        integer merit_no UK
+        varchar application_no UK
+        varchar roll_no UK
+        varchar student_name
+        integer marks
+        varchar gender
+        varchar category
+        varchar stream
+    }
+
+    district_status {
+        varchar id PK
+        varchar district
+        varchar counseling_round_id FK
+        boolean is_finalized
+        varchar finalized_by FK
+    }
+
+    file_uploads {
+        varchar id PK
+        varchar filename
+        varchar type
+        varchar academic_year
+        varchar counseling_round_id FK
+        varchar uploaded_by FK
+        varchar status
+    }
+
+    audit_logs {
+        varchar id PK
+        varchar user_id FK
+        varchar action
+        varchar resource
+        varchar resource_id
+    }
+
+    unlock_requests {
+        varchar id PK
+        varchar student_id FK
+        varchar requested_by FK
+        varchar status
+        varchar reviewed_by FK
+    }
+
+    %% Relationships
+    users ||--o{ year_session : "creates"
+    users ||--o{ district_status : "finalizes"
+    users ||--o{ audit_logs : "generates"
+    users ||--o{ file_uploads : "uploads"
+    users ||--o{ counseling_rounds : "finalizes_allocations"
+    users ||--o{ unlock_requests : "requests / reviews"
+
+    schools ||--o{ students : "hosts_allotted_students"
+    schools ||--o{ vacancies : "has_open_seats"
+
+    counseling_rounds ||--o{ students : "allocates_in_round"
+    counseling_rounds ||--o{ district_status : "tracks_district_state"
+    counseling_rounds ||--o{ file_uploads : "receives_files_during"
+
+    students ||--o{ unlock_requests : "requires"
+        </div>
+    </div>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+</body>
+</html>
