@@ -2475,6 +2475,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Year Sessions routes
+  app.get('/api/year-sessions', isAuthenticated, async (req, res) => {
+    try {
+      const sessions = await storage.getYearSessions();
+      res.json(sessions);
+    } catch (error) {
+      console.error("Get year sessions error:", error);
+      res.status(500).json({ message: "Failed to fetch year sessions" });
+    }
+  });
+
+  app.post('/api/year-sessions', isCentralAdmin, async (req, res) => {
+    try {
+      const { startDate } = req.body;
+      if (!startDate) {
+        return res.status(400).json({ message: "Start date is required" });
+      }
+
+      const date = new Date(startDate);
+      const month = date.getMonth();
+      const year = date.getFullYear();
+      let sessionName = "";
+      if (month >= 3) {
+        sessionName = `${year}-${year + 1}`;
+      } else {
+        sessionName = `${year - 1}-${year}`;
+      }
+
+      const endDate = new Date(year + (month >= 3 ? 1 : 0), 2, 31).toISOString(); // March 31 of next year
+
+      const session = await storage.createYearSession({
+        sessionName,
+        startDate: new Date(startDate).toISOString(),
+        endDate,
+        isCurrent: false,
+        isActive: true,
+      });
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Create year session error:", error);
+      res.status(500).json({ message: "Failed to create year session" });
+    }
+  });
+
+  app.put('/api/year-sessions/:id/set-current', isCentralAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const session = await storage.setCurrentYearSession(id);
+
+      // Keep the legacy setting in sync
+      await storage.setSetting({
+        key: 'current_session',
+        value: session.sessionName,
+        description: 'Current Academic Year'
+      });
+
+      res.json(session);
+    } catch (error) {
+      console.error("Set current session error:", error);
+      res.status(500).json({ message: "Failed to set current session" });
+    }
+  });
+
+  app.put('/api/year-sessions/:id', isCentralAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive } = req.body;
+      const session = await storage.updateYearSession(id, { isActive });
+      res.json(session);
+    } catch (error) {
+      console.error("Update year session error:", error);
+      res.status(500).json({ message: "Failed to update year session" });
+    }
+  });
+
   // Settings routes
   app.get('/api/settings', isAuthenticated, async (req, res) => {
     try {
