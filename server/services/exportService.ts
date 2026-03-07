@@ -557,13 +557,25 @@ export class ExportService {
         description: "Generate and export allocation results (PDF/CSV)",
         status: allocationCompleted ? "ready" : "pending",
         color: allocationCompleted ? "#3b82f6" : "#6b7280"
+      },
+      {
+        title: "9. Multi-Round Counseling",
+        description: "Manage vacated seats and spawn next iteration rounds",
+        status: allocationCompleted ? "ready" : "pending",
+        color: allocationCompleted ? "#3b82f6" : "#6b7280"
+      },
+      {
+        title: "10. Session Closing",
+        description: "Permanently close and archive the academic session",
+        status: "pending",
+        color: "#6b7280"
       }
     ];
 
-    let currentY = 180;
-    const stepHeight = 80;
+    let currentY = 150;
+    const stepHeight = 62;
     const boxWidth = 400;
-    const boxHeight = 60;
+    const boxHeight = 45;
     const centerX = (doc.page.width - boxWidth) / 2;
 
     steps.forEach((step, index) => {
@@ -571,17 +583,17 @@ export class ExportService {
       doc.rect(centerX, currentY, boxWidth, boxHeight).fillAndStroke(step.color, '#d1d5db');
 
       // Step title
-      doc.fontSize(14).fillColor('#ffffff').text(step.title, centerX + 20, currentY + 10, { width: boxWidth - 40 });
+      doc.fontSize(12).fillColor('#ffffff').text(step.title, centerX + 15, currentY + 8, { width: boxWidth - 30 });
 
       // Step description  
-      doc.fontSize(10).fillColor('#ffffff').text(step.description, centerX + 20, currentY + 30, { width: boxWidth - 40 });
+      doc.fontSize(9).fillColor('#ffffff').text(step.description, centerX + 15, currentY + 23, { width: boxWidth - 30 });
 
       // Status badge
       const badgeText = step.status.toUpperCase();
-      const badgeWidth = 80;
+      const badgeWidth = 70;
       const badgeX = centerX + boxWidth - badgeWidth - 10;
-      doc.rect(badgeX, currentY + 45, badgeWidth, 12).fillAndStroke('#ffffff', '#ffffff');
-      doc.fontSize(8).fillColor(step.color).text(badgeText, badgeX + 5, currentY + 47);
+      doc.rect(badgeX, currentY + 30, badgeWidth, 10).fillAndStroke('#ffffff', '#ffffff');
+      doc.fontSize(7).fillColor(step.color).text(badgeText, badgeX + 4, currentY + 31);
 
       // Draw arrow to next step (except for last step)
       if (index < steps.length - 1) {
@@ -615,6 +627,7 @@ export class ExportService {
       `Finalized Districts: ${districtStatuses.filter(d => d.isFinalized).length}`,
       `Total Students: ${totalStudents}`,
       `Locked Students: ${lockedStudents}`,
+      `Vacated Seats: ${students.filter(s => s.allocationStatus === 'vacated').length}`,
       `Allocation Finalized: ${allocationFinalized ? 'Yes' : 'No'}`,
       `Allocation Completed: ${allocationCompleted ? 'Yes' : 'No'}`
     ];
