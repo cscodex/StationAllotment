@@ -12,6 +12,7 @@ import { FileService } from "./services/fileService";
 import { AllocationService } from "./services/allocationService";
 import { ExportService } from "./services/exportService";
 import { AuditService } from "./services/auditService";
+import { omrService } from "./omrService";
 import fs from "fs/promises";
 
 // Cache for demo credentials (only load once at startup in development)
@@ -1408,6 +1409,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Fetch student endpoint
+  app.post('/api/students/bulk-omr-form', isAuthenticated, async (req, res) => {
+    try {
+      const { studentIds } = req.body;
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "No students provided for bulk generation" });
+      }
+
+      const pdfBytes = await omrService.generateBulkOMRForms(studentIds);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="bulk_omr_forms_${Date.now()}.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (error: any) {
+      console.error("Bulk OMR Generation error:", error);
+      res.status(500).json({ message: error.message || "Failed to generate bulk OMR forms" });
+    }
+  });
+
+  app.get('/api/students/:id/omr-form', isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const pdfBytes = await omrService.generateStudentOMRForm(id);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="student_${id}_omr_form.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (error: any) {
+      console.error("OMR Generation error:", error);
+      res.status(error.message === 'Student not found' ? 404 : 500)
+        .json({ message: error.message || "Failed to generate OMR form" });
+    }
+  });
+
   app.put('/api/students/:id/fetch', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;

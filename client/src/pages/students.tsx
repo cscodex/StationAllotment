@@ -12,7 +12,8 @@ import { DataPagination } from "@/components/ui/data-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
-import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -29,41 +30,111 @@ export default function Students() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [editingEntranceResult, setEditingEntranceResult] = useState<string | null>(null);
   const [editingStream, setEditingStream] = useState<string>("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const isDistrictAdmin = user?.role === 'district_admin';
   const isCentralAdmin = user?.role === 'central_admin';
 
   // Fetch entrance results for central admin first tab or district admin
-  const { data: entranceResultsData, isLoading: isLoadingEntrance } = useQuery<{students: StudentsEntranceResult[], total: number}>({
+  const { data: entranceResultsData, isLoading: isLoadingEntrance } = useQuery<{ students: StudentsEntranceResult[], total: number }>({
     queryKey: ["/api/students-entrance-results", { limit, offset: page * limit }],
     enabled: isDistrictAdmin || isCentralAdmin,
   });
 
   // Fetch student records for central admin second tab (with year/round filtering)
-  const { data: studentsData, isLoading: isLoadingStudents } = useQuery<{students: Student[], total: number}>({
+  const { data: studentsData, isLoading: isLoadingStudents } = useQuery<{ students: Student[], total: number }>({
     queryKey: ["/api/students", { limit, offset: page * limit, academicYear, roundNumber }],
     enabled: isCentralAdmin,
   });
 
   const filteredEntranceResults = entranceResultsData?.students?.filter((entranceResult: StudentsEntranceResult) => {
     return entranceResult.studentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           entranceResult.meritNo.toString().includes(searchTerm) ||
-           entranceResult.applicationNo?.includes(searchTerm) ||
-           entranceResult.rollNo?.includes(searchTerm);
+      entranceResult.meritNo.toString().includes(searchTerm) ||
+      entranceResult.applicationNo?.includes(searchTerm) ||
+      entranceResult.rollNo?.includes(searchTerm);
   }) || [];
 
   const filteredStudents = studentsData?.students?.filter((student: Student) => {
     return student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           student.meritNumber.toString().includes(searchTerm) ||
-           student.appNo?.includes(searchTerm);
+      student.meritNumber.toString().includes(searchTerm) ||
+      student.appNo?.includes(searchTerm);
   }) || [];
 
   const handleViewStudent = (student: StudentsEntranceResult | Student) => {
     setSelectedStudent(student);
     setIsViewDialogOpen(true);
+  };
+
+  const handleDownloadOMR = async (student: Student) => {
+    try {
+      const response = await fetch(`/api/students/${student.id}/omr-form`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        }
+      });
+      if (!response.ok) throw new Error("Failed to generate OMR form");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${student.appNo}_OMR_Form.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "OMR form generated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not download OMR form",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBulkDownloadOMR = async () => {
+    if (selectedStudentIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/students/bulk-omr-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ studentIds: selectedStudentIds })
+      });
+      if (!response.ok) throw new Error("Failed to generate bulk OMR forms");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk_omr_forms_${new Date().getTime()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: `Successfully generated OMR forms for ${selectedStudentIds.length} students`,
+      });
+      setSelectedStudentIds([]); // Clear selection after successful download
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not download bulk OMR forms",
+        variant: "destructive",
+      });
+    }
   };
 
   // Update entrance result mutation
@@ -230,9 +301,9 @@ export default function Students() {
                           </Button>
                         </>
                       ) : (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleViewStudent(entranceResult)}
                           data-testid={`button-view-${entranceResult.meritNo}`}
                         >
@@ -255,113 +326,164 @@ export default function Students() {
     </div>
   );
 
-  const StudentRecordsTable = ({ students, isLoading }: { students: Student[], isLoading: boolean }) => (
-    <div className="space-y-4">
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, merit number, or application number..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-students"
-          />
+  const StudentRecordsTable = ({ students, isLoading }: { students: Student[], isLoading: boolean }) => {
+    const isAllSelected = students.length > 0 && selectedStudentIds.length === students.length;
+    const isSomeSelected = selectedStudentIds.length > 0 && selectedStudentIds.length < students.length;
+
+    const handleSelectAll = (checked: boolean) => {
+      if (checked) {
+        setSelectedStudentIds(students.map(s => s.id));
+      } else {
+        setSelectedStudentIds([]);
+      }
+    };
+
+    const handleSelectStudent = (studentId: string, checked: boolean) => {
+      setSelectedStudentIds(prev =>
+        checked ? [...prev, studentId] : prev.filter(id => id !== studentId)
+      );
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2 justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, merit number, or application number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-students"
+            />
+          </div>
+          {selectedStudentIds.length > 0 && (
+            <Button onClick={handleBulkDownloadOMR} className="flex items-center gap-2">
+              <DownloadCloud className="w-4 h-4" />
+              Download OMRs ({selectedStudentIds.length})
+            </Button>
+          )}
         </div>
-      </div>
-      {isLoading ? (
-        <div className="flex items-center justify-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>App No.</TableHead>
-                <TableHead>Merit No.</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Gender</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Stream</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Locked Status</TableHead>
-                <TableHead>Allotted District</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {students.map((student: Student) => (
-                <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
-                  <TableCell className="font-mono text-sm">{student.appNo}</TableCell>
-                  <TableCell className="font-medium">{student.meritNumber}</TableCell>
-                  <TableCell>{student.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={student.gender === 'Male' ? 'default' : student.gender === 'Female' ? 'secondary' : 'outline'}>
-                      {student.gender}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={student.category === 'Open' ? 'default' : 'secondary'}>
-                      {student.category}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>
-                      {student.stream}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
-                  <TableCell>
-                    {student.isLocked ? (
-                      <div className="flex items-center space-x-1">
-                        <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200">
-                          <Clock className="w-3 h-3 mr-1" />
-                          Locked
-                        </Badge>
-                        {student.lockedAt && (
-                          <div className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(student.lockedAt), { addSuffix: true })}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">Unlocked</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {student.allottedDistrict ? (
-                      <Badge className="bg-green-100 text-green-800">{student.allottedDistrict}</Badge>
-                    ) : '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => handleViewStudent(student)}
-                      data-testid={`button-view-${student.meritNumber}`}
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
+        {isLoading ? (
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={isAllSelected || (isSomeSelected ? "indeterminate" : false)}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <TableHead>App No.</TableHead>
+                  <TableHead>Merit No.</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Gender</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Stream</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Locked Status</TableHead>
+                  <TableHead>Allotted District</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {students.length === 0 && !isLoading && (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">No student records found matching your search.</p>
-        </div>
-      )}
-    </div>
-  );
+              </TableHeader>
+              <TableBody>
+                {students.map((student: Student) => (
+                  <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedStudentIds.includes(student.id)}
+                        onCheckedChange={(checked) => handleSelectStudent(student.id, checked as boolean)}
+                        aria-label={`Select student ${student.name}`}
+                      />
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">{student.appNo}</TableCell>
+                    <TableCell className="font-medium">{student.meritNumber}</TableCell>
+                    <TableCell>{student.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={student.gender === 'Male' ? 'default' : student.gender === 'Female' ? 'secondary' : 'outline'}>
+                        {student.gender}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={student.category === 'Open' ? 'default' : 'secondary'}>
+                        {student.category}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>
+                        {student.stream}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(student.allocationStatus || 'pending')}</TableCell>
+                    <TableCell>
+                      {student.isLocked ? (
+                        <div className="flex items-center space-x-1">
+                          <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Locked
+                          </Badge>
+                          {student.lockedAt && (
+                            <div className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(student.lockedAt), { addSuffix: true })}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground">Unlocked</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {student.allottedDistrict ? (
+                        <Badge className="bg-green-100 text-green-800">{student.allottedDistrict}</Badge>
+                      ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewStudent(student)}
+                          data-testid={`button-view-${student.meritNumber}`}
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadOMR(student)}
+                          data-testid={`button-download-omr-${student.meritNumber}`}
+                          title="Download OMR Sheet"
+                        >
+                          <FileText className="w-4 h-4 text-blue-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {students.length === 0 && !isLoading && (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">No student records found matching your search.</p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header 
-        title="Students" 
+      <Header
+        title="Students"
         breadcrumbs={[
           { name: "Home" },
           { name: "Students" }
@@ -465,12 +587,12 @@ export default function Students() {
             </CardContent>
           </Card>
         )}
-        
+
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
-                {'studentName' in (selectedStudent || {}) 
+                {'studentName' in (selectedStudent || {})
                   ? `Entrance Result - ${(selectedStudent as StudentsEntranceResult).studentName}`
                   : `Student Record - ${(selectedStudent as Student)?.name}`
                 }
@@ -572,7 +694,7 @@ export default function Students() {
                     <div className="col-span-2">
                       <label className="font-medium">District Choices</label>
                       <div className="grid grid-cols-5 gap-2 mt-2">
-                        {[1,2,3,4,5,6,7,8,9,10].map(i => {
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => {
                           const choice = (selectedStudent as Student)[`choice${i}` as keyof Student] as string;
                           return choice ? (
                             <div key={i} className="text-sm">
