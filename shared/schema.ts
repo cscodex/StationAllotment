@@ -204,6 +204,15 @@ export const auditLogs = pgTable("audit_logs", {
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
+// App documents table for storing system PDFs/Images in Neon (like flow diagram)
+export const appDocuments = pgTable("app_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name").notNull().unique(), // e.g. "counseling_flow_diagram.pdf"
+  mimeType: varchar("mime_type").notNull().default('application/pdf'),
+  dataBase64: text("data_base64").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // File uploads table
 export const fileUploads = pgTable("file_uploads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -402,6 +411,8 @@ export type CounselingRound = typeof counselingRounds.$inferSelect;
 export type InsertCounselingRound = z.infer<typeof insertCounselingRoundSchema>;
 export type YearSession = typeof yearSession.$inferSelect;
 export type InsertYearSession = z.infer<typeof insertYearSessionSchema>;
+export type AppDocument = typeof appDocuments.$inferSelect;
+export type InsertAppDocument = typeof appDocuments.$inferInsert;
 
 // Constants - All 23 districts of Punjab (Counseling Districts)
 export const DISTRICTS = [

@@ -144,6 +144,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendFile(path.resolve(process.cwd(), "counseling_flow_diagram.drawio"));
   });
 
+  // GET endpoint to serve app documents like Flow Diagram from DB
+  app.get('/api/documents/:name', async (req, res) => {
+    try {
+      const doc = await storage.getAppDocument(req.params.name);
+      if (!doc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      const pdfBuffer = Buffer.from(doc.dataBase64, 'base64');
+      res.setHeader('Content-Type', doc.mimeType);
+
+      // Inline ensures it renders in the UI iframe rather than forcing a disk download
+      res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error serving document:", error);
+      res.status(500).json({ message: "Failed to serve document" });
+    }
+  });
+
   // Upload endpoint for PDF-based Flow Diagram
   app.post('/api/upload-diagram', isCentralAdmin, upload.single('diagram'), async (req, res) => {
     try {
@@ -151,17 +171,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No diagram file uploaded" });
       }
 
-      const targetPath = path.resolve(process.cwd(), "client/public/counseling_flow_diagram.pdf");
       const tempPath = req.file.path;
 
-      const targetDir = path.dirname(targetPath);
-      await fs.mkdir(targetDir, { recursive: true });
+      // Read the raw binary from multer, convert to Base64, and throw to Neon
+      const fileBuffer = await fs.readFile(tempPath);
+      const base64Data = fileBuffer.toString('base64');
 
-      // Move using fs module to persist the uploaded file
-      await fs.copyFile(tempPath, targetPath);
+      await storage.saveAppDocument({
+        name: 'counseling_flow_diagram.pdf',
+        mimeType: 'application/pdf',
+        dataBase64: base64Data
+      });
+
+      // Cleanup local temp file entirely
       await fs.unlink(tempPath);
 
-      res.json({ message: "Diagram PDF uploaded successfully" });
+      res.json({ message: "Diagram PDF uploaded to database successfully" });
     } catch (error) {
       console.error("Error uploading diagram:", error);
       res.status(500).json({ message: "Failed to upload diagram" });

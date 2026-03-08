@@ -35,8 +35,11 @@ import {
   type InsertUnlockRequest,
   type YearSession,
   type InsertYearSession,
+  type AppDocument,
+  type InsertAppDocument,
 } from "@shared/schema";
 import { db } from "./db";
+import { appDocuments } from "@shared/schema";
 import { eq, desc, and, asc, sql, or, ilike, isNull } from "drizzle-orm";
 
 export interface IStorage {
@@ -142,6 +145,10 @@ export interface IStorage {
   getFileUploads(limit?: number): Promise<FileUpload[]>;
   updateFileUpload(id: string, fileUpload: Partial<InsertFileUpload>): Promise<FileUpload>;
   getFileUploadsByType(type: string): Promise<FileUpload[]>;
+
+  // App Document operations (for PDFs like counseling flow)
+  getAppDocument(name: string): Promise<AppDocument | undefined>;
+  saveAppDocument(doc: InsertAppDocument): Promise<AppDocument>;
 
   // District status operations
   getDistrictStatus(district: string, counselingRoundId?: string): Promise<DistrictStatus | undefined>;
@@ -1631,6 +1638,28 @@ export class DatabaseStorage implements IStorage {
       .where(eq(yearSession.id, id))
       .returning();
     return updated;
+  }
+
+  // App Document operations
+  async getAppDocument(name: string): Promise<AppDocument | undefined> {
+    const [doc] = await db.select().from(appDocuments)
+      .where(eq(appDocuments.name, name));
+    return doc;
+  }
+
+  async saveAppDocument(doc: InsertAppDocument): Promise<AppDocument> {
+    const existing = await this.getAppDocument(doc.name);
+    if (existing) {
+      const [updated] = await db.update(appDocuments)
+        .set({ ...doc, updatedAt: new Date() })
+        .where(eq(appDocuments.name, doc.name))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(appDocuments)
+      .values(doc)
+      .returning();
+    return created;
   }
 }
 

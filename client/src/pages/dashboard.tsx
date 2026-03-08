@@ -114,7 +114,7 @@ export default function Dashboard() {
                     </Button>
                   </div>
                   <object
-                    data={`/counseling_flow_diagram.pdf?v=${Date.now()}#toolbar=0&navpanes=0&scrollbar=0`}
+                    data={`/api/documents/counseling_flow_diagram.pdf?v=${Date.now()}#toolbar=0&navpanes=0&scrollbar=0`}
                     type="application/pdf"
                     className="w-full h-full border-0 pointer-events-none object-cover"
                     title="Counseling Flow Diagram View"

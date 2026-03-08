@@ -8,7 +8,7 @@ interface FlowDiagramModalProps {
 }
 
 export default function FlowDiagramModal({ isOpen, onClose }: FlowDiagramModalProps) {
-    const pdfUrl = `/counseling_flow_diagram.pdf?v=${Date.now()}`;
+    const pdfUrl = `/api/documents/counseling_flow_diagram.pdf?v=${Date.now()}`;
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
