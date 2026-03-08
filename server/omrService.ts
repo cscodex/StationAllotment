@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { storage } from './storage';
 
 export class OMRService {
-    async generateStudentOMRForm(studentId: string): Promise<Uint8Array> {
+    async generateStudentOMRForm(studentId: string, testFillMode = false): Promise<Uint8Array> {
         const student = await storage.getStudent(studentId);
         if (!student) {
             throw new Error("Student not found");
@@ -78,14 +78,20 @@ export class OMRService {
         for (let r = 0; r < 10; r++) {
             frontPage.drawText(`Choice ${r + 1}`, { x: 60, y: startY - r * rowSpacing - 4, size: 11, font: boldFont });
 
+            // Randomly select one column to darken if in testing mode
+            const randomFilledColumn = testFillMode ? Math.floor(Math.random() * schoolDistricts.length) : -1;
+
             for (let c = 0; c < schoolDistricts.length; c++) {
-                // Draw hollow circles (bubbles)
+                const isFilled = c === randomFilledColumn;
+
+                // Draw circle (hollow by default, solid black if filled)
                 frontPage.drawCircle({
                     x: startX + c * colSpacing + 10,
                     y: startY - r * rowSpacing,
                     size: 8,
                     borderWidth: 1.5,
                     borderColor: black,
+                    color: isFilled ? black : undefined,
                 });
             }
         }
@@ -132,12 +138,12 @@ export class OMRService {
         return await doc.save();
     }
 
-    async generateBulkOMRForms(studentIds: string[]): Promise<Uint8Array> {
+    async generateBulkOMRForms(studentIds: string[], testFillMode = false): Promise<Uint8Array> {
         const mainDoc = await PDFDocument.create();
 
         for (const studentId of studentIds) {
             // Generate the standalone 2-page doc for each student
-            const singleStudentBytes = await this.generateStudentOMRForm(studentId);
+            const singleStudentBytes = await this.generateStudentOMRForm(studentId, testFillMode);
             const studentDoc = await PDFDocument.load(singleStudentBytes);
 
             // Copy the 2 pages from the student doc into the main doc

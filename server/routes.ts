@@ -1452,6 +1452,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk generate fully filled (randomized) bubbles for optical OpenCV testing
+  app.post('/api/omr/test-scenarios', isCentralAdmin, async (req, res) => {
+    try {
+      const { studentIds } = req.body;
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "No students provided for testing mock generation" });
+      }
+
+      console.log(`[TESTING] Generating Mock Bubbled OMR forms for ${studentIds.length} students...`);
+      const pdfBytes = await omrService.generateBulkOMRForms(studentIds, true); // testFillMode = true
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="mock_scenarios_${studentIds.length}_students.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (error: any) {
+      console.error("Test Scenarios OMR Generation error:", error);
+      res.status(500).json({ message: error.message || "Failed to generate Mock OMR testing forms" });
+    }
+  });
+
   app.get('/api/students/:id/omr-form', isAuthenticated, async (req, res) => {
     try {
       const { id } = req.params;

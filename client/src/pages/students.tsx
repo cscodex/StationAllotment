@@ -137,6 +137,43 @@ export default function Students() {
     }
   };
 
+  const handleTestScenariosDownload = async () => {
+    if (selectedStudentIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/omr/test-scenarios`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ studentIds: selectedStudentIds })
+      });
+      if (!response.ok) throw new Error("Failed to generate test mock forms");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mock_scenarios_${selectedStudentIds.length}_students.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: `Successfully generated fully bubbled mock OMR forms for ${selectedStudentIds.length} students`,
+      });
+      setSelectedStudentIds([]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not generate testing scenarios",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Update entrance result mutation
   const updateEntranceResultMutation = useMutation({
     mutationFn: async ({ id, stream }: { id: string, stream: string }) => {
@@ -358,10 +395,16 @@ export default function Students() {
             />
           </div>
           {selectedStudentIds.length > 0 && (
-            <Button onClick={handleBulkDownloadOMR} className="flex items-center gap-2">
-              <DownloadCloud className="w-4 h-4" />
-              Download OMRs ({selectedStudentIds.length})
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleTestScenariosDownload} variant="secondary" className="flex items-center gap-2 border-primary/20 text-primary">
+                <DownloadCloud className="w-4 h-4" />
+                Generate Testing Subset ({selectedStudentIds.length})
+              </Button>
+              <Button onClick={handleBulkDownloadOMR} className="flex items-center gap-2">
+                <DownloadCloud className="w-4 h-4" />
+                Download Blank OMRs ({selectedStudentIds.length})
+              </Button>
+            </div>
           )}
         </div>
         {isLoading ? (
