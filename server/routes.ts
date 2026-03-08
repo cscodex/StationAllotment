@@ -1846,8 +1846,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const results = await storage.getStudentsEntranceResultsByRound(round.academicYear, round.roundName || '');
       const pendingStudents = await storage.getStudentsByStatus('pending', round.academicYear);
       const notAllottedStudents = await storage.getStudentsByStatus('not_allotted', round.academicYear);
-      const studentsWithChoicesCount = pendingStudents.length + notAllottedStudents.length;
+
+      const students = [...pendingStudents, ...notAllottedStudents];
+      const studentsWithChoicesCount = students.length;
       const hasStudentChoices = studentsWithChoicesCount > 0;
+
+      // 1. Check merit matching
+      const studentsWithMeritDataCount = students.filter(s => results.some(er => er.applicationNo === s.appNo && er.meritNo)).length;
+
+      // 2. Check if all eligible districts configured preferences and are finalized
+      const districtsWithEligibleStudents = new Set<string>();
+      students.forEach(student => {
+        if (student.districtAdmin && student.choice1 && student.counselingDistrict) {
+          districtsWithEligibleStudents.add(student.counselingDistrict);
+        }
+      });
+      districtsWithEligibleStudents.add('SAS Nagar (Mohali)'); // Central always included
+
+      const allDistrictStatuses = await storage.getAllDistrictStatuses(round.id);
+      const eligibleDistrictStatuses = allDistrictStatuses.filter(ds =>
+        districtsWithEligibleStudents.has(ds.district)
+      );
+
+      const totalDistrictsCount = Array.from(districtsWithEligibleStudents).length;
+      const finalizedDistrictsCount = eligibleDistrictStatuses.filter(ds => ds.isFinalized).length;
+      const allDistrictsFinalized = totalDistrictsCount > 0 && finalizedDistrictsCount === totalDistrictsCount;
+
+      // 3. Central Finalization
+      const isAllocationFinalized = round.isAllocationFinalized === true;
 
       res.json({
         hasVacancyData: vacancies.length > 0,
@@ -1857,7 +1883,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entranceResultsCount: results.length,
         hasStudentChoices,
         studentsWithChoicesCount,
-        allPrerequisitesMet: vacancies.length > 0 && results.length > 0 && hasStudentChoices
+        studentsWithMeritDataCount,
+        allDistrictsFinalized,
+        totalDistrictsCount,
+        finalizedDistrictsCount,
+        isAllocationFinalized,
+        allPrerequisitesMet: vacancies.length > 0 && results.length > 0 && hasStudentChoices && studentsWithMeritDataCount > 0 && allDistrictsFinalized && isAllocationFinalized
       });
     } catch (error) {
       console.error("Prerequisites error:", error);

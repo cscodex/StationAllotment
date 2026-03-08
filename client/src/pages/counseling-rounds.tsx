@@ -59,6 +59,11 @@ interface PrerequisitesStatus {
   entranceResultsCount: number;
   hasStudentChoices: boolean;
   studentsWithChoicesCount: number;
+  studentsWithMeritDataCount: number;
+  allDistrictsFinalized: boolean;
+  totalDistrictsCount: number;
+  finalizedDistrictsCount: number;
+  isAllocationFinalized: boolean;
   allPrerequisitesMet: boolean;
 }
 
@@ -93,6 +98,15 @@ function PrerequisitesButton({
     }
     if (!prerequisites.hasStudentChoices) {
       missingPrerequisites.push(`Student choices (${prerequisites.studentsWithChoicesCount} students)`);
+    }
+    if (prerequisites.hasStudentChoices && prerequisites.hasEntranceResults && prerequisites.studentsWithMeritDataCount === 0) {
+      missingPrerequisites.push(`Merit matching failed`);
+    }
+    if (!prerequisites.allDistrictsFinalized) {
+      missingPrerequisites.push(`District finalizations (${prerequisites.finalizedDistrictsCount}/${prerequisites.totalDistrictsCount})`);
+    }
+    if (!prerequisites.isAllocationFinalized) {
+      missingPrerequisites.push(`Central phase 1 finalization`);
     }
   }
 
@@ -611,6 +625,14 @@ export default function CounselingRounds() {
                               <div className={`flex items-center gap-1 ${prerequisites.hasStudentChoices ? 'text-green-600' : 'text-red-600'}`}>
                                 {prerequisites.hasStudentChoices ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                                 <span>Choices: {prerequisites.studentsWithChoicesCount}</span>
+                              </div>
+                              <div className={`flex items-center gap-1 ${prerequisites.allDistrictsFinalized ? 'text-green-600' : 'text-red-600'}`}>
+                                {prerequisites.allDistrictsFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                                <span>Districts: {prerequisites.finalizedDistrictsCount}/{prerequisites.totalDistrictsCount}</span>
+                              </div>
+                              <div className={`flex items-center gap-1 ${prerequisites.isAllocationFinalized ? 'text-green-600' : 'text-red-600'}`}>
+                                {prerequisites.isAllocationFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                                <span>Phase 1 Finalized</span>
                               </div>
                             </div>
                           );

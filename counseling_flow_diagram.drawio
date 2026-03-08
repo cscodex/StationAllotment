@@ -6,8 +6,8 @@
         <mxCell id="1" parent="0" />
 
         <!-- ========================== TITLE ========================== -->
-        <mxCell id="title" value="&lt;font style=&quot;font-size: 22px;&quot;&gt;&lt;b&gt;Punjab Station Allotment — Counseling Process Flow&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size: 12px; color: #666;&quot;&gt;Complete workflow for Central Admin &amp; District Admin roles&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
-          <mxGeometry x="400" y="10" width="600" height="55" as="geometry" />
+        <mxCell id="title" value="&lt;font style=&quot;font-size: 22px;&quot;&gt;&lt;b&gt;Punjab Station Allotment — Counseling Process Flow&lt;/b&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size: 13px; color: #666;&quot;&gt;Multi-Round &amp; Academic Session Management Architecture&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="380" y="10" width="600" height="55" as="geometry" />
         </mxCell>
 
         <!-- ========================== SWIM LANE: CENTRAL ADMIN ========================== -->
@@ -76,7 +76,7 @@
         </mxCell>
 
         <!-- CA5: Set Deadline -->
-        <mxCell id="ca5" value="&lt;b&gt;Set Allocation&lt;br&gt;Deadline&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Time limit for&lt;br&gt;preference entry&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e3a5f;fontColor=#fff;strokeColor=#15294a;arcSize=20;shadow=1;" vertex="1" parent="1">
+        <mxCell id="ca5" value="&lt;b&gt;Create Round &amp;amp;&lt;br&gt;Set Deadline&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Initialize round &amp;amp;&lt;br&gt;time limit for choices&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e3a5f;fontColor=#fff;strokeColor=#15294a;arcSize=20;shadow=1;" vertex="1" parent="1">
           <mxGeometry x="220" y="200" width="155" height="70" as="geometry" />
         </mxCell>
         <mxCell id="e_ca2_ca5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#1e3a5f;" edge="1" source="ca2" target="ca5" parent="1">
@@ -175,7 +175,7 @@
         </mxCell>
 
         <!-- CA-NEXT-ROUND: Start Next Round -->
-        <mxCell id="ca_next_round" value="&lt;b&gt;Start Next&lt;br&gt;Counseling Round&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Spawns new iteration&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c00000;fontColor=#fff;strokeColor=#8B0000;arcSize=20;shadow=1;" vertex="1" parent="1">
+        <mxCell id="ca_next_round" value="&lt;b&gt;Create Next&lt;br&gt;Counseling Round&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Spawns new iteration for&lt;br&gt;remaining vacancies&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c00000;fontColor=#fff;strokeColor=#8B0000;arcSize=20;shadow=1;" vertex="1" parent="1">
           <mxGeometry x="880" y="395" width="150" height="60" as="geometry" />
         </mxCell>
         <mxCell id="e_vacate_next" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#8B0000;" edge="1" source="ca_vacate" target="ca_next_round" parent="1">
@@ -193,7 +193,7 @@
         </mxCell>
 
         <!-- CA-CLOSE: Permanently Close Session -->
-        <mxCell id="ca_close" value="&lt;b&gt;Close Session&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Permanently archive year&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c00000;fontColor=#fff;strokeColor=#8B0000;arcSize=20;shadow=1;" vertex="1" parent="1">
+        <mxCell id="ca_close" value="&lt;b&gt;Close Academic&lt;br&gt;Session&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Permanently archive year&lt;br&gt;and lock all rounds&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#c00000;fontColor=#fff;strokeColor=#8B0000;arcSize=20;shadow=1;" vertex="1" parent="1">
           <mxGeometry x="1490" y="395" width="130" height="60" as="geometry" />
         </mxCell>
         <mxCell id="e_dec_no_rounds" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#cc0000;" edge="1" source="dec_more_rounds" target="ca_close" parent="1">
