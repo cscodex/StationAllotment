@@ -131,6 +131,7 @@ export const students = pgTable("students", {
   lockedBy: varchar("locked_by"), // User ID of the admin who has exclusive edit lock
   lockedAt: timestamp("locked_at"), // When the student was locked for editing
   isReleased: boolean("is_released").default(false), // Whether student is released from district
+  omrImageUrl: text("omr_image_url"), // URL/path to the scanned OMR overlay image
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

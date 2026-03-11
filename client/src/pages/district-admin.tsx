@@ -40,10 +40,11 @@ import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 
 // Use school districts for choice selection (where schools are located)
 const DISTRICTS = SCHOOL_DISTRICTS;
-const STREAMS = ["Medical", "NonMedical", "Commerce"];
+const STREAMS = ["Medical", "Non-Medical", "Commerce"];
+const STREAM_DISPLAY_MAP: Record<string, string> = { "Medical": "Medical", "NonMedical": "Non-Medical", "Commerce": "Commerce" };
 
 const updatePreferencesSchema = z.object({
-  stream: z.enum(['Medical', 'Commerce', 'NonMedical']),
+  stream: z.enum(['Medical', 'Commerce', 'NonMedical', 'Non-Medical']).transform(v => v === 'Non-Medical' ? 'NonMedical' : v),
   choice1: z.string().transform(val => val === " " ? "" : val).optional(),
   choice2: z.string().transform(val => val === " " ? "" : val).optional(),
   choice3: z.string().transform(val => val === " " ? "" : val).optional(),
@@ -81,7 +82,7 @@ export default function DistrictAdmin() {
   const form = useForm({
     resolver: zodResolver(updatePreferencesSchema),
     defaultValues: {
-      stream: "NonMedical" as const,
+      stream: "Non-Medical" as const,
       choice1: "",
       choice2: "",
       choice3: "",
@@ -397,7 +398,7 @@ export default function DistrictAdmin() {
 
     setSelectedStudentForEdit(student);
     form.reset({
-      stream: student.stream as any,
+      stream: (STREAM_DISPLAY_MAP[student.stream || ''] || student.stream) as any,
       choice1: student.choice1 || '',
       choice2: student.choice2 || '',
       choice3: student.choice3 || '',
@@ -423,7 +424,7 @@ export default function DistrictAdmin() {
     // If user is central admin, automatically set district and district admin
     const preferences: any = { ...data };
     if (user?.role === 'central_admin') {
-      preferences.counselingDistrict = "Mohali";
+      preferences.counselingDistrict = "SAS Nagar (Mohali)";
       preferences.districtAdmin = "central_admin";
     }
 
@@ -446,7 +447,7 @@ export default function DistrictAdmin() {
 
     setEditingStudent(student.id);
     form.reset({
-      stream: student.stream as any,
+      stream: (STREAM_DISPLAY_MAP[student.stream || ''] || student.stream) as any,
       choice1: student.choice1 || '',
       choice2: student.choice2 || '',
       choice3: student.choice3 || '',
@@ -470,7 +471,7 @@ export default function DistrictAdmin() {
       // If user is central admin, automatically set district and district admin
       const preferences: any = { ...values };
       if (user?.role === 'central_admin') {
-        preferences.counselingDistrict = "Mohali";
+        preferences.counselingDistrict = "SAS Nagar (Mohali)";
         preferences.districtAdmin = "central_admin";
       }
 
@@ -1087,7 +1088,7 @@ export default function DistrictAdmin() {
               {user?.role === 'central_admin' && (
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-4" data-testid="text-central-admin-edit-notice">
                   <p className="text-sm text-blue-800 dark:text-blue-300">
-                    <strong>Central Admin Mode:</strong> When you save these preferences, the student will be automatically assigned to district <strong>"Mohali"</strong> with district admin <strong>"central_admin"</strong>.
+                    <strong>Central Admin Mode:</strong> When you save these preferences, the student will be automatically assigned to district <strong>"SAS Nagar (Mohali)"</strong> with district admin <strong>"central_admin"</strong>.
                   </p>
                 </div>
               )}

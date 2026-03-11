@@ -39,6 +39,40 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
+  // ── One-time data migration: normalize "Mohali" → "SAS Nagar (Mohali)" ──
+  try {
+    const { db } = await import("./db");
+    const { students, districtStatus } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+
+    // 1. Fix students table
+    const updatedStudents = await db
+      .update(students)
+      .set({ counselingDistrict: "SAS Nagar (Mohali)" })
+      .where(eq(students.counselingDistrict, "Mohali"))
+      .returning({ id: students.id });
+
+    // 2. Fix district_status table — handle merge if both rows exist
+    const [mohaliRow] = await db.select().from(districtStatus).where(eq(districtStatus.district, "Mohali"));
+    const [sasRow] = await db.select().from(districtStatus).where(eq(districtStatus.district, "SAS Nagar (Mohali)"));
+
+    let districtStatusFixed = 0;
+    if (mohaliRow && sasRow) {
+      // Both exist: delete the "Mohali" duplicate
+      await db.delete(districtStatus).where(eq(districtStatus.district, "Mohali"));
+      districtStatusFixed = 1;
+    } else if (mohaliRow && !sasRow) {
+      // Only "Mohali" exists: rename it
+      await db.update(districtStatus).set({ district: "SAS Nagar (Mohali)" }).where(eq(districtStatus.district, "Mohali"));
+      districtStatusFixed = 1;
+    }
+
+    if (updatedStudents.length > 0 || districtStatusFixed > 0) {
+      log(`🔄 Normalized "Mohali" → "SAS Nagar (Mohali)": ${updatedStudents.length} students, ${districtStatusFixed} district status records`);
+    }
+  } catch (e) {
+    console.error("District normalization migration error (non-fatal):", e);
+  }
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

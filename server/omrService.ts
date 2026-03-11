@@ -1,6 +1,7 @@
-import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import { storage } from './storage';
+import { SCHOOL_DISTRICTS } from '@shared/schema';
 
 export class OMRService {
     async generateStudentOMRForm(studentId: string, testFillMode = false): Promise<Uint8Array> {
@@ -52,39 +53,123 @@ export class OMRService {
         // 4. Instructions
         frontPage.drawText('INSTRUCTIONS: Fill ONE circle per row completely with a dark pen or pencil. Do not use checkmarks.', { x: 60, y: height - 210, size: 10, font: boldFont });
 
-        // 5. OMR Bubble Grid (10 Choices x 10 Districts)
+        // 5. Stream Selection Section
+        const streamY = height - 250;
+        frontPage.drawText('Stream:', { x: 60, y: streamY, size: 11, font: boldFont });
+
+        const streams = ["Medical", "Non-Medical", "Commerce"];
+        const streamStartX = 140;
+        const streamSpacing = 120;
+
+        // Randomly pick a stream if testFillMode is on, otherwise use student's actual stream
+        const randomStreamIdx = testFillMode ? Math.floor(Math.random() * streams.length) : -1;
+        const studentStreamIdx = student.stream ? streams.indexOf(student.stream) : -1;
+
+        for (let s = 0; s < streams.length; s++) {
+            const isStreamFilled = testFillMode ? (s === randomStreamIdx) : (s === studentStreamIdx);
+
+            frontPage.drawCircle({
+                x: streamStartX + s * streamSpacing + 10,
+                y: streamY + 4,
+                size: 8,
+                borderWidth: 1.5,
+                borderColor: black,
+                color: isStreamFilled ? black : undefined,
+            });
+            frontPage.drawText(streams[s], { x: streamStartX + s * streamSpacing + 25, y: streamY, size: 10, font });
+        }
+
+        // 6. OMR Bubble Grid (10 Choices x 10 Districts)
         const startX = 140;
-        const startY = height - 340;
+        const startY = height - 350;
         const rowSpacing = 35;
         const colSpacing = 35;
 
-        const schoolDistricts = [
-            "Amritsar", "Bathinda", "Faridkot", "Ferozepur", "Gurdaspur",
-            "Jalandhar", "Ludhiana", "Patiala", "Sangrur", "SAS Nagar"
-        ];
+        const schoolDistricts = [...SCHOOL_DISTRICTS];
 
-        // Draw Column Headers (Rotated)
-        for (let c = 0; c < schoolDistricts.length; c++) {
-            frontPage.drawText(schoolDistricts[c], {
-                x: startX + c * colSpacing,
-                y: startY + 20,
-                size: 10,
-                font,
-                rotate: degrees(45)
+        // Prepare shuffled indices for testing mode logic to avoid duplicate choices
+        let testIndices: number[] = [];
+        if (testFillMode) {
+            testIndices = Array.from({ length: schoolDistricts.length }, (_, i) => i);
+            for (let i = testIndices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [testIndices[i], testIndices[j]] = [testIndices[j], testIndices[i]];
+            }
+        }
+
+        // Add grid bounds around the choices
+        frontPage.drawRectangle({
+            x: startX - 15,
+            y: startY - (9 * rowSpacing) - 15,
+            width: (9 * colSpacing) + 50,
+            height: (9 * rowSpacing) + 30,
+            borderColor: black,
+            borderWidth: 1.5
+        });
+
+        // Draw Column Headers: "Priority No" heading + numbers 1-10
+        frontPage.drawText('Priority No', {
+            x: startX - 5,
+            y: startY + 55,
+            size: 10,
+            font: boldFont,
+        });
+        for (let c = 0; c < 10; c++) {
+            frontPage.drawText(`${c + 1}`, {
+                x: startX + c * colSpacing + 7,
+                y: startY + 30,
+                size: 11,
+                font: boldFont,
             });
         }
 
-        // Draw 10 Choice Rows Array
-        for (let r = 0; r < 10; r++) {
-            frontPage.drawText(`Choice ${r + 1}`, { x: 60, y: startY - r * rowSpacing - 4, size: 11, font: boldFont });
+        // Draw Row Labels: District names on the left side
+        for (let r = 0; r < schoolDistricts.length; r++) {
+            const distName = schoolDistricts[r];
+            // Wrap long names: split at space nearest to mid-point if > 10 chars
+            if (distName.length > 10) {
+                const mid = Math.floor(distName.length / 2);
+                let splitIdx = distName.lastIndexOf(' ', mid);
+                if (splitIdx <= 0) splitIdx = distName.indexOf(' ', mid);
+                if (splitIdx > 0) {
+                    const line1 = distName.substring(0, splitIdx);
+                    const line2 = distName.substring(splitIdx + 1);
+                    frontPage.drawText(line1, { x: 55, y: startY - r * rowSpacing + 4, size: 8, font });
+                    frontPage.drawText(line2, { x: 55, y: startY - r * rowSpacing - 6, size: 8, font });
+                } else {
+                    frontPage.drawText(distName, { x: 55, y: startY - r * rowSpacing - 2, size: 8, font });
+                }
+            } else {
+                frontPage.drawText(distName, { x: 60, y: startY - r * rowSpacing - 4, size: 9, font });
+            }
+        }
 
-            // Randomly select one column to darken if in testing mode
-            const randomFilledColumn = testFillMode ? Math.floor(Math.random() * schoolDistricts.length) : -1;
+        // Build a mapping: for each district, which priority is it?
+        // districtPriority[districtIdx] = priority column (0-based), or -1
+        const districtPriority: number[] = new Array(schoolDistricts.length).fill(-1);
+        if (testFillMode) {
+            // In test mode, assign each district a unique random priority
+            for (let i = 0; i < testIndices.length && i < schoolDistricts.length; i++) {
+                districtPriority[testIndices[i]] = i; // district testIndices[i] gets priority i
+            }
+        } else {
+            // Map from student's choices
+            for (let priority = 0; priority < 10; priority++) {
+                const choiceKey = `choice${priority + 1}` as keyof typeof student;
+                const choiceVal = student[choiceKey] as string;
+                if (choiceVal) {
+                    const distIdx = schoolDistricts.indexOf(choiceVal as typeof schoolDistricts[number]);
+                    if (distIdx >= 0) {
+                        districtPriority[distIdx] = priority;
+                    }
+                }
+            }
+        }
 
-            for (let c = 0; c < schoolDistricts.length; c++) {
-                const isFilled = c === randomFilledColumn;
-
-                // Draw circle (hollow by default, solid black if filled)
+        // Draw circles: rows = districts, cols = priority numbers
+        for (let r = 0; r < schoolDistricts.length; r++) {
+            for (let c = 0; c < 10; c++) {
+                const isFilled = districtPriority[r] === c;
                 frontPage.drawCircle({
                     x: startX + c * colSpacing + 10,
                     y: startY - r * rowSpacing,
@@ -96,21 +181,26 @@ export class OMRService {
             }
         }
 
-        // 6. Signatures Section at the Bottom
-        const sigY = 120;
-        frontPage.drawText('I hereby declare that the preferences filled strictly adhere to my choices.', { x: 60, y: sigY + 40, size: 10, font });
+        // 7. Signatures Section at the Bottom
+        const sigY = 70;
+        frontPage.drawText('I hereby declare that the preferences filled strictly adhere to my choices.', { x: 60, y: sigY + 50, size: 10, font });
+
+        // Signatures fit exactly in one row
+        const sigBoxWidth = 145;
+        const sigBoxHeight = 50;
+        const boxSpacing = 15;
 
         // Student Signature
-        frontPage.drawRectangle({ x: 60, y: sigY - 40, width: 200, height: 60, borderColor: black, borderWidth: 1 });
-        frontPage.drawText('Signature of Candidate', { x: 90, y: sigY - 55, size: 10, font });
+        frontPage.drawRectangle({ x: 60, y: sigY - 20, width: sigBoxWidth, height: sigBoxHeight, borderColor: black, borderWidth: 1 });
+        frontPage.drawText('Signature of Candidate', { x: 75, y: sigY - 35, size: 10, font });
 
         // Parent/Guardian Signature
-        frontPage.drawRectangle({ x: width - 260, y: sigY - 40, width: 200, height: 60, borderColor: black, borderWidth: 1 });
-        frontPage.drawText('Signature of Parent / Guardian', { x: width - 240, y: sigY - 55, size: 10, font });
+        frontPage.drawRectangle({ x: 60 + sigBoxWidth + boxSpacing, y: sigY - 20, width: sigBoxWidth, height: sigBoxHeight, borderColor: black, borderWidth: 1 });
+        frontPage.drawText('Signature of Parent / Guardian', { x: 60 + sigBoxWidth + boxSpacing + 5, y: sigY - 35, size: 9, font });
 
         // Verifying Officer Signature
-        frontPage.drawRectangle({ x: (width / 2) - 100, y: sigY - 110, width: 200, height: 50, borderColor: black, borderWidth: 1 });
-        frontPage.drawText('Signature of Verifying Officer', { x: (width / 2) - 80, y: sigY - 125, size: 10, font });
+        frontPage.drawRectangle({ x: 60 + 2 * (sigBoxWidth + boxSpacing), y: sigY - 20, width: sigBoxWidth, height: sigBoxHeight, borderColor: black, borderWidth: 1 });
+        frontPage.drawText('Signature of Verifying Officer', { x: 60 + 2 * (sigBoxWidth + boxSpacing) + 5, y: sigY - 35, size: 9, font });
 
 
         // --- PAGE 2: BACK PAGE (INSTRUCTIONS SIDE) ---
@@ -123,7 +213,7 @@ export class OMRService {
             "2. DO NOT USE TICK MARKS OR CROSSES: Incompletely filled circles will not be read by the scanner.",
             "3. DO NOT FOLD OR CRUMPLE THE SHEET: Folds can damage the fiducial anchors required for scanning.",
             "4. DO NOT WRITE OUTSIDE BUBBLES: Extraneous ink within the bounds of the grid will reject the scan.",
-            "5. ONLY ONE CIRCLE PER ROW: Ensure only 1 bubble is shaded per \"Choice 1\" through \"Choice 10\".",
+            "5. ONLY ONE CIRCLE PER ROW: Ensure only 1 bubble is shaded per district row (your priority for that district).",
             "6. SIGNATURES REQUIRED: Preferences without Parent/Guardian signatures will be discarded.",
             "7. SUBMIT TO ADMIN: Once drafted, hand this paper document explicitly to the District Admin for optical verification."
         ];

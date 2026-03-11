@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import express, { type Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcrypt";
@@ -138,6 +138,7 @@ const isDistrictAdmin = async (req: any, res: any, next: any) => {
 export async function registerRoutes(app: Express): Promise<Server> {
   app.set("trust proxy", 1);
   app.use(getSession());
+  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
   // Serve the Flow Diagram XML explicitly so it bypasses Vite SPA routing
   app.get("/counseling_flow_diagram.xml", (req, res) => {
@@ -161,6 +162,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error serving document:", error);
       res.status(500).json({ message: "Failed to serve document" });
+    }
+  });
+
+  // Upload endpoint for OMR overlay images
+  app.post('/api/students/:id/omr-image', isAuthenticated, upload.single('image'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image file uploaded" });
+      }
+
+      const { db } = await import("./db");
+      const { students } = await import("@shared/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const studentId = req.params.id;
+      const omrImageUrl = `/uploads/${req.file.filename}`;
+
+      const [updated] = await db
+        .update(students)
+        .set({ omrImageUrl, updatedAt: new Date() })
+        .where(eq(students.id, studentId))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      res.json({ message: "Image uploaded successfully", omrImageUrl });
+    } catch (error) {
+      console.error("Error uploading OMR image:", error);
+      res.status(500).json({ message: "Failed to upload image" });
     }
   });
 
@@ -971,7 +1003,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Business Rule 1: Student must be assigned to central admin
-      if (student.counselingDistrict !== 'Mohali' || student.districtAdmin !== 'Central_admin') {
+      if ((student.counselingDistrict !== 'SAS Nagar (Mohali)' && student.counselingDistrict !== 'Mohali') || student.districtAdmin !== 'Central_admin') {
         return res.status(403).json({
           message: "Student is not currently assigned to central admin and cannot be locked for editing"
         });
@@ -1041,7 +1073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Set central admin info when central admin edits preferences
       if (user?.role === 'central_admin') {
-        preferences.counselingDistrict = 'Mohali';
+        preferences.counselingDistrict = 'SAS Nagar (Mohali)';
         preferences.districtAdmin = 'Central_admin';
       }
 
@@ -1226,7 +1258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify student is currently assigned to central admin
-      if (student.counselingDistrict !== 'Mohali' || student.districtAdmin !== 'Central_admin') {
+      if ((student.counselingDistrict !== 'SAS Nagar (Mohali)' && student.counselingDistrict !== 'Mohali') || student.districtAdmin !== 'Central_admin') {
         return res.status(400).json({
           message: "Student is not currently assigned to central admin"
         });
@@ -1453,7 +1485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk generate fully filled (randomized) bubbles for optical OpenCV testing
-  app.post('/api/omr/test-scenarios', isCentralAdmin, async (req, res) => {
+  app.post('/api/omr/test-scenarios', isAuthenticated, async (req, res) => {
     try {
       const { studentIds } = req.body;
       if (!Array.isArray(studentIds) || studentIds.length === 0) {

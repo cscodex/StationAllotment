@@ -7,6 +7,7 @@ import { Menu, Bell, Clock, Users, CheckCircle, XCircle, Eye, Lock, Unlock, Data
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import type { DistrictStatus, Student } from "@shared/schema";
+import { useSidebarToggle } from "./main-layout";
 
 interface HeaderProps {
   title: string;
@@ -16,6 +17,7 @@ interface HeaderProps {
 
 export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: HeaderProps) {
   const { user } = useAuth();
+  const { toggle } = useSidebarToggle();
   const { data: settings } = useQuery({
     queryKey: ["/api/settings"],
   });
@@ -77,7 +79,10 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
             variant="ghost"
             size="sm"
             className="md:hidden"
-            onClick={onMobileMenuToggle}
+            onClick={() => {
+                if (onMobileMenuToggle) onMobileMenuToggle();
+                toggle();
+            }}
             data-testid="button-mobile-menu"
           >
             <Menu className="w-4 h-4" />

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSidebarToggle } from "@/components/layout/main-layout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,16 +30,37 @@ import {
   Lock,
   Unlock,
   XCircle,
-  Loader2
+  Loader2,
+  Camera,
+  UploadCloud,
+  DownloadCloud,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
+import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
+import { BulkScannerModal, type ScannedPageInfo } from "@/components/dashboard/bulk-scanner-modal";
+import { LiveOMRScannerModal } from "@/components/dashboard/live-omr-scanner";
 
 const DISTRICTS = SCHOOL_DISTRICTS;
-const STREAMS = ["Medical", "NonMedical", "Commerce"];
+const STREAMS = ["Medical", "Non-Medical", "Commerce"];
+
+// Map display names to DB-stored values
+const STREAM_DB_MAP: Record<string, string> = { "Medical": "Medical", "Non-Medical": "NonMedical", "Commerce": "Commerce" };
+const STREAM_DISPLAY_MAP: Record<string, string> = { "Medical": "Medical", "NonMedical": "Non-Medical", "Commerce": "Commerce" };
+
+// Normalize district display: 'Mohali' → 'SAS Nagar (Mohali)'
+const normalizeDistrict = (d: string | null | undefined) => {
+  if (!d) return null;
+  if (d === 'Mohali') return 'SAS Nagar (Mohali)';
+  return d;
+};
 
 const updatePreferencesSchema = z.object({
-  stream: z.enum(['Medical', 'Commerce', 'NonMedical']),
+  stream: z.enum(['Medical', 'Commerce', 'NonMedical', 'Non-Medical']).transform(v => v === 'Non-Medical' ? 'NonMedical' : v),
   choice1: z.string().transform(val => val === " " ? "" : val).optional(),
   choice2: z.string().transform(val => val === " " ? "" : val).optional(),
   choice3: z.string().transform(val => val === " " ? "" : val).optional(),
@@ -57,15 +79,64 @@ export default function StudentPreferenceManagement() {
   const [isChoicesModalOpen, setIsChoicesModalOpen] = useState(false);
   const [selectedStudentForEdit, setSelectedStudentForEdit] = useState<Student | null>(null);
   const [selectedStudentForChoices, setSelectedStudentForChoices] = useState<Student | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
   // Confirmation dialog states
   const [isLockConfirmDialogOpen, setIsLockConfirmDialogOpen] = useState(false);
   const [isUnlockConfirmDialogOpen, setIsUnlockConfirmDialogOpen] = useState(false);
   const [isReleaseConfirmDialogOpen, setIsReleaseConfirmDialogOpen] = useState(false);
   const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
+
+  // Bulk scanner state
+  const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
+  const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
+
+  const handleBulkSave = async (pages: ScannedPageInfo[]) => {
+    let successCount = 0;
+    for (const page of pages) {
+      if (!page.studentId || !page.stream || (page.status !== 'success' && page.status !== 'warning')) continue;
+      try {
+        const payload: Record<string, any> = { stream: page.stream };
+        page.choices.forEach((choice, index) => {
+          if (index < 10) {
+            payload[`choice${index + 1}`] = choice || null;
+          }
+        });
+
+        await apiRequest("PUT", `/api/students/${page.studentId}/preferences`, payload);
+        if (page.imageBlob) {
+          const formData = new FormData();
+          formData.append('image', page.imageBlob, `omr_bulk_${page.studentId}.jpg`);
+          await fetch(`/api/students/${page.studentId}/omr-image`, {
+            method: 'POST',
+            body: formData,
+          });
+        }
+        successCount++;
+      } catch (err) {
+        console.error("Failed to save student", page.studentId, err);
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['/api/students'] });
+  };
   const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
   const [selectedStudentForRelease, setSelectedStudentForRelease] = useState<Student | null>(null);
 
+  // Scanner state
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerStudent, setScannerStudent] = useState<Student | undefined>(undefined);
+
+  // Mobile: expanded card IDs for collapsible records
+  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
+  const toggleCard = (id: string) => {
+    setExpandedCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const { toggle: toggleSidebar } = useSidebarToggle();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -86,7 +157,7 @@ export default function StudentPreferenceManagement() {
   const form = useForm({
     resolver: zodResolver(updatePreferencesSchema),
     defaultValues: {
-      stream: "NonMedical" as const,
+      stream: "Non-Medical" as const,
       choice1: "",
       choice2: "",
       choice3: "",
@@ -266,7 +337,7 @@ export default function StudentPreferenceManagement() {
     // Directly open edit modal without locking
     setSelectedStudentForEdit(student);
     form.reset({
-      stream: student.stream as any || "NonMedical",
+      stream: (STREAM_DISPLAY_MAP[student.stream || ''] || student.stream || 'Non-Medical') as any,
       choice1: student.choice1 || '',
       choice2: student.choice2 || '',
       choice3: student.choice3 || '',
@@ -284,6 +355,94 @@ export default function StudentPreferenceManagement() {
   const openChoicesModal = (student: Student) => {
     setSelectedStudentForChoices(student);
     setIsChoicesModalOpen(true);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedStudentIds(filteredStudents.map((s: Student) => s.id));
+    } else {
+      setSelectedStudentIds([]);
+    }
+  };
+
+  const handleSelectStudent = (studentId: string, checked: boolean) => {
+    setSelectedStudentIds(prev =>
+      checked ? [...prev, studentId] : prev.filter(id => id !== studentId)
+    );
+  };
+
+  const handleBulkDownloadOMR = async () => {
+    if (selectedStudentIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/students/bulk-omr-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ studentIds: selectedStudentIds })
+      });
+      if (!response.ok) throw new Error("Failed to generate bulk OMR forms");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk_omr_forms_${new Date().getTime()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: `Successfully generated OMR forms for ${selectedStudentIds.length} students`,
+      });
+      setSelectedStudentIds([]); // Clear selection after successful download
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not download bulk OMR forms",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTestScenariosDownload = async () => {
+    if (selectedStudentIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/omr/test-scenarios`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ studentIds: selectedStudentIds })
+      });
+      if (!response.ok) throw new Error("Failed to generate test mock forms");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mock_scenarios_${selectedStudentIds.length}_students.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: `Successfully generated random populated mock OMR forms for ${selectedStudentIds.length} students for optical testing`,
+      });
+      setSelectedStudentIds([]);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not download mock testing forms",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleModalSave = (data: any) => {
@@ -312,23 +471,11 @@ export default function StudentPreferenceManagement() {
     if (!user) return false;
 
     // Central admin can edit all students
-    if (user.role === 'central_admin') {
-      return true;
-    }
+    if (user.role === 'central_admin') return true;
 
-    // District admin logic
-    if (user.role === 'district_admin') {
-      // If student has no assigned district admin (N/A), any district admin can edit
-      if (!student.districtAdmin) {
-        return true;
-      }
-
-      // Check if student belongs to this district
-      const belongsToDistrict = student.counselingDistrict === user.district;
-
-      // If student has an assigned district admin, only that specific admin can edit
-      return student.districtAdmin === user.username && belongsToDistrict;
-    }
+    // District admins can interact with any unlocked student in the pipeline 
+    // to assign them their district or scan their preferences
+    if (user.role === 'district_admin') return true;
 
     return false;
   };
@@ -342,17 +489,18 @@ export default function StudentPreferenceManagement() {
           { name: "Home" },
           { name: "Student Preference Management" }
         ]}
+        onMobileMenuToggle={toggleSidebar}
       />
 
-      <main className="flex-1 p-6 overflow-auto">
+      <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-auto">
         <div className="space-y-6">
           {/* Header with Search */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                 <div className="flex items-center">
                   <UserCog className="w-5 h-5 mr-2 text-primary" />
-                  Student Preferences - Central Admin View
+                  <span className="text-base sm:text-lg">Student Preferences - {user?.role === 'central_admin' ? 'Central Admin' : 'District Admin'}</span>
                 </div>
                 {user?.role === 'central_admin' && (
                   <Button
@@ -380,42 +528,183 @@ export default function StudentPreferenceManagement() {
                     )}
                   </Button>
                 )}
+
+                {/* BULK SCAN BUTTON */}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsLiveScannerOpen(true)}
+                    className="text-orange-500 border-orange-500 hover:bg-orange-50"
+                  >
+                    <Camera className="w-4 h-4 mr-2" />
+                    Live Scan
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsBulkScannerOpen(true)}
+                    className="text-primary border-primary hover:bg-primary/10"
+                  >
+                    <UploadCloud className="w-4 h-4 mr-2" />
+                    Bulk OMR Scan
+                  </Button>
+                </div>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center space-x-4 mb-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                  <Input
-                    placeholder="Search by name, merit number, app number, district, or admin..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-search-students"
-                  />
-                </div>
+            <CardContent className="p-4 md:p-6 pt-0">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder="Search by name, merit, app no..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-search-students"
+                />
               </div>
             </CardContent>
           </Card>
 
           {/* Students Table */}
           <Card>
-            <CardHeader>
-              <CardTitle>Students ({filteredStudents.length})</CardTitle>
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-2 gap-2 p-4 md:p-6">
+              <CardTitle className="text-base sm:text-lg">Students ({filteredStudents.length})</CardTitle>
+              {selectedStudentIds.length > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button onClick={handleTestScenariosDownload} variant="secondary" size="sm" className="flex items-center gap-2 border-primary/20 text-primary text-xs sm:text-sm">
+                    <DownloadCloud className="w-4 h-4" />
+                    Mock OMRs ({selectedStudentIds.length})
+                  </Button>
+                  <Button onClick={handleBulkDownloadOMR} size="sm" className="flex items-center gap-2 text-xs sm:text-sm">
+                    <DownloadCloud className="w-4 h-4" />
+                    Blank OMRs ({selectedStudentIds.length})
+                  </Button>
+                </div>
+              )}
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className="p-0 md:p-6 md:pt-0">
+              {/* ── MOBILE CARD VIEW (<md) ── */}
+              <div className="md:hidden divide-y">
+                {isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                  </div>
+                ) : filteredStudents.length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">No students found</p>
+                ) : (
+                  filteredStudents.map((student: Student) => {
+                    const isExpanded = expandedCardIds.has(student.id);
+                    return (
+                      <div key={student.id} className="p-3">
+                        {/* Collapsed: Name, stream badge, actions */}
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            className="flex-1 text-left flex items-center gap-2 min-w-0"
+                            onClick={() => toggleCard(student.id)}
+                          >
+                            {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{student.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{student.appNo}</p>
+                            </div>
+                          </button>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {student.stream && <Badge variant="outline" className="text-xs px-1.5 py-0">{student.stream}</Badge>}
+                            {/* Primary actions: Scan + Edit */}
+                            {(user?.role === 'central_admin' ? !student.lockedBy : canEditStudent(student) && !student.lockedBy) && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-2 text-emerald-600 border-emerald-300"
+                                  onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                >
+                                  <Camera className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-2"
+                                  onClick={() => openEditModal(student)}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                            {student.lockedBy && (
+                              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0">
+                                <Lock className="w-3 h-3" />
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Expanded: Full details */}
+                        {isExpanded && (
+                          <div className="mt-3 ml-6 space-y-2 text-sm">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                              <div><span className="text-muted-foreground">Merit #:</span> <span className="font-mono">{student.meritNumber}</span></div>
+                              <div><span className="text-muted-foreground">Status:</span> {getStatusBadge(student.allocationStatus || 'pending')}</div>
+                              <div><span className="text-muted-foreground">District:</span> {normalizeDistrict(student.counselingDistrict) || 'N/A'}</div>
+                              <div><span className="text-muted-foreground">Admin:</span> {student.districtAdmin || 'N/A'}</div>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openChoicesModal(student)}>
+                                <Eye className="w-3 h-3 mr-1" /> Choices
+                              </Button>
+                              <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
+                                <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
+                                  <FileText className="w-3 h-3 mr-1" /> OMR PDF
+                                </a>
+                              </Button>
+                              {user?.role === 'central_admin' && student.lockedBy && (
+                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedStudentForUnlock(student); setIsUnlockConfirmDialogOpen(true); }}>
+                                  <Unlock className="w-3 h-3 mr-1" /> Unlock
+                                </Button>
+                              )}
+                              {user?.role === 'central_admin' && !student.lockedBy && areAllPreferencesFilled(student) && (
+                                <>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedStudentForLock(student); setIsLockConfirmDialogOpen(true); }}>
+                                    <Lock className="w-3 h-3 mr-1" /> Lock
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-red-600" onClick={() => { setSelectedStudentForRelease(student); setIsReleaseConfirmDialogOpen(true); }}>
+                                    <XCircle className="w-3 h-3 mr-1" /> Release
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* ── DESKTOP/TABLET TABLE (≥md) ── */}
+              <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={
+                            filteredStudents.length > 0 &&
+                            selectedStudentIds.length === filteredStudents.length
+                          }
+                          onCheckedChange={handleSelectAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
                       <TableHead>Merit #</TableHead>
                       <TableHead>Student Name</TableHead>
                       <TableHead>App No</TableHead>
                       <TableHead>Stream</TableHead>
                       <TableHead>Current District</TableHead>
-                      <TableHead>District Admin</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Lock Status</TableHead>
+                      <TableHead className="hidden lg:table-cell">District Admin</TableHead>
+                      <TableHead className="hidden lg:table-cell">Status</TableHead>
+                      <TableHead className="hidden lg:table-cell">Lock Status</TableHead>
                       <TableHead>Choices</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -436,6 +725,13 @@ export default function StudentPreferenceManagement() {
                     ) : (
                       filteredStudents.map((student: Student) => (
                         <TableRow key={student.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedStudentIds.includes(student.id)}
+                              onCheckedChange={(checked) => handleSelectStudent(student.id, checked as boolean)}
+                              aria-label={`Select student ${student.name}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-mono">
                             {student.meritNumber}
                           </TableCell>
@@ -453,19 +749,19 @@ export default function StudentPreferenceManagement() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {student.counselingDistrict || (
+                            {normalizeDistrict(student.counselingDistrict) || (
                               <span className="text-muted-foreground">Not Assigned</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             {student.districtAdmin || (
                               <span className="text-muted-foreground">Not Assigned</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             {getStatusBadge(student.allocationStatus || 'pending')}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             {student.lockedBy ? (
                               <Badge variant="secondary" className="bg-blue-100 text-blue-800">
                                 <Lock className="w-3 h-3 mr-1" />
@@ -491,80 +787,157 @@ export default function StudentPreferenceManagement() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center space-x-2">
-                              {/* Case 1: Student is locked - show only unlock button */}
-                              {user?.role === 'central_admin' && student.lockedBy ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedStudentForUnlock(student);
-                                    setIsUnlockConfirmDialogOpen(true);
-                                  }}
-                                  disabled={unlockEditMutation.isPending}
-                                  data-testid={`button-unlock-${student.id}`}
-                                >
-                                  <Unlock className="w-4 h-4 mr-1" />
-                                  Unlock
-                                </Button>
-                              ) : user?.role === 'central_admin' &&
-                                student.counselingDistrict === 'Mohali' &&
-                                student.districtAdmin === 'Central_admin' &&
-                                areAllPreferencesFilled(student) ? (
-                                /* Case 2: Central admin with filled preferences and not locked - show lock + release buttons */
+                              {/* Admin Action Buttons rendering based on permission matrix */}
+                              {user?.role === 'central_admin' ? (
+                                // --- CENTRAL ADMIN VIEW ---
                                 <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedStudentForLock(student);
-                                      setIsLockConfirmDialogOpen(true);
-                                    }}
-                                    disabled={lockForEditMutation.isPending}
-                                    data-testid={`button-lock-${student.id}`}
-                                  >
-                                    <Lock className="w-4 h-4 mr-1" />
-                                    Lock
-                                  </Button>
+                                  {student.lockedBy ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedStudentForUnlock(student);
+                                        setIsUnlockConfirmDialogOpen(true);
+                                      }}
+                                      disabled={unlockEditMutation.isPending}
+                                      data-testid={`button-unlock-${student.id}`}
+                                    >
+                                      <Unlock className="w-4 h-4 mr-1" />
+                                      Unlock
+                                    </Button>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => openEditModal(student)}
+                                        data-testid={`button-edit-${student.id}`}
+                                      >
+                                        <Edit className="w-4 h-4 mr-1" />
+                                        Edit
+                                      </Button>
 
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedStudentForRelease(student);
-                                      setIsReleaseConfirmDialogOpen(true);
-                                    }}
-                                    disabled={releaseAssignmentMutation.isPending}
-                                    data-testid={`button-release-${student.id}`}
-                                    className="text-red-600 border-red-300 hover:bg-red-50"
-                                  >
-                                    <XCircle className="w-4 h-4 mr-1" />
-                                    Release
-                                  </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          setScannerStudent(student);
+                                          setIsScannerOpen(true);
+                                        }}
+                                        className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 ml-2"
+                                        title="Scan OMR Form"
+                                      >
+                                        <Camera className="w-4 h-4 mr-1" />
+                                        Scan
+                                      </Button>
+
+
+
+                                      <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="ml-2"
+                                        title="Download Unfilled OMR"
+                                      >
+                                        <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
+                                          <FileText className="w-4 h-4 mr-1" />
+                                          OMR
+                                        </a>
+                                      </Button>
+
+                                      {/* Release Assignment button for fully filled forms */}
+                                      {areAllPreferencesFilled(student) && (
+                                        <div className="flex flex-col ml-2 space-y-1">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedStudentForLock(student);
+                                              setIsLockConfirmDialogOpen(true);
+                                            }}
+                                            disabled={lockForEditMutation.isPending}
+                                            data-testid={`button-lock-${student.id}`}
+                                          >
+                                            <Lock className="w-4 h-4 mr-1" />
+                                            Lock
+                                          </Button>
+
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedStudentForRelease(student);
+                                              setIsReleaseConfirmDialogOpen(true);
+                                            }}
+                                            disabled={releaseAssignmentMutation.isPending}
+                                            data-testid={`button-release-${student.id}`}
+                                            className="text-red-600 border-red-300 hover:bg-red-50"
+                                          >
+                                            <XCircle className="w-4 h-4 mr-1" />
+                                            Release
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                 </>
                               ) : (
-                                /* Case 3: Regular edit button for all other cases */
-                                canEditStudent(student) && !student.lockedBy ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => openEditModal(student)}
-                                    data-testid={`button-edit-${student.id}`}
-                                  >
-                                    <Edit className="w-4 h-4 mr-1" />
-                                    Edit
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled
-                                    data-testid={`button-edit-disabled-${student.id}`}
-                                    className="text-muted-foreground"
-                                  >
-                                    <Edit className="w-4 h-4 mr-1" />
-                                    Edit
-                                  </Button>
-                                )
+                                // --- DISTRICT ADMIN VIEW ---
+                                <>
+                                  {canEditStudent(student) && !student.lockedBy ? (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => openEditModal(student)}
+                                        data-testid={`button-edit-${student.id}`}
+                                      >
+                                        <Edit className="w-4 h-4 mr-1" />
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          setScannerStudent(student);
+                                          setIsScannerOpen(true);
+                                        }}
+                                        className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 ml-2"
+                                        title="Scan OMR Form"
+                                      >
+                                        <Camera className="w-4 h-4 mr-1" />
+                                        Scan
+                                      </Button>
+
+
+
+                                      <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="ml-2"
+                                        title="Download Unfilled OMR"
+                                      >
+                                        <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
+                                          <FileText className="w-4 h-4 mr-1" />
+                                          OMR
+                                        </a>
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled
+                                      data-testid={`button-edit-disabled-${student.id}`}
+                                      className="text-muted-foreground"
+                                    >
+                                      <Edit className="w-4 h-4 mr-1" />
+                                      {student.lockedBy ? "Locked" : "Edit"}
+                                    </Button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </TableCell>
@@ -577,76 +950,72 @@ export default function StudentPreferenceManagement() {
             </CardContent>
           </Card>
         </div>
-      </main>
+      </main >
 
       {/* Edit Modal */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+      < Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen} >
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Student Preferences</DialogTitle>
           </DialogHeader>
 
           {selectedStudentForEdit && (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium">Student Name</p>
-                    <p className="text-lg">{selectedStudentForEdit.name}</p>
+            <div className={selectedStudentForEdit.omrImageUrl ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : ""}>
+              {/* OMR Image Preview Column */}
+              {selectedStudentForEdit.omrImageUrl && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm">OMR Scan Preview</h3>
+                    <div className="flex gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        Stream: {selectedStudentForEdit.stream || "N/A"}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        Choices: {Array.from({ length: 10 }, (_, i) => selectedStudentForEdit[`choice${i + 1}` as keyof typeof selectedStudentForEdit]).filter(Boolean).length}/10 Detected
+                      </Badge>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">Merit Number</p>
-                    <p className="text-lg font-mono">{selectedStudentForEdit.meritNumber}</p>
+                  <div className="border border-input rounded-md overflow-hidden bg-muted/30 flex-1 flex items-center justify-center p-2 min-h-[400px]">
+                    <img
+                      src={selectedStudentForEdit.omrImageUrl as string}
+                      alt="OMR Scan Overlay"
+                      className="max-w-full max-h-[70vh] object-contain drop-shadow-md bg-white"
+                    />
                   </div>
                 </div>
+              )}
 
-                <FormField
-                  control={form.control}
-                  name="stream"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Stream</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select stream" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {STREAMS.map((stream) => (
-                            <SelectItem key={stream} value={stream}>
-                              {stream}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              {/* Form Column */}
+              <div>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">Student Name</p>
+                        <p className="text-lg">{selectedStudentForEdit.name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Merit Number</p>
+                        <p className="text-lg font-mono">{selectedStudentForEdit.meritNumber}</p>
+                      </div>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
                     <FormField
-                      key={choiceNum}
                       control={form.control}
-                      name={`choice${choiceNum}` as any}
+                      name="stream"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Choice {choiceNum}</FormLabel>
+                          <FormLabel>Stream</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder={`Select choice ${choiceNum}`} />
+                                <SelectValue placeholder="Select stream" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value=" ">
-                                <span className="text-muted-foreground">No selection</span>
-                              </SelectItem>
-                              {DISTRICTS.map((district) => (
-                                <SelectItem key={district} value={district}>
-                                  {district}
+                              {STREAMS.map((stream) => (
+                                <SelectItem key={stream} value={stream}>
+                                  {stream}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -655,73 +1024,152 @@ export default function StudentPreferenceManagement() {
                         </FormItem>
                       )}
                     />
-                  ))}
-                </div>
 
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsEditModalOpen(false)}
-                    data-testid="button-cancel-edit"
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={updatePreferencesMutation.isPending}
-                    data-testid="button-save-preferences"
-                  >
-                    {updatePreferencesMutation.isPending ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
-                    ) : "Save Preferences"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
+                    <div className="grid grid-cols-2 gap-4">
+                      {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
+                        <FormField
+                          key={choiceNum}
+                          control={form.control}
+                          name={`choice${choiceNum}` as any}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Choice {choiceNum}</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value || ""}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder={`Select choice ${choiceNum}`} />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value=" ">
+                                    <span className="text-muted-foreground">No selection</span>
+                                  </SelectItem>
+                                  {DISTRICTS.map((district) => (
+                                    <SelectItem key={district} value={district}>
+                                      {district}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      ))}
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsEditModalOpen(false)}
+                        data-testid="button-cancel-edit"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={updatePreferencesMutation.isPending}
+                      >
+                        {updatePreferencesMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="w-4 h-4 mr-2" />
+                        )}
+                        Save Changes
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </div>
+            </div>
           )}
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Choices View Modal */}
-      <Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen}>
-        <DialogContent className="max-w-2xl">
+      < Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen} >
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-2">
-              {selectedStudentForChoices && [
-                selectedStudentForChoices.choice1, selectedStudentForChoices.choice2,
-                selectedStudentForChoices.choice3, selectedStudentForChoices.choice4,
-                selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
-                selectedStudentForChoices.choice7, selectedStudentForChoices.choice8,
-                selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
-              ].map((choice, index) => (
-                <div key={index} className="flex items-center justify-between p-3 border rounded">
-                  <span className="font-medium">Choice {index + 1}:</span>
-                  <span className={choice ? "text-blue-600" : "text-gray-400"}>
-                    {choice || "Not set"}
-                  </span>
-                </div>
-              ))}
-            </div>
+          {selectedStudentForChoices && (
+            <div className={selectedStudentForChoices.omrImageUrl ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : ""}>
 
-            {selectedStudentForChoices && (
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><strong>Stream:</strong> {selectedStudentForChoices.stream || "Not set"}</div>
-                  <div><strong>Status:</strong> {selectedStudentForChoices.isLocked ? "🔒 Locked" : "🔓 Unlocked"}</div>
-                  <div><strong>Merit Number:</strong> {selectedStudentForChoices.meritNumber}</div>
-                  <div><strong>App Number:</strong> {selectedStudentForChoices.appNo}</div>
-                  <div><strong>Current District:</strong> {selectedStudentForChoices.counselingDistrict || "Not assigned"}</div>
-                  <div><strong>District Admin:</strong> {selectedStudentForChoices.districtAdmin || "Not assigned"}</div>
+              {/* OMR Image Preview Column */}
+              {selectedStudentForChoices.omrImageUrl && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-sm">OMR Scan Preview</h3>
+                    <div className="flex gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        Stream: {selectedStudentForChoices.stream || "N/A"}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        Choices: {Array.from({ length: 10 }, (_, i) => selectedStudentForChoices[`choice${i + 1}` as keyof typeof selectedStudentForChoices]).filter(Boolean).length}/10 Detected
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="border border-input rounded-md overflow-hidden bg-muted/30 flex-1 flex items-center justify-center p-2 min-h-[400px]">
+                    <img
+                      src={selectedStudentForChoices.omrImageUrl as string}
+                      alt="OMR Scan Overlay"
+                      className="max-w-full max-h-[70vh] object-contain drop-shadow-md bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Data Column */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg text-sm">
+                  <div>
+                    <p className="font-medium text-muted-foreground">Stream</p>
+                    <p className="font-semibold">{selectedStudentForChoices.stream || "Not set"}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-muted-foreground">Status</p>
+                    <p className="font-semibold">{selectedStudentForChoices.lockedBy ? "🔒 Locked" : "🔓 Unlocked"}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-muted-foreground">Merit Number</p>
+                    <p className="font-mono">{selectedStudentForChoices.meritNumber}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-muted-foreground">App Number</p>
+                    <p className="font-mono">{selectedStudentForChoices.appNo || "N/A"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="font-medium text-muted-foreground">Current District / Admin</p>
+                    <p>{normalizeDistrict(selectedStudentForChoices.counselingDistrict) || "Not assigned"} / {selectedStudentForChoices.districtAdmin || "N/A"}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm border-b pb-1">Preferences</h4>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      selectedStudentForChoices.choice1, selectedStudentForChoices.choice2,
+                      selectedStudentForChoices.choice3, selectedStudentForChoices.choice4,
+                      selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
+                      selectedStudentForChoices.choice7, selectedStudentForChoices.choice8,
+                      selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
+                    ].map((choice, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 lg:p-3 border rounded bg-card text-sm">
+                        <span className="font-medium text-muted-foreground w-20">Choice {index + 1}</span>
+                        <span className={choice ? "font-semibold" : "text-muted-foreground italic"}>
+                          {choice || "Not set"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button
@@ -732,10 +1180,10 @@ export default function StudentPreferenceManagement() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog >
 
       {/* Lock Confirmation Dialog */}
-      <AlertDialog open={isLockConfirmDialogOpen} onOpenChange={setIsLockConfirmDialogOpen}>
+      < AlertDialog open={isLockConfirmDialogOpen} onOpenChange={setIsLockConfirmDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Lock Student Preferences</AlertDialogTitle>
@@ -798,10 +1246,10 @@ export default function StudentPreferenceManagement() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+      </AlertDialog >
 
       {/* Unlock Confirmation Dialog */}
-      <AlertDialog open={isUnlockConfirmDialogOpen} onOpenChange={setIsUnlockConfirmDialogOpen}>
+      < AlertDialog open={isUnlockConfirmDialogOpen} onOpenChange={setIsUnlockConfirmDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Unlock Student Preferences</AlertDialogTitle>
@@ -861,10 +1309,10 @@ export default function StudentPreferenceManagement() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+      </AlertDialog >
 
       {/* Release Assignment Confirmation Dialog */}
-      <AlertDialog open={isReleaseConfirmDialogOpen} onOpenChange={setIsReleaseConfirmDialogOpen}>
+      < AlertDialog open={isReleaseConfirmDialogOpen} onOpenChange={setIsReleaseConfirmDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Release Student Assignment</AlertDialogTitle>
@@ -892,7 +1340,7 @@ export default function StudentPreferenceManagement() {
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Current District</p>
                   <p className="font-semibold text-blue-600">
-                    {selectedStudentForRelease.counselingDistrict || "None"}
+                    {normalizeDistrict(selectedStudentForRelease.counselingDistrict) || "None"}
                   </p>
                 </div>
                 <div>
@@ -924,7 +1372,46 @@ export default function StudentPreferenceManagement() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
-    </div>
+      </AlertDialog >
+
+      {/* OMR Scanner Modal */}
+      < OMRScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)
+        }
+        expectedStudent={scannerStudent || undefined}
+        onScanComplete={(scannedStudentId, parsedData) => {
+          if (scannerStudent && scannerStudent.id === scannedStudentId) {
+            form.setValue('stream', (STREAM_DISPLAY_MAP[parsedData.stream] || parsedData.stream) as any);
+            parsedData.choices.forEach((choice, idx) => {
+              form.setValue(`choice${idx + 1}` as any, choice);
+            });
+            setSelectedStudentForEdit(scannerStudent);
+            setIsEditModalOpen(true);
+            setIsScannerOpen(false);
+          }
+        }}
+      />
+
+      <BulkScannerModal
+        isOpen={isBulkScannerOpen}
+        onClose={() => setIsBulkScannerOpen(false)}
+        students={(studentsData as any)?.students || []}
+        onSaveSelected={handleBulkSave}
+      />
+      
+      <LiveOMRScannerModal 
+        isOpen={isLiveScannerOpen}
+        onClose={() => setIsLiveScannerOpen(false)}
+        students={(studentsData as any)?.students || []}
+        onSaveData={(studentId, stream, choices) => {
+          const preferences: any = { stream };
+          for (let i = 0; i < 10; i++) {
+              preferences[`choice${i + 1}`] = choices[i] || "";
+          }
+          updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
+        }}
+      />
+    </div >
   );
 }

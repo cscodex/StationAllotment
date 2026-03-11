@@ -31,6 +31,7 @@ export default function Students() {
   const [editingEntranceResult, setEditingEntranceResult] = useState<string | null>(null);
   const [editingStream, setEditingStream] = useState<string>("");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -751,8 +752,14 @@ export default function Students() {
                 </>
               )}
             </div>
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+                Close
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
+
       </main>
     </div>
   );
