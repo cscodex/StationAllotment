@@ -110,9 +110,17 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         overCtx.clearRect(0, 0, width, height);
 
         // ===== DRAW FIXED A4 GUIDE BOX WITH FIDUCIAL TARGETS =====
-        // Calculate the maximum A4 box that fits, using 85% of height
-        const guideHeight = height * 0.85;
-        const guideWidth = guideHeight / (PDF_H / PDF_W); // Exact A4 ratio
+        // Calculate the maximum A4 box that fits, using 85% of height or 90% of width
+        const A4_RATIO = PDF_H / PDF_W;
+        let guideHeight = height * 0.85;
+        let guideWidth = guideHeight / A4_RATIO;
+
+        // If the box is too wide for the screen (e.g. tablet in portrait mode), constrain by width instead
+        if (guideWidth > width * 0.9) {
+            guideWidth = width * 0.9;
+            guideHeight = guideWidth * A4_RATIO;
+        }
+
         const guideX = (width - guideWidth) / 2;
         const guideY = (height - guideHeight) / 2;
 

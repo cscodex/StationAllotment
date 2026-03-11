@@ -235,7 +235,7 @@ export async function parseOMRImageData(
     const sMin = Math.min(...streamI);
     const sMax = Math.max(...streamI);
     let selectedStream: string | null = null;
-    if (sMax - sMin > 25) {
+    if (sMax - sMin > 15) {
         const sIdx = streamI.indexOf(sMin);
         selectedStream = STREAMS[sIdx];
     }
@@ -251,7 +251,7 @@ export async function parseOMRImageData(
         const rMin = Math.min(...rowI);
         const rMax = Math.max(...rowI);
         const priorityIdx = rowI.indexOf(rMin);
-        if (rMax - rMin > 25 && priorityIdx >= 0 && priorityIdx < 10) {
+        if (rMax - rMin > 15 && priorityIdx >= 0 && priorityIdx < 10) {
             choices[priorityIdx] = DISTRICTS[r];
         }
     }

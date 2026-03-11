@@ -224,6 +224,85 @@ export class OMRService {
             instY -= 25;
         }
 
+        instY -= 20;
+        backPage.drawText('EXAMPLES OF HOW TO FILL OPTIONS:', { x: 60, y: instY, size: 12, font: boldFont, color: black });
+        instY -= 30;
+
+        // Correct Example
+        backPage.drawText('CORRECT METHOD:', { x: 60, y: instY, size: 10, font: boldFont, color: rgb(0, 0.5, 0) });
+        backPage.drawCircle({ x: 200, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black, color: black });
+        backPage.drawText('1', { x: 197, y: instY + 15, size: 9, font });
+        backPage.drawCircle({ x: 230, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawText('2', { x: 227, y: instY + 15, size: 9, font });
+        backPage.drawCircle({ x: 260, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawText('3', { x: 257, y: instY + 15, size: 9, font });
+
+        instY -= 40;
+
+        // Incorrect Methods
+        backPage.drawText('INCORRECT METHODS:', { x: 60, y: instY, size: 10, font: boldFont, color: rgb(0.8, 0, 0) });
+        
+        // Tick mark
+        backPage.drawCircle({ x: 200, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawLine({ start: { x: 195, y: instY + 3 }, end: { x: 200, y: instY - 2 }, thickness: 2, color: black });
+        backPage.drawLine({ start: { x: 200, y: instY - 2 }, end: { x: 210, y: instY + 10 }, thickness: 2, color: black });
+        backPage.drawText('Tick', { x: 190, y: instY - 20, size: 9, font });
+
+        // Cross mark
+        backPage.drawCircle({ x: 260, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawLine({ start: { x: 254, y: instY - 3 }, end: { x: 266, y: instY + 9 }, thickness: 2, color: black });
+        backPage.drawLine({ start: { x: 254, y: instY + 9 }, end: { x: 266, y: instY - 3 }, thickness: 2, color: black });
+        backPage.drawText('Cross', { x: 247, y: instY - 20, size: 9, font });
+
+        // Half filled
+        backPage.drawCircle({ x: 320, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawRectangle({ x: 312, y: instY - 5, width: 8, height: 16, color: black }); // fill left half
+        backPage.drawText('Half Filled', { x: 300, y: instY - 20, size: 9, font });
+
+        // Dot
+        backPage.drawCircle({ x: 380, y: instY + 3, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 380, y: instY + 3, size: 3, color: black });
+        backPage.drawText('Dot', { x: 373, y: instY - 20, size: 9, font });
+
+        instY -= 50;
+        
+        // Example of filling Station Choice
+        backPage.drawText('EXAMPLE OF FILLING STATION CHOICES:', { x: 60, y: instY, size: 12, font: boldFont, color: black });
+        instY -= 30;
+
+        // Draw a mini grid
+        backPage.drawText('Priority No:', { x: 140, y: instY + 20, size: 10, font: boldFont });
+        for(let c=0; c<4; c++) {
+            backPage.drawText(`${c+1}`, { x: 147 + c * 35, y: instY + 20, size: 11, font: boldFont });
+        }
+        
+        instY -= 15;
+        backPage.drawText('1. Amritsar', { x: 60, y: instY - 4, size: 10, font });
+        backPage.drawCircle({ x: 152, y: instY, size: 8, borderWidth: 1.5, borderColor: black, color: black }); // priority 1
+        backPage.drawCircle({ x: 187, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 222, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 257, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+
+        instY -= 25;
+        backPage.drawText('2. Bathinda', { x: 60, y: instY - 4, size: 10, font });
+        backPage.drawCircle({ x: 152, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 187, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 222, y: instY, size: 8, borderWidth: 1.5, borderColor: black, color: black }); // priority 3
+        backPage.drawCircle({ x: 257, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+
+        instY -= 25;
+        backPage.drawText('3. Ludhiana', { x: 60, y: instY - 4, size: 10, font });
+        backPage.drawCircle({ x: 152, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 187, y: instY, size: 8, borderWidth: 1.5, borderColor: black, color: black }); // priority 2
+        backPage.drawCircle({ x: 222, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+        backPage.drawCircle({ x: 257, y: instY, size: 8, borderWidth: 1.5, borderColor: black });
+
+        instY += 65; // Back up to draw text block on the right
+        backPage.drawText('In this example grid:', { x: 310, y: instY, size: 10, font: boldFont });
+        backPage.drawText('1st Preference = Amritsar', { x: 310, y: instY - 20, size: 10, font });
+        backPage.drawText('2nd Preference = Ludhiana', { x: 310, y: instY - 40, size: 10, font });
+        backPage.drawText('3rd Preference = Bathinda', { x: 310, y: instY - 60, size: 10, font });
+
         // Convert to Bytes
         return await doc.save();
     }
