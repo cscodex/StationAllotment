@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Camera, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
+import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR } from "@/lib/omr-utils";
 import jsQR from "jsqr";
@@ -24,6 +24,9 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
     const [cameraOk, setCameraOk] = useState<boolean | null>(null);
     const [lockedStudent, setLockedStudent] = useState<Student | null>(null);
     const [scanData, setScanData] = useState<{ stream: string | null, choices: string[] } | null>(null);
+    const [flashSupported, setFlashSupported] = useState(false);
+    const [flashOn, setFlashOn] = useState(false);
+    const [showCaptureFlash, setShowCaptureFlash] = useState(false);
     
     // Stability tracking (require 5 consecutive identical QR reads before capture)
     const stabilityCounter = useRef(0);
@@ -47,11 +50,23 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                         videoRef.current.srcObject = s;
                         videoRef.current.play();
                     }
+
+                    // Check if device supports hardware flashlight (torch)
+                    const tempTrack = s.getVideoTracks()[0];
+                    if (tempTrack && tempTrack.getCapabilities) {
+                        const caps = tempTrack.getCapabilities() as any;
+                        if (caps.torch) {
+                            setFlashSupported(true);
+                        }
+                    }
+
                     setCameraOk(true);
                     setIsScanning(true);
+                    setFlashOn(false);
                     stabilityCounter.current = 0;
                     setLockedStudent(null);
                     setScanData(null);
+                    setShowCaptureFlash(false);
                 })
                 .catch(err => {
                     console.error("Camera error:", err);
@@ -61,10 +76,27 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         return () => {
             setIsScanning(false);
             if (stream) {
+                const track = stream.getVideoTracks()[0];
+                if (track && typeof track.applyConstraints === 'function' && flashOn) {
+                    track.applyConstraints({ advanced: [{ torch: false } as any] }).catch(() => {});
+                }
                 stream.getTracks().forEach(t => t.stop());
             }
         };
-    }, [isOpen]);
+    }, [isOpen, flashOn]);
+
+    const toggleFlash = () => {
+        if (!videoRef.current || !videoRef.current.srcObject) return;
+        const stream = videoRef.current.srcObject as MediaStream;
+        const track = stream.getVideoTracks()[0];
+        if (track && typeof track.applyConstraints === 'function') {
+            track.applyConstraints({
+                advanced: [{ torch: !flashOn } as any]
+            })
+            .then(() => setFlashOn(!flashOn))
+            .catch(console.error);
+        }
+    };
 
     // Helper: draw a crosshair target on a canvas context
     const drawCrosshair = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => {
@@ -242,6 +274,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
 
                 const capturedImgData = captureCtx.getImageData(0, 0, targetW, targetH);
 
+                // Trigger visual flash
+                setShowCaptureFlash(true);
+                setTimeout(() => setShowCaptureFlash(false), 300);
+
                 // ===== PROCESS: Use the exact same pipeline as bulk scanner =====
                 // 1. Find student from QR
                 let detectedStudent: Student | null = null;
@@ -313,6 +349,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         setScanData(null);
         lastQrData.current = "";
         stabilityCounter.current = 0;
+        setShowCaptureFlash(false);
         setIsScanning(true);
     };
 
@@ -365,11 +402,29 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                         className={`absolute top-0 left-0 w-full h-full object-contain pointer-events-none transition-opacity duration-200 ${!isScanning && lockedStudent ? 'opacity-0' : 'opacity-100'}`}
                     />
 
-                    {/* HUD: Scanning Indicator */}
+                    {/* Visible Camera Feedback Flash */}
+                    {showCaptureFlash && (
+                        <div className="absolute inset-0 bg-white z-40 transition-opacity duration-300 pointer-events-none" />
+                    )}
+
+                    {/* HUD: Scanning Indicator and Flashlight */}
                     {isScanning && cameraOk && (
-                        <div className="absolute top-4 right-4 bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
-                            <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                            <span className="text-xs font-semibold text-white tracking-widest uppercase">Scanning</span>
+                        <div className="absolute top-4 right-4 flex items-center space-x-2">
+                            {flashSupported && (
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    onClick={toggleFlash}
+                                    className="bg-black/60 border border-white/20 hover:bg-black/80 text-white rounded-full p-2 h-auto"
+                                    title={flashOn ? "Turn off flash" : "Turn on flash"}
+                                >
+                                    {flashOn ? <Zap className="w-4 h-4 text-yellow-500 fill-yellow-500" /> : <ZapOff className="w-4 h-4" />}
+                                </Button>
+                            )}
+                            <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
+                                <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                                <span className="text-xs font-semibold text-white tracking-widest uppercase">Scanning</span>
+                            </div>
                         </div>
                     )}
 
