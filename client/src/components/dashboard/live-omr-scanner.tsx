@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { parseOMRImageData, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP } from "@/lib/omr-utils";
+import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR } from "@/lib/omr-utils";
 import jsQR from "jsqr";
 import type { Student } from "@shared/schema";
 
@@ -25,9 +25,9 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
     const [lockedStudent, setLockedStudent] = useState<Student | null>(null);
     const [scanData, setScanData] = useState<{ stream: string | null, choices: string[] } | null>(null);
     
-    // Stability tracking (require 3 consecutive identical frames to lock on)
+    // Stability tracking (require 5 consecutive identical QR reads before capture)
     const stabilityCounter = useRef(0);
-    const lastResultStr = useRef("");
+    const lastQrData = useRef("");
 
     // Start Webcam
     useEffect(() => {
@@ -66,6 +66,21 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         };
     }, [isOpen]);
 
+    // Helper: draw a crosshair target on a canvas context
+    const drawCrosshair = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        // Circle
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, 2 * Math.PI);
+        ctx.stroke();
+        // Cross
+        ctx.beginPath();
+        ctx.moveTo(x - size - 5, y); ctx.lineTo(x + size + 5, y);
+        ctx.moveTo(x, y - size - 5); ctx.lineTo(x, y + size + 5);
+        ctx.stroke();
+    };
+
     const processFrame = useCallback(async () => {
         if (!isScanning || !videoRef.current || !hiddenCanvasRef.current || !overlayCanvasRef.current) return;
 
@@ -78,7 +93,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         const width = video.videoWidth;
         const height = video.videoHeight;
 
-        // Set canvases physical DOM dimensions to match exact video resolution tightly
+        // Set canvases to match video resolution
         hiddenCanvasRef.current.width = width;
         hiddenCanvasRef.current.height = height;
         overlayCanvasRef.current.width = width;
@@ -90,199 +105,177 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
 
         // Draw current video frame to hidden canvas
         ctx.drawImage(video, 0, 0, width, height);
-        const imgData = ctx.getImageData(0, 0, width, height);
 
-        // Clear overlay for fresh redrawing
+        // Clear overlay
         overCtx.clearRect(0, 0, width, height);
 
-        // Draw "Hold Paper Here" Guide Box
-        // Perfect A4 aspect ratio is 1:1.414. We want to take up 80% of the screen height.
-        const guideHeight = height * 0.8;
-        const guideWidth = guideHeight / 1.414;
+        // ===== DRAW FIXED A4 GUIDE BOX WITH FIDUCIAL TARGETS =====
+        // Calculate the maximum A4 box that fits, using 85% of height
+        const guideHeight = height * 0.85;
+        const guideWidth = guideHeight / (PDF_H / PDF_W); // Exact A4 ratio
         const guideX = (width - guideWidth) / 2;
         const guideY = (height - guideHeight) / 2;
-        
-        // Draw the white stencil mask covering everything OUTSIDE the guide
-        overCtx.fillStyle = "rgba(255, 255, 255, 0.65)";
+
+        // White stencil mask outside the guide
+        overCtx.fillStyle = "rgba(0, 0, 0, 0.55)";
         overCtx.beginPath();
-        overCtx.rect(0, 0, width, height); // Outer full screen
-        overCtx.rect(guideX, guideY, guideWidth, guideHeight); // Inner guide hole
-        overCtx.fill("evenodd"); // Subtractive hole punch using evenodd winding rule
-        
-        // Draw dashed guide boundary
-        overCtx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+        overCtx.rect(0, 0, width, height);
+        overCtx.rect(guideX, guideY, guideWidth, guideHeight);
+        overCtx.fill("evenodd");
+
+        // Dashed border around the guide
+        overCtx.strokeStyle = "rgba(255, 255, 255, 0.7)";
         overCtx.lineWidth = 2;
-        overCtx.setLineDash([15, 15]);
+        overCtx.setLineDash([12, 8]);
         overCtx.strokeRect(guideX, guideY, guideWidth, guideHeight);
         overCtx.setLineDash([]);
-        
-        // Add corner brackets for the guide
+
+        // Draw 4 Fixed Fiducial Crosshair Targets at A4-proportional positions
+        // These are exactly where the physical black squares are printed on the OMR form
+        const targetTL = { x: guideX + (MARKER_TL.x / PDF_W) * guideWidth, y: guideY + (MARKER_TL.y / PDF_H) * guideHeight };
+        const targetTR = { x: guideX + (MARKER_TR.x / PDF_W) * guideWidth, y: guideY + (MARKER_TR.y / PDF_H) * guideHeight };
+        const targetBL = { x: guideX + (MARKER_BL.x / PDF_W) * guideWidth, y: guideY + (MARKER_BL.y / PDF_H) * guideHeight };
+        const targetBR = { x: guideX + (MARKER_BR.x / PDF_W) * guideWidth, y: guideY + (MARKER_BR.y / PDF_H) * guideHeight };
+
+        const targetColor = "#ff6b35"; // Vivid orange for maximum visibility
+        const targetSize = Math.max(8, guideWidth * 0.02);
+        drawCrosshair(overCtx, targetTL.x, targetTL.y, targetSize, targetColor);
+        drawCrosshair(overCtx, targetTR.x, targetTR.y, targetSize, targetColor);
+        drawCrosshair(overCtx, targetBL.x, targetBL.y, targetSize, targetColor);
+        drawCrosshair(overCtx, targetBR.x, targetBR.y, targetSize, targetColor);
+
+        // Corner bracket decorations
         overCtx.strokeStyle = "rgba(255, 255, 255, 0.9)";
         overCtx.lineWidth = 4;
-        const cl = 30; // corner length
-        // Top Left
+        const cl = 25;
+        // TL
         overCtx.beginPath(); overCtx.moveTo(guideX, guideY + cl); overCtx.lineTo(guideX, guideY); overCtx.lineTo(guideX + cl, guideY); overCtx.stroke();
-        // Top Right
+        // TR
         overCtx.beginPath(); overCtx.moveTo(guideX + guideWidth - cl, guideY); overCtx.lineTo(guideX + guideWidth, guideY); overCtx.lineTo(guideX + guideWidth, guideY + cl); overCtx.stroke();
-        // Bottom Left
+        // BL
         overCtx.beginPath(); overCtx.moveTo(guideX, guideY + guideHeight - cl); overCtx.lineTo(guideX, guideY + guideHeight); overCtx.lineTo(guideX + cl, guideY + guideHeight); overCtx.stroke();
-        // Bottom Right
+        // BR
         overCtx.beginPath(); overCtx.moveTo(guideX + guideWidth - cl, guideY + guideHeight); overCtx.lineTo(guideX + guideWidth, guideY + guideHeight); overCtx.lineTo(guideX + guideWidth, guideY + guideHeight - cl); overCtx.stroke();
 
+        // Instructional text
+        overCtx.font = `${Math.max(14, guideWidth * 0.025)}px sans-serif`;
+        overCtx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        overCtx.textAlign = "center";
+        overCtx.fillText("Align the 4 black corner squares to the orange crosshairs", width / 2, guideY - 10);
+
+        // ===== LIGHTWEIGHT QR-ONLY DETECTION (no heavy OMR per-frame) =====
         try {
-            // STEP 1: Fast QR Scan first to avoid heavy OMR processing on random frames
-            // Using "attemptBoth" is critical for webcams due to variable contrast/shadows
-            const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" });
+            // Only scan the guide region for QR to save CPU
+            const cropImgData = ctx.getImageData(
+                Math.max(0, Math.floor(guideX)),
+                Math.max(0, Math.floor(guideY)),
+                Math.min(Math.floor(guideWidth), width - Math.floor(guideX)),
+                Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
+            );
+
+            const code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
             if (!code) {
-                // Keep trying
+                stabilityCounter.current = 0;
+                lastQrData.current = "";
                 requestAnimationFrame(processFrame);
                 return;
             }
 
-            // Draw Green Box around QR code indicating detection
-            overCtx.strokeStyle = "#22c55e"; // green-500
+            // Draw green box around detected QR (offset back to full-frame coordinates)
+            const ox = Math.floor(guideX);
+            const oy = Math.floor(guideY);
+            overCtx.strokeStyle = "#22c55e";
             overCtx.lineWidth = 4;
             overCtx.beginPath();
-            overCtx.moveTo(code.location.topLeftCorner.x, code.location.topLeftCorner.y);
-            overCtx.lineTo(code.location.topRightCorner.x, code.location.topRightCorner.y);
-            overCtx.lineTo(code.location.bottomRightCorner.x, code.location.bottomRightCorner.y);
-            overCtx.lineTo(code.location.bottomLeftCorner.x, code.location.bottomLeftCorner.y);
+            overCtx.moveTo(ox + code.location.topLeftCorner.x, oy + code.location.topLeftCorner.y);
+            overCtx.lineTo(ox + code.location.topRightCorner.x, oy + code.location.topRightCorner.y);
+            overCtx.lineTo(ox + code.location.bottomRightCorner.x, oy + code.location.bottomRightCorner.y);
+            overCtx.lineTo(ox + code.location.bottomLeftCorner.x, oy + code.location.bottomLeftCorner.y);
             overCtx.closePath();
             overCtx.stroke();
 
-            // Locate Student
-            let detectedStudent: Student | null = null;
-            try {
-                const qrPayload = JSON.parse(code.data);
-                if (qrPayload.id) {
-                    detectedStudent = students.find(s => s.id === qrPayload.id) || null;
-                }
-            } catch (e) {
-                // Invalid Payload 
+            // Stability check: same QR data for 5 consecutive frames
+            if (code.data === lastQrData.current) {
+                stabilityCounter.current++;
+            } else {
+                lastQrData.current = code.data;
+                stabilityCounter.current = 1;
             }
 
-            if (!detectedStudent) {
-                requestAnimationFrame(processFrame);
-                return;
-            }
+            // Show stability progress
+            overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
+            overCtx.font = `bold ${Math.max(16, guideWidth * 0.03)}px sans-serif`;
+            overCtx.textAlign = "center";
+            overCtx.fillText(
+                stabilityCounter.current >= 5 ? "✓ Capturing..." : `Stabilizing... ${stabilityCounter.current}/5`,
+                width / 2,
+                guideY + guideHeight + Math.max(20, guideHeight * 0.04)
+            );
 
-            // STEP 2: Use the physical coordinates of the QR code in the video frame to establish a planar Anchor
-            // The QR code printed by omrService is 90x90 physically
-            const dx = code.location.topRightCorner.x - code.location.topLeftCorner.x;
-            const dy = code.location.topRightCorner.y - code.location.topLeftCorner.y;
-            const qrPxWidth = Math.sqrt(dx * dx + dy * dy);
-            
-            // Avoid division by zero on corrupted reads
-            if (qrPxWidth < 10) {
-                requestAnimationFrame(processFrame);
-                return;
-            }
-            
-            const scale = qrPxWidth / 90.0;
-            const angle = Math.atan2(dy, dx);
-            
-            const anchor = {
-                scale,
-                angle,
-                qrX: code.location.topLeftCorner.x,
-                qrY: code.location.topLeftCorner.y,
-                qrPhysicalX: 455.28,
-                qrPhysicalY: 80.0
-            };
+            // Once stable, CAPTURE and PROCESS the frame
+            if (stabilityCounter.current >= 5) {
+                // ===== CAPTURE: Crop guide region and scale to PDF dimensions =====
+                const RENDER_SCALE = 2.0; // Same scale used by bulk scanner
+                const targetW = Math.floor(PDF_W * RENDER_SCALE);
+                const targetH = Math.floor(PDF_H * RENDER_SCALE);
 
-            // STEP 3: Full OMR extraction
-            const parsedOMR = await parseOMRImageData(imgData, 0, 0, false, undefined, undefined, anchor);
-            const { markerTL, markerTR, markerBL, markerBR, toPixel, selectedStream, choices } = parsedOMR;
+                const captureCanvas = document.createElement("canvas");
+                captureCanvas.width = targetW;
+                captureCanvas.height = targetH;
+                const captureCtx = captureCanvas.getContext("2d");
+                if (!captureCtx) { requestAnimationFrame(processFrame); return; }
 
-            // Paint Blue Crosshairs where Center of Mass located Fiducials
-            if (markerTL && markerTR && markerBL && markerBR) {
-                overCtx.strokeStyle = "blue";
-                overCtx.lineWidth = 3;
-                const drawCrosshair = (point: { x: number, y: number }) => {
-                    overCtx.beginPath();
-                    overCtx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
-                    overCtx.stroke();
-                    overCtx.beginPath();
-                    overCtx.moveTo(point.x - 15, point.y);
-                    overCtx.lineTo(point.x + 15, point.y);
-                    overCtx.moveTo(point.x, point.y - 15);
-                    overCtx.lineTo(point.x, point.y + 15);
-                    overCtx.stroke();
-                };
-                drawCrosshair(markerTL);
-                drawCrosshair(markerTR);
-                drawCrosshair(markerBL);
-                drawCrosshair(markerBR);
+                // Draw the guide region scaled to exact PDF dimensions
+                captureCtx.drawImage(
+                    hiddenCanvasRef.current!,
+                    Math.floor(guideX), Math.floor(guideY), Math.floor(guideWidth), Math.floor(guideHeight),
+                    0, 0, targetW, targetH
+                );
 
-                // Draw bounding box interconnecting the 4 fiducials
-                overCtx.strokeStyle = "rgba(0, 0, 255, 0.4)";
-                overCtx.setLineDash([10, 10]);
-                overCtx.beginPath();
-                overCtx.moveTo(markerTL.x, markerTL.y);
-                overCtx.lineTo(markerTR.x, markerTR.y);
-                overCtx.lineTo(markerBR.x, markerBR.y);
-                overCtx.lineTo(markerBL.x, markerBL.y);
-                overCtx.closePath();
-                overCtx.stroke();
-                overCtx.setLineDash([]);
-            }
+                const capturedImgData = captureCtx.getImageData(0, 0, targetW, targetH);
 
-            if (toPixel) {
-                // Overlay theoretical extraction matrix
-                overCtx.strokeStyle = "red";
-                overCtx.lineWidth = 2;
-                
-                // Red Matrix
-                for (let r = 0; r < 10; r++) {
-                    for (let c = 0; c < 10; c++) {
-                        const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
-                        overCtx.beginPath();
-                        overCtx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
-                        overCtx.stroke();
-                        
-                        // If selected, fill it
-                        if (choices[c] === DISTRICTS[r]) {
-                            overCtx.fillStyle = "rgba(255, 0, 0, 0.5)";
-                            overCtx.fill();
-                        }
+                // ===== PROCESS: Use the exact same pipeline as bulk scanner =====
+                // 1. Find student from QR
+                let detectedStudent: Student | null = null;
+                try {
+                    const qrPayload = JSON.parse(code.data);
+                    if (qrPayload.id) {
+                        detectedStudent = students.find(s => s.id === qrPayload.id) || null;
                     }
+                } catch (e) {
+                    // Invalid QR payload
                 }
-                
-                // Pink Streams
-                overCtx.strokeStyle = "magenta";
-                for (const pos of STREAM_POS) {
-                    const p = toPixel(pos.x, pos.y);
-                    overCtx.beginPath();
-                    overCtx.arc(p.x, p.y, 8, 0, 2 * Math.PI);
-                    overCtx.stroke();
+
+                if (!detectedStudent) {
+                    stabilityCounter.current = 0;
+                    requestAnimationFrame(processFrame);
+                    return;
                 }
+
+                // 2. Run OMR extraction on the cropped+scaled image (identical to bulk scanner)
+                try {
+                    const parsedOMR = await parseOMRImageData(capturedImgData, 0, 0, false);
+                    const { selectedStream, choices } = parsedOMR;
+
+                    if (selectedStream && choices.filter(c => c && c.trim() !== "").length > 0) {
+                        setLockedStudent(detectedStudent);
+                        setScanData({ stream: selectedStream, choices });
+                        setIsScanning(false);
+                        return; // EXIT LOOP - show result
+                    }
+                } catch (err) {
+                    console.error("OMR extraction error:", err);
+                }
+
+                // If extraction failed, reset and keep trying
+                stabilityCounter.current = 0;
+                requestAnimationFrame(processFrame);
+                return;
             }
-
-            // Stabilizer Check: Do we have all 10 choices and a stream?
-            const validChoices = choices.filter(c => c && c.trim() !== "").length;
-            if (selectedStream && validChoices > 0) {
-                const resultHash = `${detectedStudent.id}-${selectedStream}-${choices.join("-")}`;
-                if (resultHash === lastResultStr.current) {
-                    stabilityCounter.current++;
-                } else {
-                    lastResultStr.current = resultHash;
-                    stabilityCounter.current = 1;
-                }
-
-                // If locked stably for 5 frames, STOP processing and present result
-                if (stabilityCounter.current >= 5) {
-                    setLockedStudent(detectedStudent);
-                    setScanData({ stream: selectedStream, choices });
-                    setIsScanning(false);
-                    return; // EXIT LOOP
-                }
-            }
-
         } catch (err) {
-            // Ignore frame errors and continue loop
+            // Ignore frame errors and continue
         }
 
-        // Loop next frame
         requestAnimationFrame(processFrame);
     }, [isScanning, students]);
 
@@ -298,20 +291,19 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
             onSaveData(lockedStudent.id.toString(), scanData.stream, scanData.choices);
             toast({ title: "Saved", description: `Data for ${lockedStudent.name} saved successfully.` });
             
-            // Resume scanning immediately for the next paper
+            // Resume scanning for next paper
             setLockedStudent(null);
             setScanData(null);
-            lastResultStr.current = "";
+            lastQrData.current = "";
             stabilityCounter.current = 0;
             setIsScanning(true);
         }
     };
 
     const handleReject = () => {
-        // Resume scanning
         setLockedStudent(null);
         setScanData(null);
-        lastResultStr.current = "";
+        lastQrData.current = "";
         stabilityCounter.current = 0;
         setIsScanning(true);
     };
@@ -329,7 +321,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                 <DialogHeader>
                     <DialogTitle>Live Real-Time OMR Scanner</DialogTitle>
                     <DialogDescription>
-                        Hold the printed A4 physical OMR sheet up to your camera. Make sure all 4 black corner squares are visible.
+                        Align the 4 black corner squares on the OMR sheet to the orange crosshair targets. Hold steady until captured.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -359,7 +351,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                     {/* Hidden canvas for data extraction */}
                     <canvas ref={hiddenCanvasRef} className="hidden" />
                     
-                    {/* Overlay canvas for live drawing Blue and Red visual feedback */}
+                    {/* Overlay canvas for guide UI and feedback */}
                     <canvas 
                         ref={overlayCanvasRef} 
                         className={`absolute top-0 left-0 w-full h-full object-contain pointer-events-none transition-opacity duration-200 ${!isScanning && lockedStudent ? 'opacity-0' : 'opacity-100'}`}
@@ -375,23 +367,23 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
 
                     {/* Final Result Modal Overlay */}
                     {!isScanning && lockedStudent && scanData && (
-                        <div className="absolute inset-x-8 inset-y-8 bg-white/95 text-black rounded-xl shadow-2xl p-6 flex flex-col justify-center border-2 border-primary/20 backdrop-blur-md animate-in zoom-in-95 duration-200">
-                            <div className="flex items-center space-x-3 mb-6">
-                                <CheckCircle2 className="w-10 h-10 text-green-500" />
+                        <div className="absolute inset-x-4 inset-y-4 sm:inset-x-8 sm:inset-y-8 bg-white/95 text-black rounded-xl shadow-2xl p-4 sm:p-6 flex flex-col justify-center border-2 border-primary/20 backdrop-blur-md animate-in zoom-in-95 duration-200 overflow-auto">
+                            <div className="flex items-center space-x-3 mb-4 sm:mb-6">
+                                <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-green-500 flex-shrink-0" />
                                 <div>
-                                    <h3 className="text-xl font-bold">Stable Lock Acquired</h3>
-                                    <p className="text-sm text-zinc-600">Student: <strong>{lockedStudent.name}</strong> (Merit #: {lockedStudent.meritNumber})</p>
+                                    <h3 className="text-lg sm:text-xl font-bold">Scan Complete</h3>
+                                    <p className="text-xs sm:text-sm text-zinc-600">Student: <strong>{lockedStudent.name}</strong> (Merit #: {lockedStudent.meritNumber})</p>
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-4 flex-1 overflow-auto bg-slate-50 p-4 border rounded-lg">
+                            <div className="grid grid-cols-2 gap-4 flex-1 overflow-auto bg-slate-50 p-3 sm:p-4 border rounded-lg">
                                 <div>
                                     <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-2">Detected Stream</h4>
-                                    <p className="text-lg font-bold text-primary">{scanData.stream === "Non-Medical" ? "NonMedical" : scanData.stream}</p>
+                                    <p className="text-base sm:text-lg font-bold text-primary">{scanData.stream === "Non-Medical" ? "NonMedical" : scanData.stream}</p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-2">Detected Choices</h4>
-                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs sm:text-sm">
                                         {scanData.choices.map((c, i) => (
                                             <div key={i} className="flex">
                                                 <span className="w-6 text-zinc-400 font-mono">{i + 1}.</span>
@@ -402,7 +394,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                                 </div>
                             </div>
 
-                            <div className="flex space-x-4 mt-6">
+                            <div className="flex space-x-4 mt-4 sm:mt-6">
                                 <Button variant="destructive" onClick={handleReject} className="flex-1">
                                     <RefreshCw className="w-4 h-4 mr-2" /> Resume Scanning
                                 </Button>
