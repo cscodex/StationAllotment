@@ -76,14 +76,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         return () => {
             setIsScanning(false);
             if (stream) {
-                const track = stream.getVideoTracks()[0];
-                if (track && typeof track.applyConstraints === 'function' && flashOn) {
-                    track.applyConstraints({ advanced: [{ torch: false } as any] }).catch(() => {});
-                }
                 stream.getTracks().forEach(t => t.stop());
             }
         };
-    }, [isOpen, flashOn]);
+    }, [isOpen]);
 
     const toggleFlash = () => {
         if (!videoRef.current || !videoRef.current.srcObject) return;

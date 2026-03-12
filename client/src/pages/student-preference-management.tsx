@@ -489,7 +489,6 @@ export default function StudentPreferenceManagement() {
           { name: "Home" },
           { name: "Student Preference Management" }
         ]}
-        onMobileMenuToggle={toggleSidebar}
       />
 
       <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-auto">
@@ -530,7 +529,7 @@ export default function StudentPreferenceManagement() {
                 )}
 
                 {/* BULK SCAN BUTTON */}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                   <Button
                     variant="outline"
                     size="sm"
