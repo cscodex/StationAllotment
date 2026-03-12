@@ -43,7 +43,14 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                 return;
             }
 
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } } })
+            const isMobile = window.innerWidth < 768;
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: "environment", 
+                    width: { ideal: isMobile ? 1080 : 1920 }, 
+                    height: { ideal: isMobile ? 1920 : 1080 } 
+                } 
+            })
                 .then(s => {
                     stream = s;
                     if (videoRef.current) {
@@ -366,7 +373,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border">
+                <div className="relative w-full h-[65vh] sm:h-[70vh] md:h-auto md:aspect-video bg-black rounded-lg overflow-hidden border">
                     {cameraOk === false && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-red-500 p-6 text-center bg-zinc-900 border-2 border-red-500 rounded-lg z-50">
                             <AlertCircle className="w-12 h-12 mb-3" />
