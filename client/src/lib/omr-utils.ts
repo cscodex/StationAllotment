@@ -50,7 +50,7 @@ export function sampleIntensity(data: Uint8ClampedArray, w: number, h: number, c
     return count > 0 ? sum / count : 255;
 }
 
-export function findMarker(data: Uint8ClampedArray, w: number, h: number, startX: number, startY: number, searchRadius: number) {
+export function findMarker(data: Uint8ClampedArray, w: number, h: number, startX: number, startY: number, searchRadius: number, corner?: "TL" | "TR" | "BL" | "BR") {
     let minInt = 255;
     let minX = startX;
     let minY = startY;
@@ -59,6 +59,16 @@ export function findMarker(data: Uint8ClampedArray, w: number, h: number, startX
     for (let y = startY - searchRadius; y <= startY + searchRadius; y += 2) {
         for (let x = startX - searchRadius; x <= startX + searchRadius; x += 2) {
             if (x < 0 || x >= w || y < 0 || y >= h) continue;
+
+            // Strict Directional Clamping: Prevent the search space from wandering inwards 
+            // towards the center of the page where false positives like Signature Lines exist.
+            if (corner) {
+                if (corner === "TL" && (x > startX + searchRadius/2 || y > startY + searchRadius/2)) continue;
+                if (corner === "TR" && (x < startX - searchRadius/2 || y > startY + searchRadius/2)) continue;
+                if (corner === "BL" && (x > startX + searchRadius/2 || y < startY - searchRadius/2)) continue;
+                if (corner === "BR" && (x < startX - searchRadius/2 || y < startY - searchRadius/2)) continue;
+            }
+
             const intensity = sampleIntensity(data, w, h, x, y, Math.floor(MARKER_SIZE_PT / 2));
             if (intensity < minInt) {
                 minInt = intensity;
@@ -186,13 +196,13 @@ export async function parseOMRImageData(
     }
 
     // Use a wider search radius for manual camera captures (150) because user prints ("Fit to page")
-    // often break the strict A4 aspect ratio, causing physical markers to be far from the expected guide.
+    // often break the strict A4 aspect ratio. Our new directional clamping prevents it from snapping to signatures.
     const searchRadius = Math.floor((anchor ? 40 : 150) * (anchor ? anchor.scale : w / PDF_W));
     
-    const mTL = findMarker(imgData.data, w, h, expectedTL.x, expectedTL.y, searchRadius);
-    const mTR = findMarker(imgData.data, w, h, expectedTR.x, expectedTR.y, searchRadius);
-    const mBL = findMarker(imgData.data, w, h, expectedBL.x, expectedBL.y, searchRadius + (anchor ? 10 : 30 * (w/PDF_W)));
-    const mBR = findMarker(imgData.data, w, h, expectedBR.x, expectedBR.y, searchRadius + (anchor ? 10 : 30 * (w/PDF_W)));
+    const mTL = findMarker(imgData.data, w, h, expectedTL.x, expectedTL.y, searchRadius, "TL");
+    const mTR = findMarker(imgData.data, w, h, expectedTR.x, expectedTR.y, searchRadius, "TR");
+    const mBL = findMarker(imgData.data, w, h, expectedBL.x, expectedBL.y, searchRadius + (anchor ? 10 : 30 * (w/PDF_W)), "BL");
+    const mBR = findMarker(imgData.data, w, h, expectedBR.x, expectedBR.y, searchRadius + (anchor ? 10 : 30 * (w/PDF_W)), "BR");
     
     let markerTL = { x: mTL.x, y: mTL.y };
     let markerTR = { x: mTR.x, y: mTR.y };
