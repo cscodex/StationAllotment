@@ -14,12 +14,12 @@ export const MARKER_SIZE_PT = 25;
 // Stream selection circles (based on exact X/Y offsets from original PDF outputs)
 // PDF uses Bottom-Left origin. QR Y=h-170 -> Canvas Y=170. Stream Y=h-250 -> Canvas Y=250.
 export const STREAM_POS = [
-    { x: 115, y: 250 }, // Medical
-    { x: 235, y: 250 }, // NonMedical
-    { x: 355, y: 250 }, // Commerce
+    { x: 153, y: 250 }, // Medical
+    { x: 273, y: 250 }, // NonMedical
+    { x: 393, y: 250 }, // Commerce
 ];
 
-export const GRID_ORIGIN = { x: 115, y: 350 };
+export const GRID_ORIGIN = { x: 150, y: 350 };
 export const COL_STEP = 35;
 export const ROW_STEP = 35; 
 export const CIRCLE_R_PT = 8;
@@ -185,9 +185,9 @@ export async function parseOMRImageData(
         expectedBR = { x: MARKER_BR.x * roughScale, y: h - (MARKER_TL.y * roughScale) };
     }
 
-    // Use a tight search radius (e.g. 40 points) to prevent the bottom anchors from snapping
-    // to the dark borders of the nearby Signature boxes, which causes the grid to skew right.
-    const searchRadius = Math.floor((anchor ? 40 : 40) * (anchor ? anchor.scale : w / PDF_W));
+    // Use a wider search radius for manual camera captures (150) because user prints ("Fit to page")
+    // often break the strict A4 aspect ratio, causing physical markers to be far from the expected guide.
+    const searchRadius = Math.floor((anchor ? 40 : 150) * (anchor ? anchor.scale : w / PDF_W));
     
     const mTL = findMarker(imgData.data, w, h, expectedTL.x, expectedTL.y, searchRadius);
     const mTR = findMarker(imgData.data, w, h, expectedTR.x, expectedTR.y, searchRadius);
