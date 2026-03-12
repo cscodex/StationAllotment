@@ -72,9 +72,9 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
   const unlockedStudents = totalStudents - lockedStudents;
 
   return (
-    <header className="bg-card border-b border-border p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+    <header className="bg-card border-b border-border p-4 md:p-6">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
           <Button
             variant="ghost"
             size="sm"
@@ -88,11 +88,11 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
             <Menu className="w-4 h-4" />
           </Button>
           <div>
-            <h2 className="text-2xl font-bold" data-testid="text-page-title">{title}</h2>
+            <h2 className="text-xl sm:text-2xl font-bold line-clamp-1" data-testid="text-page-title">{title}</h2>
             {breadcrumbs.length > 0 && (
-              <nav className="flex items-center space-x-2 text-sm text-muted-foreground">
+              <nav className="flex flex-wrap items-center gap-1 sm:space-x-2 text-xs sm:text-sm text-muted-foreground mr-2">
                 {breadcrumbs.map((crumb, index) => (
-                  <span key={index}>
+                  <span key={index} className="flex items-center">
                     {index > 0 && <span className="mx-1">›</span>}
                     <span className={index === breadcrumbs.length - 1 ? "text-foreground" : ""}>
                       {crumb.name}
@@ -104,7 +104,7 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
           </div>
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-wrap items-center gap-2 xl:space-x-4 w-full xl:w-auto overflow-x-auto pb-1 xl:pb-0">
           {deadlineDate && daysLeft !== null && (
             <Badge variant={daysLeft <= 3 ? "destructive" : "secondary"} className="flex items-center space-x-1">
               <Clock className="w-3 h-3" />
