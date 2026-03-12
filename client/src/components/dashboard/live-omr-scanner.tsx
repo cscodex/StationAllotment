@@ -127,6 +127,11 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
 
         const width = video.videoWidth;
         const height = video.videoHeight;
+        
+        const container = video.parentElement;
+        if (!container) return;
+        const cW = container.clientWidth;
+        const cH = container.clientHeight;
 
         // Set canvases to match video resolution
         hiddenCanvasRef.current.width = width;
@@ -144,18 +149,35 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         // Clear overlay
         overCtx.clearRect(0, 0, width, height);
 
+        // Calculate visible area of the video due to 'object-cover' CSS
+        const vRatio = width / height;
+        const cRatio = cW / cH;
+        let visibleW = width;
+        let visibleH = height;
+
+        if (vRatio > cRatio) {
+            // Video is comparatively wider than container; it spans full height, cropped on left/right
+            visibleH = height;
+            visibleW = height * cRatio;
+        } else {
+            // Video is comparatively taller than container; it spans full width, cropped on top/bottom
+            visibleW = width;
+            visibleH = width / cRatio;
+        }
+
         // ===== DRAW FIXED A4 GUIDE BOX WITH FIDUCIAL TARGETS =====
-        // Calculate the maximum A4 box that fits, using 85% of height or 90% of width
+        // Calculate the maximum A4 box that fits within the VISIBLE area
         const A4_RATIO = PDF_H / PDF_W;
-        let guideHeight = height * 0.85;
+        let guideHeight = visibleH * 0.85;
         let guideWidth = guideHeight / A4_RATIO;
 
-        // If the box is too wide for the screen (e.g. tablet in portrait mode), constrain by width instead
-        if (guideWidth > width * 0.9) {
-            guideWidth = width * 0.9;
+        // If the box is too wide for the visible screen (e.g. tablet in portrait mode), constrain by width instead
+        if (guideWidth > visibleW * 0.9) {
+            guideWidth = visibleW * 0.9;
             guideHeight = guideWidth * A4_RATIO;
         }
 
+        // Center the guide box strictly in the middle of the native video resolution
         const guideX = (width - guideWidth) / 2;
         const guideY = (height - guideHeight) / 2;
 
@@ -393,7 +415,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                         ref={videoRef} 
                         playsInline 
                         muted 
-                        className={`w-full h-full object-contain ${!isScanning && lockedStudent ? 'filter blur-sm opacity-50' : ''}`}
+                        className={`w-full h-full object-cover ${!isScanning && lockedStudent ? 'filter blur-sm opacity-50' : ''}`}
                     />
                     
                     {/* Hidden canvas for data extraction */}
@@ -402,7 +424,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                     {/* Overlay canvas for guide UI and feedback */}
                     <canvas 
                         ref={overlayCanvasRef} 
-                        className={`absolute top-0 left-0 w-full h-full object-contain pointer-events-none transition-opacity duration-200 ${!isScanning && lockedStudent ? 'opacity-0' : 'opacity-100'}`}
+                        className={`absolute top-0 left-0 w-full h-full object-cover pointer-events-none transition-opacity duration-200 ${!isScanning && lockedStudent ? 'opacity-0' : 'opacity-100'}`}
                     />
 
                     {/* Visible Camera Feedback Flash */}
