@@ -78,14 +78,13 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
           <Button
             variant="ghost"
             size="sm"
-            className="md:hidden"
             onClick={() => {
                 if (onMobileMenuToggle) onMobileMenuToggle();
                 toggle();
             }}
             data-testid="button-mobile-menu"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-5 h-5" />
           </Button>
           <div>
             <h2 className="text-xl sm:text-2xl font-bold line-clamp-1" data-testid="text-page-title">{title}</h2>

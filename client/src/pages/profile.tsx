@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { User, Lock, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
+import Header from '@/components/layout/header';
 
 interface User {
   id: string;
@@ -139,11 +140,17 @@ export default function Profile() {
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-6" data-testid="profile-page">
-      <div className="flex items-center gap-3 mb-6">
-        <User className="h-8 w-8 text-primary" />
-        <h1 className="text-3xl font-bold">Profile Settings</h1>
-      </div>
+    <div className="flex-1 flex flex-col h-full overflow-hidden" data-testid="profile-page">
+      <Header 
+        title="Profile Settings" 
+        breadcrumbs={[{ name: "Home" }, { name: "Profile Settings" }]} 
+      />
+      <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex items-center gap-3 mb-6">
+            <User className="h-8 w-8 text-primary" />
+            <h1 className="text-3xl font-bold">Profile Settings</h1>
+          </div>
 
       {/* User Information */}
       <Card data-testid="card-user-info">
@@ -294,6 +301,8 @@ export default function Profile() {
           </CardContent>
         </Card>
       )}
+        </div>
+      </main>
     </div>
   );
 }

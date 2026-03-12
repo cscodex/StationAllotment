@@ -120,7 +120,7 @@ export default function Sidebar({ className }: SidebarProps) {
   if (!user) return null;
 
   return (
-    <div className={cn("w-64 bg-card border-r border-border flex flex-col", className)}>
+    <div className={cn("w-64 h-full bg-card border-r border-border flex flex-col", className)}>
       <div className="p-6 border-b border-border">
         <div className="flex items-center space-x-3 mb-4">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -152,7 +152,7 @@ export default function Sidebar({ className }: SidebarProps) {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2">
+      <nav className="flex-1 p-4 space-y-2 overflow-y-auto min-h-0 custom-scrollbar">
         {navigation.map((section) => (
           <div key={section.name} className="mb-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">

@@ -18,9 +18,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
   return (
     <SidebarContext.Provider value={{ toggle: () => setSidebarOpen((o) => !o) }}>
       <div className="h-screen flex bg-background">
-        {/* Desktop Sidebar */}
-        <div className="hidden md:block">
-          <Sidebar />
+        {/* Desktop Persistent Sidebar */}
+        <div className={cn(
+          "hidden md:block transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0",
+          sidebarOpen ? "w-64" : "w-0"
+        )}>
+          <Sidebar className="w-64 min-w-[16rem]" />
         </div>
 
         {/* Mobile Sidebar Overlay */}
@@ -29,8 +32,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
           sidebarOpen ? "block" : "hidden"
         )}>
           <div className="fixed inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <div className="relative">
-            <Sidebar className="fixed left-0 top-0 h-full" />
+          <div className="relative h-full flex">
+            <Sidebar className="w-64 h-full" />
+            <div className="flex-1" onClick={() => setSidebarOpen(false)}></div>
           </div>
         </div>
 
