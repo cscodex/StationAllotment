@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff } from "lucide-react";
+import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff, Crosshair } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR } from "@/lib/omr-utils";
 import jsQR from "jsqr";
@@ -12,9 +12,11 @@ interface LiveOMRScannerModalProps {
     onClose: () => void;
     students: Student[];
     onSaveData: (studentId: string, stream: string, choices: string[]) => void;
+    /** If provided, skip QR detection and use this student directly */
+    prelockedStudent?: Student;
 }
 
-export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: LiveOMRScannerModalProps) {
+export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, prelockedStudent }: LiveOMRScannerModalProps) {
     const { toast } = useToast();
     const videoRef = useRef<HTMLVideoElement>(null);
     const hiddenCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -28,7 +30,12 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
     const [flashOn, setFlashOn] = useState(false);
     const [showCaptureFlash, setShowCaptureFlash] = useState(false);
     
-    // Stability tracking (require 5 consecutive identical QR reads before capture)
+    // Gyroscope state
+    const [tiltBeta, setTiltBeta] = useState<number | null>(null); // front-back
+    const [tiltGamma, setTiltGamma] = useState<number | null>(null); // left-right
+    const [gyroAvailable, setGyroAvailable] = useState(false);
+    
+    // Stability tracking (require 3 consecutive identical QR reads before capture)
     const stabilityCounter = useRef(0);
     const lastQrData = useRef("");
 
@@ -88,33 +95,247 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         };
     }, [isOpen]);
 
+    // Gyroscope / Accelerometer
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleOrientation = (e: DeviceOrientationEvent) => {
+            if (e.beta !== null && e.gamma !== null) {
+                setGyroAvailable(true);
+                setTiltBeta(e.beta);
+                setTiltGamma(e.gamma);
+            }
+        };
+
+        // iOS 13+ requires explicit permission
+        const startGyro = async () => {
+            try {
+                const DOE = DeviceOrientationEvent as any;
+                if (typeof DOE.requestPermission === "function") {
+                    const perm = await DOE.requestPermission();
+                    if (perm === "granted") {
+                        window.addEventListener("deviceorientation", handleOrientation);
+                    }
+                } else {
+                    window.addEventListener("deviceorientation", handleOrientation);
+                }
+            } catch (e) {
+                console.warn("Gyroscope not available:", e);
+            }
+        };
+
+        startGyro();
+        return () => {
+            window.removeEventListener("deviceorientation", handleOrientation);
+        };
+    }, [isOpen]);
+
     const toggleFlash = () => {
         if (!videoRef.current || !videoRef.current.srcObject) return;
         const stream = videoRef.current.srcObject as MediaStream;
         const track = stream.getVideoTracks()[0];
         if (track && typeof track.applyConstraints === 'function') {
-            track.applyConstraints({
-                advanced: [{ torch: !flashOn } as any]
-            })
-            .then(() => setFlashOn(!flashOn))
-            .catch(console.error);
+            const newFlash = !flashOn;
+            track.applyConstraints({ advanced: [{ torch: newFlash } as any] })
+                .then(() => setFlashOn(newFlash))
+                .catch((e: any) => console.warn("Flash toggle failed:", e));
         }
     };
 
-    // Helper: draw a crosshair target on a canvas context
+    // Helper to draw crosshairs
     const drawCrosshair = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) => {
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
-        // Circle
         ctx.beginPath();
         ctx.arc(x, y, size, 0, 2 * Math.PI);
         ctx.stroke();
-        // Cross
         ctx.beginPath();
         ctx.moveTo(x - size - 5, y); ctx.lineTo(x + size + 5, y);
         ctx.moveTo(x, y - size - 5); ctx.lineTo(x, y + size + 5);
         ctx.stroke();
     };
+
+    // Helper: capture the current frame, run OMR extraction, and display result
+    const captureAndProcess = useCallback(async (detectedStudent: Student) => {
+        if (!videoRef.current || !hiddenCanvasRef.current || !overlayCanvasRef.current) return false;
+
+        const video = videoRef.current;
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+
+        const container = video.parentElement;
+        if (!container) return false;
+        const cW = container.clientWidth;
+        const cH = container.clientHeight;
+
+        // Recalculate visible area
+        const vRatio = width / height;
+        const cRatio = cW / cH;
+        let visibleW = width, visibleH = height;
+        if (vRatio > cRatio) { visibleH = height; visibleW = height * cRatio; }
+        else { visibleW = width; visibleH = width / cRatio; }
+
+        const A4_RATIO = PDF_H / PDF_W;
+        let guideHeight = visibleH * 0.85;
+        let guideWidth = guideHeight / A4_RATIO;
+        if (guideWidth > visibleW * 0.9) {
+            guideWidth = visibleW * 0.9;
+            guideHeight = guideWidth * A4_RATIO;
+        }
+        const guideX = (width - guideWidth) / 2;
+        const guideY = (height - guideHeight) / 2;
+
+        // Crop guide region and scale to PDF dimensions
+        const RENDER_SCALE = 2.0;
+        const targetW = Math.floor(PDF_W * RENDER_SCALE);
+        const targetH = Math.floor(PDF_H * RENDER_SCALE);
+
+        const captureCanvas = document.createElement("canvas");
+        captureCanvas.width = targetW;
+        captureCanvas.height = targetH;
+        const captureCtx = captureCanvas.getContext("2d");
+        if (!captureCtx) return false;
+
+        // Ensure hidden canvas has the latest frame
+        const hCtx = hiddenCanvasRef.current.getContext("2d");
+        if (!hCtx) return false;
+        hiddenCanvasRef.current.width = width;
+        hiddenCanvasRef.current.height = height;
+        hCtx.drawImage(video, 0, 0, width, height);
+
+        captureCtx.drawImage(
+            hiddenCanvasRef.current,
+            Math.floor(guideX), Math.floor(guideY), Math.floor(guideWidth), Math.floor(guideHeight),
+            0, 0, targetW, targetH
+        );
+
+        const capturedImgData = captureCtx.getImageData(0, 0, targetW, targetH);
+
+        // Visual flash
+        setShowCaptureFlash(true);
+        setTimeout(() => setShowCaptureFlash(false), 300);
+
+        // Run OMR extraction
+        try {
+            const parsedOMR = await parseOMRImageData(capturedImgData, 0, 0, false);
+            const { selectedStream, choices } = parsedOMR;
+
+            if (selectedStream && choices.filter(c => c && c.trim() !== "").length > 0) {
+                setLockedStudent(detectedStudent);
+                setScanData({ stream: selectedStream, choices });
+                setIsScanning(false);
+                return true;
+            } else {
+                toast({
+                    title: "Extraction Incomplete",
+                    description: `Stream: ${selectedStream || "Not detected"}, Choices found: ${choices.filter(c => c).length}/10. Try adjusting position.`,
+                    variant: "destructive",
+                });
+                return false;
+            }
+        } catch (err) {
+            console.error("OMR extraction error:", err);
+            toast({
+                title: "Extraction Failed",
+                description: "Could not read OMR data from frame. Try adjusting position and lighting.",
+                variant: "destructive",
+            });
+            return false;
+        }
+    }, [toast]);
+
+    // Manual capture handler
+    const handleManualCapture = useCallback(async () => {
+        if (!videoRef.current || !hiddenCanvasRef.current) return;
+
+        const video = videoRef.current;
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+
+        // If we have a prelocked student, use them directly (no QR needed)
+        if (prelockedStudent) {
+            await captureAndProcess(prelockedStudent);
+            return;
+        }
+
+        // Otherwise, try QR detection on the current frame
+        const container = video.parentElement;
+        if (!container) return;
+        const cW = container.clientWidth;
+        const cH = container.clientHeight;
+
+        // Recalculate guide box
+        const vRatio = width / height;
+        const cRatio = cW / cH;
+        let visibleW = width, visibleH = height;
+        if (vRatio > cRatio) { visibleH = height; visibleW = height * cRatio; }
+        else { visibleW = width; visibleH = width / cRatio; }
+
+        const A4_RATIO = PDF_H / PDF_W;
+        let guideHeight = visibleH * 0.85;
+        let guideWidth = guideHeight / A4_RATIO;
+        if (guideWidth > visibleW * 0.9) {
+            guideWidth = visibleW * 0.9;
+            guideHeight = guideWidth * A4_RATIO;
+        }
+        const guideX = (width - guideWidth) / 2;
+        const guideY = (height - guideHeight) / 2;
+
+        // Get current frame
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tCtx = tempCanvas.getContext("2d");
+        if (!tCtx) return;
+        tCtx.drawImage(video, 0, 0, width, height);
+
+        // Try QR from guide region
+        const cropImgData = tCtx.getImageData(
+            Math.max(0, Math.floor(guideX)),
+            Math.max(0, Math.floor(guideY)),
+            Math.min(Math.floor(guideWidth), width - Math.floor(guideX)),
+            Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
+        );
+
+        // Try with multiple inversion attempts for faint prints
+        let code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+        
+        // If guide region failed, try the full frame
+        if (!code) {
+            const fullImgData = tCtx.getImageData(0, 0, width, height);
+            code = jsQR(fullImgData.data, fullImgData.width, fullImgData.height, { inversionAttempts: "attemptBoth" });
+        }
+
+        if (!code) {
+            toast({
+                title: "QR Code Not Found",
+                description: "Could not detect a QR code. Ensure the OMR form is visible and well-lit.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        let detectedStudent: Student | null = null;
+        try {
+            const qrPayload = JSON.parse(code.data);
+            if (qrPayload.id) {
+                detectedStudent = students.find(s => s.id === qrPayload.id) || null;
+            }
+        } catch (e) { }
+
+        if (!detectedStudent) {
+            toast({
+                title: "Student Not Found",
+                description: "QR detected but student not matched in system.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        await captureAndProcess(detectedStudent);
+    }, [prelockedStudent, students, captureAndProcess, toast]);
 
     const processFrame = useCallback(async () => {
         if (!isScanning || !videoRef.current || !hiddenCanvasRef.current || !overlayCanvasRef.current) return;
@@ -133,7 +354,6 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         const cW = container.clientWidth;
         const cH = container.clientHeight;
 
-        // Set canvases to match video resolution
         hiddenCanvasRef.current.width = width;
         hiddenCanvasRef.current.height = height;
         overlayCanvasRef.current.width = width;
@@ -143,94 +363,82 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         const overCtx = overlayCanvasRef.current.getContext('2d');
         if (!ctx || !overCtx) return;
 
-        // Draw current video frame to hidden canvas
         ctx.drawImage(video, 0, 0, width, height);
-
-        // Clear overlay
         overCtx.clearRect(0, 0, width, height);
 
         // Calculate visible area of the video due to 'object-cover' CSS
         const vRatio = width / height;
         const cRatio = cW / cH;
-        let visibleW = width;
-        let visibleH = height;
+        let visibleW = width, visibleH = height;
+        if (vRatio > cRatio) { visibleH = height; visibleW = height * cRatio; }
+        else { visibleW = width; visibleH = width / cRatio; }
 
-        if (vRatio > cRatio) {
-            // Video is comparatively wider than container; it spans full height, cropped on left/right
-            visibleH = height;
-            visibleW = height * cRatio;
-        } else {
-            // Video is comparatively taller than container; it spans full width, cropped on top/bottom
-            visibleW = width;
-            visibleH = width / cRatio;
-        }
-
-        // ===== DRAW FIXED A4 GUIDE BOX WITH FIDUCIAL TARGETS =====
-        // Calculate the maximum A4 box that fits within the VISIBLE area
+        // A4 Guide Box
         const A4_RATIO = PDF_H / PDF_W;
         let guideHeight = visibleH * 0.85;
         let guideWidth = guideHeight / A4_RATIO;
-
-        // If the box is too wide for the visible screen (e.g. tablet in portrait mode), constrain by width instead
         if (guideWidth > visibleW * 0.9) {
             guideWidth = visibleW * 0.9;
             guideHeight = guideWidth * A4_RATIO;
         }
-
-        // Center the guide box strictly in the middle of the native video resolution
         const guideX = (width - guideWidth) / 2;
         const guideY = (height - guideHeight) / 2;
 
-        // White stencil mask outside the guide
+        // Semi-transparent mask
         overCtx.fillStyle = "rgba(0, 0, 0, 0.55)";
         overCtx.beginPath();
         overCtx.rect(0, 0, width, height);
         overCtx.rect(guideX, guideY, guideWidth, guideHeight);
         overCtx.fill("evenodd");
 
-        // Dashed border around the guide
+        // Dashed border
         overCtx.strokeStyle = "rgba(255, 255, 255, 0.7)";
         overCtx.lineWidth = 2;
         overCtx.setLineDash([12, 8]);
         overCtx.strokeRect(guideX, guideY, guideWidth, guideHeight);
         overCtx.setLineDash([]);
 
-        // Draw 4 Fixed Fiducial Crosshair Targets at A4-proportional positions
-        // These are exactly where the physical black squares are printed on the OMR form
+        // Fiducial Crosshairs
         const targetTL = { x: guideX + (MARKER_TL.x / PDF_W) * guideWidth, y: guideY + (MARKER_TL.y / PDF_H) * guideHeight };
         const targetTR = { x: guideX + (MARKER_TR.x / PDF_W) * guideWidth, y: guideY + (MARKER_TR.y / PDF_H) * guideHeight };
         const targetBL = { x: guideX + (MARKER_BL.x / PDF_W) * guideWidth, y: guideY + (MARKER_BL.y / PDF_H) * guideHeight };
         const targetBR = { x: guideX + (MARKER_BR.x / PDF_W) * guideWidth, y: guideY + (MARKER_BR.y / PDF_H) * guideHeight };
 
-        const targetColor = "#ff6b35"; // Vivid orange for maximum visibility
+        const targetColor = "#ff6b35";
         const targetSize = Math.max(8, guideWidth * 0.02);
         drawCrosshair(overCtx, targetTL.x, targetTL.y, targetSize, targetColor);
         drawCrosshair(overCtx, targetTR.x, targetTR.y, targetSize, targetColor);
         drawCrosshair(overCtx, targetBL.x, targetBL.y, targetSize, targetColor);
         drawCrosshair(overCtx, targetBR.x, targetBR.y, targetSize, targetColor);
 
-        // Corner bracket decorations
+        // Corner brackets
         overCtx.strokeStyle = "rgba(255, 255, 255, 0.9)";
         overCtx.lineWidth = 4;
         const cl = 25;
-        // TL
         overCtx.beginPath(); overCtx.moveTo(guideX, guideY + cl); overCtx.lineTo(guideX, guideY); overCtx.lineTo(guideX + cl, guideY); overCtx.stroke();
-        // TR
         overCtx.beginPath(); overCtx.moveTo(guideX + guideWidth - cl, guideY); overCtx.lineTo(guideX + guideWidth, guideY); overCtx.lineTo(guideX + guideWidth, guideY + cl); overCtx.stroke();
-        // BL
         overCtx.beginPath(); overCtx.moveTo(guideX, guideY + guideHeight - cl); overCtx.lineTo(guideX, guideY + guideHeight); overCtx.lineTo(guideX + cl, guideY + guideHeight); overCtx.stroke();
-        // BR
         overCtx.beginPath(); overCtx.moveTo(guideX + guideWidth - cl, guideY + guideHeight); overCtx.lineTo(guideX + guideWidth, guideY + guideHeight); overCtx.lineTo(guideX + guideWidth, guideY + guideHeight - cl); overCtx.stroke();
 
-        // Instructional text
+        // Instruction text
         overCtx.font = `${Math.max(14, guideWidth * 0.025)}px sans-serif`;
         overCtx.fillStyle = "rgba(255, 255, 255, 0.8)";
         overCtx.textAlign = "center";
-        overCtx.fillText("Align the 4 black corner squares to the orange crosshairs", width / 2, guideY - 10);
+        const instructionText = prelockedStudent 
+            ? `Scanning for: ${prelockedStudent.name} — Align page or tap Capture`
+            : "Align OMR page or tap Capture button below";
+        overCtx.fillText(instructionText, width / 2, guideY - 10);
 
-        // ===== LIGHTWEIGHT QR-ONLY DETECTION (no heavy OMR per-frame) =====
+        // ===== QR DETECTION (skip if prelocked student) =====
+        if (prelockedStudent) {
+            // For prelocked student mode, just render the guide and wait for manual capture
+            // No auto-capture in prelocked mode — user should tap the button
+            requestAnimationFrame(processFrame);
+            return;
+        }
+
+        // Auto-detect QR for the global live scan mode
         try {
-            // Only scan the guide region for QR to save CPU
             const cropImgData = ctx.getImageData(
                 Math.max(0, Math.floor(guideX)),
                 Math.max(0, Math.floor(guideY)),
@@ -238,6 +446,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                 Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
             );
 
+            // Use attemptBoth for faint prints
             const code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
             if (!code) {
                 stabilityCounter.current = 0;
@@ -246,7 +455,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                 return;
             }
 
-            // Draw green box around detected QR (offset back to full-frame coordinates)
+            // Green box around detected QR
             const ox = Math.floor(guideX);
             const oy = Math.floor(guideY);
             overCtx.strokeStyle = "#22c55e";
@@ -259,7 +468,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
             overCtx.closePath();
             overCtx.stroke();
 
-            // Stability check: same QR data for 5 consecutive frames
+            // Stability check: same QR data for 3 consecutive frames (reduced from 5)
             if (code.data === lastQrData.current) {
                 stabilityCounter.current++;
             } else {
@@ -267,53 +476,24 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                 stabilityCounter.current = 1;
             }
 
-            // Show stability progress
+            // Progress indicator
             overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
             overCtx.font = `bold ${Math.max(16, guideWidth * 0.03)}px sans-serif`;
             overCtx.textAlign = "center";
             overCtx.fillText(
-                stabilityCounter.current >= 5 ? "✓ Capturing..." : `Stabilizing... ${stabilityCounter.current}/5`,
+                stabilityCounter.current >= 3 ? "✓ Capturing..." : `Stabilizing... ${stabilityCounter.current}/3`,
                 width / 2,
                 guideY + guideHeight + Math.max(20, guideHeight * 0.04)
             );
 
-            // Once stable, CAPTURE and PROCESS the frame
-            if (stabilityCounter.current >= 5) {
-                // ===== CAPTURE: Crop guide region and scale to PDF dimensions =====
-                const RENDER_SCALE = 2.0; // Same scale used by bulk scanner
-                const targetW = Math.floor(PDF_W * RENDER_SCALE);
-                const targetH = Math.floor(PDF_H * RENDER_SCALE);
-
-                const captureCanvas = document.createElement("canvas");
-                captureCanvas.width = targetW;
-                captureCanvas.height = targetH;
-                const captureCtx = captureCanvas.getContext("2d");
-                if (!captureCtx) { requestAnimationFrame(processFrame); return; }
-
-                // Draw the guide region scaled to exact PDF dimensions
-                captureCtx.drawImage(
-                    hiddenCanvasRef.current!,
-                    Math.floor(guideX), Math.floor(guideY), Math.floor(guideWidth), Math.floor(guideHeight),
-                    0, 0, targetW, targetH
-                );
-
-                const capturedImgData = captureCtx.getImageData(0, 0, targetW, targetH);
-
-                // Trigger visual flash
-                setShowCaptureFlash(true);
-                setTimeout(() => setShowCaptureFlash(false), 300);
-
-                // ===== PROCESS: Use the exact same pipeline as bulk scanner =====
-                // 1. Find student from QR
+            if (stabilityCounter.current >= 3) {
                 let detectedStudent: Student | null = null;
                 try {
                     const qrPayload = JSON.parse(code.data);
                     if (qrPayload.id) {
                         detectedStudent = students.find(s => s.id === qrPayload.id) || null;
                     }
-                } catch (e) {
-                    // Invalid QR payload
-                }
+                } catch (e) { }
 
                 if (!detectedStudent) {
                     stabilityCounter.current = 0;
@@ -321,34 +501,23 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                     return;
                 }
 
-                // 2. Run OMR extraction on the cropped+scaled image (identical to bulk scanner)
-                try {
-                    const parsedOMR = await parseOMRImageData(capturedImgData, 0, 0, false);
-                    const { selectedStream, choices } = parsedOMR;
-
-                    if (selectedStream && choices.filter(c => c && c.trim() !== "").length > 0) {
-                        setLockedStudent(detectedStudent);
-                        setScanData({ stream: selectedStream, choices });
-                        setIsScanning(false);
-                        return; // EXIT LOOP - show result
-                    }
-                } catch (err) {
-                    console.error("OMR extraction error:", err);
+                const success = await captureAndProcess(detectedStudent);
+                if (!success) {
+                    stabilityCounter.current = 0;
                 }
-
-                // If extraction failed, reset and keep trying
-                stabilityCounter.current = 0;
-                requestAnimationFrame(processFrame);
+                if (!success) {
+                    requestAnimationFrame(processFrame);
+                }
                 return;
             }
         } catch (err) {
-            // Ignore frame errors and continue
+            // Ignore frame errors
         }
 
         requestAnimationFrame(processFrame);
-    }, [isScanning, students]);
+    }, [isScanning, students, prelockedStudent, captureAndProcess]);
 
-    // Trigger loop when scanning states becomes true
+    // Trigger loop
     useEffect(() => {
         if (isScanning && cameraOk) {
             requestAnimationFrame(processFrame);
@@ -383,16 +552,40 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
         "Ludhiana", "Patiala", "SAS Nagar (Mohali)", "Sangrur", "Talwara",
     ];
 
+    // Gyroscope level indicator helper
+    const getLevelInfo = () => {
+        if (tiltBeta === null || tiltGamma === null) return null;
+        // When phone is held upright pointing down at paper, beta ~= 90, we want beta close to 90 and gamma close to 0
+        // When phone is flat, beta ~= 0, gamma ~= 0
+        // For scanning a flat paper, the ideal tilt is beta ~= 90 (phone vertical looking down) adjusted for angle
+        // Simpler: measure deviation from "flat" (beta=0, gamma=0) when phone is face-up
+        // Actually for scanning, the user holds the phone above the paper. The ideal is gamma=0 (no left-right tilt)
+        // and beta between 60-90 (slight angle is fine). We measure "levelness" as how close gamma is to 0.
+        const absGamma = Math.abs(tiltGamma);
+        const absBetaDev = Math.abs(tiltBeta - 75); // ~75° is typical scanning angle
+        const totalTilt = absGamma + absBetaDev * 0.3;
+        
+        if (totalTilt < 8) return { color: "#22c55e", label: "Level ✓", status: "good" };
+        if (totalTilt < 20) return { color: "#eab308", label: "Almost level", status: "ok" };
+        return { color: "#ef4444", label: "Tilt detected", status: "bad" };
+    };
+
+    const dialogTitle = prelockedStudent 
+        ? `Live Scan — ${prelockedStudent.name}`
+        : "Live Real-Time OMR Scanner";
+
+    const dialogDesc = prelockedStudent
+        ? `Scanning OMR form for ${prelockedStudent.name} (${prelockedStudent.appNo}). Align the page and tap Capture.`
+        : "Align the OMR page within the guide or tap the Capture button. Hold steady for auto-detection.";
+
     return (
         <Dialog open={isOpen} onOpenChange={(open) => {
             if (!open) onClose();
         }}>
             <DialogContent className="max-w-4xl">
                 <DialogHeader>
-                    <DialogTitle>Live Real-Time OMR Scanner</DialogTitle>
-                    <DialogDescription>
-                        Align the 4 black corner squares on the OMR sheet to the orange crosshair targets. Hold steady until captured.
-                    </DialogDescription>
+                    <DialogTitle>{dialogTitle}</DialogTitle>
+                    <DialogDescription>{dialogDesc}</DialogDescription>
                 </DialogHeader>
 
                 <div className="relative w-full h-[65vh] sm:h-[70vh] md:h-auto md:aspect-video bg-black rounded-lg overflow-hidden border">
@@ -418,41 +611,64 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                         className={`w-full h-full object-cover ${!isScanning && lockedStudent ? 'filter blur-sm opacity-50' : ''}`}
                     />
                     
-                    {/* Hidden canvas for data extraction */}
                     <canvas ref={hiddenCanvasRef} className="hidden" />
                     
-                    {/* Overlay canvas for guide UI and feedback */}
                     <canvas 
                         ref={overlayCanvasRef} 
                         className={`absolute top-0 left-0 w-full h-full object-cover pointer-events-none transition-opacity duration-200 ${!isScanning && lockedStudent ? 'opacity-0' : 'opacity-100'}`}
                     />
 
-                    {/* Visible Camera Feedback Flash */}
+                    {/* Capture Flash */}
                     {showCaptureFlash && (
                         <div className="absolute inset-0 bg-white z-40 transition-opacity duration-300 pointer-events-none" />
                     )}
 
-                    {/* HUD: Scanning Indicator and Flashlight */}
+                    {/* HUD: Top bar with flash + gyro + scanning indicator */}
                     {isScanning && cameraOk && (
-                        <div className="absolute top-4 right-4 flex items-center space-x-2">
-                            <Button 
-                                variant="secondary" 
-                                size="sm" 
-                                onClick={toggleFlash}
-                                disabled={!flashSupported}
-                                className={`bg-black/60 border border-white/20 text-white rounded-full p-2 h-auto transition-opacity ${flashSupported ? 'hover:bg-black/80' : 'opacity-50 cursor-not-allowed'}`}
-                                title={flashSupported ? (flashOn ? "Turn off flash" : "Turn on flash") : "Flash not supported"}
-                            >
-                                {flashOn ? <Zap className="w-4 h-4 text-yellow-500 fill-yellow-500" /> : <ZapOff className="w-4 h-4" />}
-                            </Button>
-                            <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
-                                <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-                                <span className="text-xs font-semibold text-white tracking-widest uppercase">Scanning</span>
+                        <>
+                            <div className="absolute top-4 right-4 flex items-center space-x-2">
+                                <Button 
+                                    variant="secondary" 
+                                    size="sm" 
+                                    onClick={toggleFlash}
+                                    disabled={!flashSupported}
+                                    className={`bg-black/60 border border-white/20 text-white rounded-full p-2 h-auto transition-opacity ${flashSupported ? 'hover:bg-black/80' : 'opacity-50 cursor-not-allowed'}`}
+                                    title={flashSupported ? (flashOn ? "Turn off flash" : "Turn on flash") : "Flash not supported"}
+                                >
+                                    {flashOn ? <Zap className="w-4 h-4 text-yellow-500 fill-yellow-500" /> : <ZapOff className="w-4 h-4" />}
+                                </Button>
+                                <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                                    <span className="text-xs font-semibold text-white tracking-widest uppercase">Scanning</span>
+                                </div>
                             </div>
-                        </div>
+
+                            {/* Gyroscope Level Indicator */}
+                            {gyroAvailable && (() => {
+                                const level = getLevelInfo();
+                                if (!level) return null;
+                                return (
+                                    <div className="absolute top-4 left-4 bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
+                                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: level.color }} />
+                                        <span className="text-xs font-medium text-white">{level.label}</span>
+                                    </div>
+                                );
+                            })()}
+
+                            {/* MANUAL CAPTURE BUTTON — always visible at bottom center */}
+                            <div className="absolute bottom-6 left-0 right-0 flex justify-center z-30">
+                                <Button
+                                    onClick={handleManualCapture}
+                                    className="bg-white/90 hover:bg-white text-black rounded-full w-16 h-16 shadow-xl border-4 border-white/50 flex items-center justify-center transition-transform active:scale-90"
+                                    title="Manual Capture"
+                                >
+                                    <Crosshair className="w-7 h-7" />
+                                </Button>
+                            </div>
+                        </>
                     )}
 
-                    {/* Final Result Modal Overlay */}
+                    {/* Result Overlay */}
                     {!isScanning && lockedStudent && scanData && (
                         <div className="absolute inset-x-4 inset-y-4 sm:inset-x-8 sm:inset-y-8 bg-white/95 text-black rounded-xl shadow-2xl p-4 sm:p-6 flex flex-col justify-center border-2 border-primary/20 backdrop-blur-md animate-in zoom-in-95 duration-200 overflow-auto">
                             <div className="flex items-center space-x-3 mb-4 sm:mb-6">

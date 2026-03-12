@@ -126,6 +126,9 @@ export default function StudentPreferenceManagement() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerStudent, setScannerStudent] = useState<Student | undefined>(undefined);
 
+  // Per-student live camera scanner state
+  const [perStudentLiveScanStudent, setPerStudentLiveScanStudent] = useState<Student | null>(null);
+
   // Mobile: expanded card IDs for collapsible records
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
   const toggleCard = (id: string) => {
@@ -617,7 +620,7 @@ export default function StudentPreferenceManagement() {
                                   variant="outline"
                                   size="sm"
                                   className="h-8 px-2 text-emerald-600 border-emerald-300"
-                                  onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                  onClick={() => { setPerStudentLiveScanStudent(student); }}
                                 >
                                   <Camera className="w-4 h-4" />
                                 </Button>
@@ -820,8 +823,7 @@ export default function StudentPreferenceManagement() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => {
-                                          setScannerStudent(student);
-                                          setIsScannerOpen(true);
+                                          setPerStudentLiveScanStudent(student);
                                         }}
                                         className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 ml-2"
                                         title="Scan OMR Form"
@@ -899,8 +901,7 @@ export default function StudentPreferenceManagement() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => {
-                                          setScannerStudent(student);
-                                          setIsScannerOpen(true);
+                                          setPerStudentLiveScanStudent(student);
                                         }}
                                         className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 ml-2"
                                         title="Scan OMR Form"
@@ -1409,6 +1410,22 @@ export default function StudentPreferenceManagement() {
               preferences[`choice${i + 1}`] = choices[i] || "";
           }
           updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
+        }}
+      />
+
+      {/* Per-Student Live Camera Scanner */}
+      <LiveOMRScannerModal 
+        isOpen={!!perStudentLiveScanStudent}
+        onClose={() => setPerStudentLiveScanStudent(null)}
+        students={(studentsData as any)?.students || []}
+        prelockedStudent={perStudentLiveScanStudent || undefined}
+        onSaveData={(studentId, stream, choices) => {
+          const preferences: any = { stream };
+          for (let i = 0; i < 10; i++) {
+              preferences[`choice${i + 1}`] = choices[i] || "";
+          }
+          updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
+          setPerStudentLiveScanStudent(null);
         }}
       />
     </div >
