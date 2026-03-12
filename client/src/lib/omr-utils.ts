@@ -12,10 +12,11 @@ export const MARKER_BR = { x: 552.78, y: 799.39 };
 export const MARKER_SIZE_PT = 25;
 
 // Stream selection circles (based on exact X/Y offsets from original PDF outputs)
+// PDF uses Bottom-Left origin. QR Y=h-170 -> Canvas Y=170. Stream Y=h-250 -> Canvas Y=250.
 export const STREAM_POS = [
-    { x: 150, y: 246 }, 
-    { x: 270, y: 246 },
-    { x: 390, y: 246 },
+    { x: 153, y: 250 }, // Medical
+    { x: 273, y: 250 }, // NonMedical
+    { x: 393, y: 250 }, // Commerce
 ];
 
 export const GRID_ORIGIN = { x: 150, y: 350 };
