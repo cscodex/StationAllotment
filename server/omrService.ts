@@ -57,16 +57,16 @@ export class OMRService {
         const streamY = height - 250;
         frontPage.drawText('Stream:', { x: 60, y: streamY, size: 11, font: boldFont });
 
-        const streams = ["Medical", "Non-Medical", "Commerce"];
+        const streams = ["Medical", "NonMedical", "Commerce"];
         const streamStartX = 140;
         const streamSpacing = 120;
 
         // Randomly pick a stream if testFillMode is on, otherwise use student's actual stream
+        // For blank OMR generation, always leave bubbles blank so students must fill them.
         const randomStreamIdx = testFillMode ? Math.floor(Math.random() * streams.length) : -1;
-        const studentStreamIdx = student.stream ? streams.indexOf(student.stream) : -1;
 
         for (let s = 0; s < streams.length; s++) {
-            const isStreamFilled = testFillMode ? (s === randomStreamIdx) : (s === studentStreamIdx);
+            const isStreamFilled = testFillMode ? (s === randomStreamIdx) : false;
 
             frontPage.drawCircle({
                 x: streamStartX + s * streamSpacing + 10,

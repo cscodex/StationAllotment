@@ -466,7 +466,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData }: L
                             <div className="grid grid-cols-2 gap-4 flex-1 overflow-auto bg-slate-50 p-3 sm:p-4 border rounded-lg">
                                 <div>
                                     <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-2">Detected Stream</h4>
-                                    <p className="text-base sm:text-lg font-bold text-primary">{scanData.stream === "Non-Medical" ? "NonMedical" : scanData.stream}</p>
+                                    <p className="text-base sm:text-lg font-bold text-primary">{scanData.stream}</p>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-2">Detected Choices</h4>

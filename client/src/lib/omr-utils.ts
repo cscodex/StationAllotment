@@ -27,7 +27,7 @@ export const DISTRICTS = [
     "Amritsar", "Bathinda", "Ferozepur", "Gurdaspur", "Jalandhar",
     "Ludhiana", "Patiala", "SAS Nagar (Mohali)", "Sangrur", "Talwara",
 ];
-export const STREAMS = ["Medical", "Non-Medical", "Commerce"];
+export const STREAMS = ["Medical", "NonMedical", "Commerce"];
 
 
 

@@ -190,7 +190,7 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                         studentId: matchedStudent?.id || null,
                         studentName: matchedStudent?.name,
                         appNo: matchedStudent?.appNo,
-                        stream: selectedStream === "Non-Medical" ? "NonMedical" : selectedStream,
+                        stream: selectedStream,
                         choices,
                         status,
                         error: errorMsg,
@@ -427,7 +427,7 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
             setScannedPages(prev => {
                 const next = [...prev];
                 const p = { ...next[reviewingIndex] }; // Create a new reference to force React Table update
-                p.stream = parsedOMR.selectedStream === "Non-Medical" ? "NonMedical" : parsedOMR.selectedStream;
+                p.stream = parsedOMR.selectedStream;
                 p.choices = parsedOMR.choices;
                 p.imageBlob = blob || p.imageBlob;
                 p.markerTL = parsedOMR.markerTL;
