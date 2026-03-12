@@ -412,6 +412,19 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         drawCrosshair(overCtx, targetBL.x, targetBL.y, targetSize, targetColor);
         drawCrosshair(overCtx, targetBR.x, targetBR.y, targetSize, targetColor);
 
+        // Connect crosshairs with lines to form a visible quadrilateral
+        overCtx.strokeStyle = "rgba(255, 107, 53, 0.7)";
+        overCtx.lineWidth = 2;
+        overCtx.setLineDash([6, 4]);
+        overCtx.beginPath();
+        overCtx.moveTo(targetTL.x, targetTL.y);
+        overCtx.lineTo(targetTR.x, targetTR.y);
+        overCtx.lineTo(targetBR.x, targetBR.y);
+        overCtx.lineTo(targetBL.x, targetBL.y);
+        overCtx.closePath();
+        overCtx.stroke();
+        overCtx.setLineDash([]);
+
         // Corner brackets
         overCtx.strokeStyle = "rgba(255, 255, 255, 0.9)";
         overCtx.lineWidth = 4;
@@ -513,7 +526,21 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             );
 
             // Use attemptBoth for faint prints
-            const code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+            let code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+
+            // If normal detection fails, try contrast-enhanced image (helps with faint prints)
+            if (!code) {
+                const enhanced = new Uint8ClampedArray(cropImgData.data);
+                for (let i = 0; i < enhanced.length; i += 4) {
+                    // Increase contrast: stretch pixel values away from midpoint
+                    for (let ch = 0; ch < 3; ch++) {
+                        const v = enhanced[i + ch];
+                        enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
+                    }
+                }
+                code = jsQR(enhanced, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+            }
+
             if (!code) {
                 stabilityCounter.current = 0;
                 lastQrData.current = "";
