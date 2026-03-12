@@ -300,13 +300,13 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
         );
 
-        // Try with multiple inversion attempts for faint prints
-        let code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+        // Try with new Hybrid QR Decoder
+        let code = await decodeQRHybrid(cropImgData);
         
         // If guide region failed, try the full frame
         if (!code) {
             const fullImgData = tCtx.getImageData(0, 0, width, height);
-            code = jsQR(fullImgData.data, fullImgData.width, fullImgData.height, { inversionAttempts: "attemptBoth" });
+            code = await decodeQRHybrid(fullImgData);
         }
 
         if (!code) {
@@ -442,6 +442,28 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             ? `Scanning for: ${prelockedStudent.name} — Align page or tap Capture`
             : "Align OMR page or tap Capture button below";
         overCtx.fillText(instructionText, width / 2, guideY - 10);
+
+        // Draw Expected QR Zone indicator (only in global mode where QR matters)
+        if (!prelockedStudent) {
+            const qrPdfX = 440;
+            const qrPdfY = 590;
+            const qrPdfW = 160;
+            const qrPdfH = 160;
+            const qrPixelX = guideX + (qrPdfX / PDF_W) * guideWidth;
+            const qrPixelY = guideY + (qrPdfY / PDF_H) * guideHeight;
+            const qrPixelW = (qrPdfW / PDF_W) * guideWidth;
+            const qrPixelH = (qrPdfH / PDF_H) * guideHeight;
+
+            overCtx.strokeStyle = "rgba(59, 130, 246, 0.6)"; // Blue dashed box
+            overCtx.lineWidth = 2;
+            overCtx.setLineDash([6, 4]);
+            overCtx.strokeRect(qrPixelX, qrPixelY, qrPixelW, qrPixelH);
+            
+            overCtx.fillStyle = "rgba(59, 130, 246, 0.8)";
+            overCtx.font = `bold ${Math.max(12, guideWidth * 0.02)}px sans-serif`;
+            overCtx.fillText("QR Zone", qrPixelX + qrPixelW / 2, qrPixelY - 8);
+            overCtx.setLineDash([]);
+        }
 
         // ===== FIDUCIAL MARKER DETECTION (Relative Darkness) =====
         // Instead of absolute thresholds, compare each marker position to its surroundings.
@@ -717,6 +739,12 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                                 <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
                                     <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                                     <span className="text-xs font-semibold text-white tracking-widest uppercase">Scanning</span>
+                                </div>
+                                <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
+                                    <div className={`w-2.5 h-2.5 rounded-full ${'BarcodeDetector' in window ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                                    <span className="text-xs font-semibold text-white tracking-widest uppercase" title="Hardware Acceleration (BarcodeDetector API)">
+                                        {'BarcodeDetector' in window ? 'HW Scanner' : 'JS Scanner'}
+                                    </span>
                                 </div>
                             </div>
 
