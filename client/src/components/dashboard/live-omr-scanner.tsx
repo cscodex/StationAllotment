@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff, Crosshair } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR } from "@/lib/omr-utils";
+import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR, sampleIntensity } from "@/lib/omr-utils";
 import jsQR from "jsqr";
 import type { Student } from "@shared/schema";
 
@@ -35,9 +35,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
     const [tiltGamma, setTiltGamma] = useState<number | null>(null); // left-right
     const [gyroAvailable, setGyroAvailable] = useState(false);
     
-    // Stability tracking (require 3 consecutive identical QR reads before capture)
+    // Stability tracking
     const stabilityCounter = useRef(0);
     const lastQrData = useRef("");
+    const markerStabilityCounter = useRef(0);
 
     // Start Webcam
     useEffect(() => {
@@ -429,10 +430,51 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             : "Align OMR page or tap Capture button below";
         overCtx.fillText(instructionText, width / 2, guideY - 10);
 
-        // ===== QR DETECTION (skip if prelocked student) =====
+        // ===== FIDUCIAL MARKER DETECTION =====
+        // Sample pixel intensity at each expected marker position to see if we detect dark squares
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const markerCheckR = Math.max(4, Math.floor(targetSize * 0.5)); // sample radius in pixels
+        const DARK_THRESHOLD = 100; // pixels below this intensity are considered "dark" (black marker)
+
+        const markerPositions = [targetTL, targetTR, targetBL, targetBR];
+        const markerLabels = ["TL", "TR", "BL", "BR"];
+        let alignedCount = 0;
+
+        for (let m = 0; m < markerPositions.length; m++) {
+            const mp = markerPositions[m];
+            const intensity = sampleIntensity(imgData.data, width, height, Math.floor(mp.x), Math.floor(mp.y), markerCheckR);
+            const isAligned = intensity < DARK_THRESHOLD;
+            if (isAligned) alignedCount++;
+
+            // Draw feedback: green if aligned, keep orange if not
+            if (isAligned) {
+                drawCrosshair(overCtx, mp.x, mp.y, targetSize, "#22c55e");
+            }
+        }
+
+        // Show alignment status
+        const alignText = alignedCount >= 4 ? "✓ All 4 markers aligned!"
+            : alignedCount >= 2 ? `${alignedCount}/4 markers aligned`
+            : "Align OMR page to crosshairs";
+        overCtx.fillStyle = alignedCount >= 2 ? "rgba(34, 197, 94, 0.9)" : "rgba(255, 200, 50, 0.9)";
+        overCtx.font = `bold ${Math.max(14, guideWidth * 0.025)}px sans-serif`;
+        overCtx.textAlign = "center";
+        overCtx.fillText(alignText, width / 2, guideY + guideHeight + Math.max(20, guideHeight * 0.04));
+
+        // ===== AUTO-CAPTURE LOGIC =====
         if (prelockedStudent) {
-            // For prelocked student mode, just render the guide and wait for manual capture
-            // No auto-capture in prelocked mode — user should tap the button
+            // For prelocked student mode, auto-capture when >=2 markers are aligned for 3 consecutive frames
+            if (alignedCount >= 2) {
+                markerStabilityCounter.current++;
+                if (markerStabilityCounter.current >= 3) {
+                    markerStabilityCounter.current = 0;
+                    const success = await captureAndProcess(prelockedStudent);
+                    if (success) return; // EXIT loop — show result
+                    // If extraction failed, keep scanning
+                }
+            } else {
+                markerStabilityCounter.current = 0;
+            }
             requestAnimationFrame(processFrame);
             return;
         }
@@ -555,18 +597,14 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
     // Gyroscope level indicator helper
     const getLevelInfo = () => {
         if (tiltBeta === null || tiltGamma === null) return null;
-        // When phone is held upright pointing down at paper, beta ~= 90, we want beta close to 90 and gamma close to 0
-        // When phone is flat, beta ~= 0, gamma ~= 0
-        // For scanning a flat paper, the ideal tilt is beta ~= 90 (phone vertical looking down) adjusted for angle
-        // Simpler: measure deviation from "flat" (beta=0, gamma=0) when phone is face-up
-        // Actually for scanning, the user holds the phone above the paper. The ideal is gamma=0 (no left-right tilt)
-        // and beta between 60-90 (slight angle is fine). We measure "levelness" as how close gamma is to 0.
+        // When the phone is held FLAT (horizontal, face-up), beta ≈ 0, gamma ≈ 0
+        // This is the ideal scanning position — phone parallel to the paper on the table.
         const absGamma = Math.abs(tiltGamma);
-        const absBetaDev = Math.abs(tiltBeta - 75); // ~75° is typical scanning angle
-        const totalTilt = absGamma + absBetaDev * 0.3;
+        const absBeta = Math.abs(tiltBeta); // deviation from flat (0°)
+        const totalTilt = absGamma + absBeta;
         
-        if (totalTilt < 8) return { color: "#22c55e", label: "Level ✓", status: "good" };
-        if (totalTilt < 20) return { color: "#eab308", label: "Almost level", status: "ok" };
+        if (totalTilt < 10) return { color: "#22c55e", label: "Level ✓", status: "good" };
+        if (totalTilt < 25) return { color: "#eab308", label: "Almost level", status: "ok" };
         return { color: "#ef4444", label: "Tilt detected", status: "bad" };
     };
 
