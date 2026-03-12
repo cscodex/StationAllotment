@@ -520,6 +520,39 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         overCtx.textAlign = "center";
         overCtx.fillText(alignText, width / 2, guideY + guideHeight + Math.max(20, guideHeight * 0.04));
 
+        // --- DEBUG OVERLAY: Project the OMR Grid onto the screen if markers are somewhat aligned ---
+        if (alignedCount >= 2) {
+            const pdfW = 510.28; // 552.78 - 42.5
+            const pdfH = 756.89; // 799.39 - 42.5
+            const toPixel = (pdfX: number, pdfY: number) => {
+                const tx = (pdfX - MARKER_TL.x) / pdfW;
+                const ty = (pdfY - MARKER_TL.y) / pdfH;
+                const px = (1 - tx) * (1 - ty) * targetTL.x + tx * (1 - ty) * targetTR.x + (1 - tx) * ty * targetBL.x + tx * ty * targetBR.x;
+                const py = (1 - tx) * (1 - ty) * targetTL.y + tx * (1 - ty) * targetTR.y + (1 - tx) * ty * targetBL.y + tx * ty * targetBR.y;
+                return { x: px, y: py };
+            };
+
+            // Draw Stream Dots (Cyan)
+            overCtx.fillStyle = "rgba(0, 255, 255, 0.8)";
+            STREAM_POS.forEach(pos => {
+                const p = toPixel(pos.x, pos.y);
+                overCtx.beginPath();
+                overCtx.arc(p.x, p.y, Math.max(3, guideWidth * 0.005), 0, Math.PI * 2);
+                overCtx.fill();
+            });
+
+            // Draw Choice Grid Dots (Pink)
+            overCtx.fillStyle = "rgba(255, 0, 255, 0.7)";
+            for (let r = 0; r < 10; r++) {
+                for (let c = 0; c < 10; c++) {
+                    const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
+                    overCtx.beginPath();
+                    overCtx.arc(p.x, p.y, Math.max(2, guideWidth * 0.004), 0, Math.PI * 2);
+                    overCtx.fill();
+                }
+            }
+        }
+
         // ===== UNIFIED AUTO-CAPTURE: ≥3 markers aligned for 3 frames =====
         if (alignedCount >= 3) {
             markerStabilityCounter.current++;
