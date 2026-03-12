@@ -58,7 +58,7 @@ export class OMRService {
         frontPage.drawText('Stream:', { x: 60, y: streamY, size: 11, font: boldFont });
 
         const streams = ["Medical", "NonMedical", "Commerce"];
-        const streamStartX = 140;
+        const streamStartX = 105;
         const streamSpacing = 120;
 
         // Randomly pick a stream if testFillMode is on, otherwise use student's actual stream
@@ -80,7 +80,7 @@ export class OMRService {
         }
 
         // 6. OMR Bubble Grid (10 Choices x 10 Districts)
-        const startX = 140;
+        const startX = 105;
         const startY = height - 350;
         const rowSpacing = 35;
         const colSpacing = 35;
@@ -134,13 +134,13 @@ export class OMRService {
                 if (splitIdx > 0) {
                     const line1 = distName.substring(0, splitIdx);
                     const line2 = distName.substring(splitIdx + 1);
-                    frontPage.drawText(line1, { x: 55, y: startY - r * rowSpacing + 4, size: 8, font });
-                    frontPage.drawText(line2, { x: 55, y: startY - r * rowSpacing - 6, size: 8, font });
+                    frontPage.drawText(line1, { x: 45, y: startY - r * rowSpacing + 4, size: 8, font });
+                    frontPage.drawText(line2, { x: 45, y: startY - r * rowSpacing - 6, size: 8, font });
                 } else {
-                    frontPage.drawText(distName, { x: 55, y: startY - r * rowSpacing - 2, size: 8, font });
+                    frontPage.drawText(distName, { x: 45, y: startY - r * rowSpacing - 2, size: 8, font });
                 }
             } else {
-                frontPage.drawText(distName, { x: 60, y: startY - r * rowSpacing - 4, size: 9, font });
+                frontPage.drawText(distName, { x: 45, y: startY - r * rowSpacing - 4, size: 9, font });
             }
         }
 
