@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff, Crosshair } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR, sampleIntensity } from "@/lib/omr-utils";
+import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR, sampleIntensity, decodeQRHybrid } from "@/lib/omr-utils";
 import jsQR from "jsqr";
 import type { Student } from "@shared/schema";
 
@@ -532,22 +532,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                     Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
                 );
 
-                // Strategy 1: Normal QR scan on full guide region
-                let code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+                // Strategy 1 & 2: Native BarcodeDetector + jsQR fallback + contrast enhancement on full guide region
+                let code = await decodeQRHybrid(cropImgData);
 
-                // Strategy 2: Contrast-enhanced full guide region
-                if (!code) {
-                    const enhanced = new Uint8ClampedArray(cropImgData.data);
-                    for (let i = 0; i < enhanced.length; i += 4) {
-                        for (let ch = 0; ch < 3; ch++) {
-                            const v = enhanced[i + ch];
-                            enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
-                        }
-                    }
-                    code = jsQR(enhanced, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
-                }
-
-                // Strategy 3: Zoom into expected QR location (top-right of OMR form)
+                // Strategy 3 & 4: Zoom into expected QR location (top-right of OMR form)
                 // QR is at PDF coords x:472-562, y:622-712 — map to guide region pixels
                 if (!code) {
                     const qrPdfX = 440;  // slightly wider crop for margin
@@ -577,20 +565,8 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                             zoomCtx.drawImage(tempCanvas, qrPixelX, qrPixelY, qrPixelW, qrPixelH, 0, 0, qrPixelW * 2, qrPixelH * 2);
                             const zoomData = zoomCtx.getImageData(0, 0, qrPixelW * 2, qrPixelH * 2);
 
-                            // Try normal
-                            code = jsQR(zoomData.data, zoomData.width, zoomData.height, { inversionAttempts: "attemptBoth" });
-
-                            // Try contrast-enhanced zoom
-                            if (!code) {
-                                const zoomEnhanced = new Uint8ClampedArray(zoomData.data);
-                                for (let i = 0; i < zoomEnhanced.length; i += 4) {
-                                    for (let ch = 0; ch < 3; ch++) {
-                                        const v = zoomEnhanced[i + ch];
-                                        zoomEnhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 2.2 + 128)));
-                                    }
-                                }
-                                code = jsQR(zoomEnhanced, zoomData.width, zoomData.height, { inversionAttempts: "attemptBoth" });
-                            }
+                            // Strategy 3 & 4: Native + jsQR fallback + contrast enhancement on Zoomed Region
+                            code = await decodeQRHybrid(zoomData);
                         }
                     }
                 }

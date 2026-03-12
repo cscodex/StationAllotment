@@ -11,7 +11,7 @@ import { type Student } from "@shared/schema";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 import jsQR from "jsqr";
-import { parseOMRImageData, extractQRFromImage, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP } from "@/lib/omr-utils";
+import { parseOMRImageData, extractQRFromImage, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP, decodeQRHybrid } from "@/lib/omr-utils";
 
 // Initialize PDF.js worker using Vite's URL import
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -104,7 +104,7 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                     let studentId = null;
                     let matchedStudent = null;
                     try {
-                        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" });
+                        const code = await decodeQRHybrid(imgData);
                         if (code) {
                             try {
                                 const parsed = JSON.parse(code.data);

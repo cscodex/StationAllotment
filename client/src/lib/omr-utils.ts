@@ -258,3 +258,71 @@ export async function parseOMRImageData(
 
     return { selectedStream, choices, toPixel, markerTL, markerTR, markerBL, markerBR };
 }
+
+// ============================================================
+// Hybrid QR Decoder (Native + jsQR Fallback)
+// ============================================================
+declare global {
+    class BarcodeDetector {
+        constructor(options?: { formats: string[] });
+        detect(image: ImageBitmapSource | ImageData): Promise<any[]>;
+    }
+}
+
+export interface QRResult {
+    data: string;
+    location?: {
+        topLeftCorner: { x: number; y: number };
+        topRightCorner: { x: number; y: number };
+        bottomRightCorner: { x: number; y: number };
+        bottomLeftCorner: { x: number; y: number };
+    };
+}
+
+/**
+ * Hybrid QR Decoder
+ * 1. Tries native hardware BarcodeDetector API (much better for faint prints on mobile)
+ * 2. Falls back to normal jsQR
+ * 3. Falls back to contrast-enhanced jsQR
+ */
+export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | null> {
+    // 1. Try native hardware BarcodeDetector API (Chromium only)
+    if ('BarcodeDetector' in window) {
+        try {
+            const detector = new BarcodeDetector({ formats: ['qr_code'] });
+            const results = await detector.detect(imageData);
+            if (results && results.length > 0) {
+                const res = results[0];
+                let location;
+                // BarcodeDetector returns cornerPoints
+                if (res.cornerPoints && res.cornerPoints.length === 4) {
+                    location = {
+                        topLeftCorner: res.cornerPoints[0],
+                        topRightCorner: res.cornerPoints[1],
+                        bottomRightCorner: res.cornerPoints[2],
+                        bottomLeftCorner: res.cornerPoints[3]
+                    };
+                }
+                return { data: res.rawValue, location };
+            }
+        } catch (err) {
+            console.error('BarcodeDetector failed:', err);
+        }
+    }
+
+    // 2. Try normal jsQR
+    let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+    if (code) return { data: code.data, location: code.location };
+
+    // 3. Try contrast-enhanced jsQR (fallback for faint prints)
+    const enhanced = new Uint8ClampedArray(imageData.data);
+    for (let i = 0; i < enhanced.length; i += 4) {
+        for (let ch = 0; ch < 3; ch++) {
+            const v = enhanced[i + ch];
+            enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
+        }
+    }
+    code = jsQR(enhanced, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+
+    return code ? { data: code.data, location: code.location } : null;
+}

@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import jsQR from "jsqr";
 import { UploadCloud, Camera, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { type Student } from "@shared/schema";
+import { decodeQRHybrid } from "@/lib/omr-utils";
 
 interface OMRScannerModalProps {
   isOpen: boolean;
@@ -270,7 +271,7 @@ export default function OMRScannerModal({
       // ── Step 1: QR Code Detection ──
       let qr;
       try {
-        qr = jsQR(imgData.data, w, h, { inversionAttempts: "attemptBoth" });
+        qr = await decodeQRHybrid(imgData);
       } catch {
         throw new Error("Error scanning for QR code. The image may be corrupt or unsupported.");
       }

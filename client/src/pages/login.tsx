@@ -12,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { GraduationCap, User, Shield } from "lucide-react";
 
+declare const __COMMIT_HASH__: string;
+declare const __COMMIT_DATE__: string;
+
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
   password: z.string().min(1, "Password is required"),
@@ -200,6 +203,12 @@ export default function Login() {
           )}
         </CardContent>
       </Card>
+
+      {/* Version Display */}
+      <div className="absolute bottom-4 text-center text-xs text-slate-400">
+        <p>Live Version: {typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'Dev'}</p>
+        <p>{typeof __COMMIT_DATE__ !== 'undefined' ? __COMMIT_DATE__ : 'Local Build'}</p>
+      </div>
     </div>
   );
 }
