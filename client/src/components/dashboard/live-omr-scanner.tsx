@@ -177,10 +177,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         else { visibleW = width; visibleH = width / cRatio; }
 
         const A4_RATIO = PDF_H / PDF_W;
-        let guideHeight = visibleH * 0.60;
+        let guideHeight = visibleH * 0.95;
         let guideWidth = guideHeight / A4_RATIO;
-        if (guideWidth > visibleW * 0.75) {
-            guideWidth = visibleW * 0.75;
+        if (guideWidth > visibleW * 0.95) {
+            guideWidth = visibleW * 0.95;
             guideHeight = guideWidth * A4_RATIO;
         }
         const guideX = (width - guideWidth) / 2;
@@ -275,10 +275,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         else { visibleW = width; visibleH = width / cRatio; }
 
         const A4_RATIO = PDF_H / PDF_W;
-        let guideHeight = visibleH * 0.60;
+        let guideHeight = visibleH * 0.95;
         let guideWidth = guideHeight / A4_RATIO;
-        if (guideWidth > visibleW * 0.75) {
-            guideWidth = visibleW * 0.75;
+        if (guideWidth > visibleW * 0.95) {
+            guideWidth = visibleW * 0.95;
             guideHeight = guideWidth * A4_RATIO;
         }
         const guideX = (width - guideWidth) / 2;
@@ -376,10 +376,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
         // A4 Guide Box
         const A4_RATIO = PDF_H / PDF_W;
-        let guideHeight = visibleH * 0.60;
+        let guideHeight = visibleH * 0.95;
         let guideWidth = guideHeight / A4_RATIO;
-        if (guideWidth > visibleW * 0.75) {
-            guideWidth = visibleW * 0.75;
+        if (guideWidth > visibleW * 0.95) {
+            guideWidth = visibleW * 0.95;
             guideHeight = guideWidth * A4_RATIO;
         }
         const guideX = (width - guideWidth) / 2;
