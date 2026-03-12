@@ -52,7 +52,7 @@ const DISTRICTS = [
   "Amritsar", "Bathinda", "Ferozepur", "Gurdaspur", "Jalandhar",
   "Ludhiana", "Patiala", "SAS Nagar (Mohali)", "Sangrur", "Talwara",
 ];
-const STREAMS = ["Medical", "Non-Medical", "Commerce"];
+const STREAMS = ["Medical", "NonMedical", "Commerce"];
 
 // ============================================================
 // Helpers
@@ -270,7 +270,7 @@ export default function OMRScannerModal({
       // ── Step 1: QR Code Detection ──
       let qr;
       try {
-        qr = jsQR(imgData.data, w, h);
+        qr = jsQR(imgData.data, w, h, { inversionAttempts: "attemptBoth" });
       } catch {
         throw new Error("Error scanning for QR code. The image may be corrupt or unsupported.");
       }
@@ -402,8 +402,7 @@ export default function OMRScannerModal({
       description: `Stream: ${selectedStream || "N/A"}. ${choices.filter(Boolean).length}/10 choices detected.`,
     });
 
-    // Normalize "Non-Medical" → "NonMedical" to match DB storage format
-    const dbStream = selectedStream === "Non-Medical" ? "NonMedical" : selectedStream;
+    const dbStream = selectedStream;
 
     // Upload the canvas image with overlay
     if (canvasRef.current && studentId) {

@@ -104,7 +104,7 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                     let studentId = null;
                     let matchedStudent = null;
                     try {
-                        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "dontInvert" });
+                        const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "attemptBoth" });
                         if (code) {
                             try {
                                 const parsed = JSON.parse(code.data);

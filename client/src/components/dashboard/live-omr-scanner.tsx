@@ -430,20 +430,44 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             : "Align OMR page or tap Capture button below";
         overCtx.fillText(instructionText, width / 2, guideY - 10);
 
-        // ===== FIDUCIAL MARKER DETECTION =====
-        // Sample pixel intensity at each expected marker position to see if we detect dark squares
+        // ===== FIDUCIAL MARKER DETECTION (Relative Darkness) =====
+        // Instead of absolute thresholds, compare each marker position to its surroundings.
+        // A fiducial marker is detected when the spot is significantly DARKER than nearby paper.
         const imgData = ctx.getImageData(0, 0, width, height);
-        const markerCheckR = Math.max(4, Math.floor(targetSize * 0.5)); // sample radius in pixels
-        const DARK_THRESHOLD = 100; // pixels below this intensity are considered "dark" (black marker)
+        const markerCheckR = Math.max(4, Math.floor(targetSize * 0.5));
+        const surroundR = Math.max(markerCheckR * 3, 20); // sample surrounding paper further out
+        const RELATIVE_GAP = 40; // marker must be this much darker than surrounding paper
 
         const markerPositions = [targetTL, targetTR, targetBL, targetBR];
-        const markerLabels = ["TL", "TR", "BL", "BR"];
         let alignedCount = 0;
 
         for (let m = 0; m < markerPositions.length; m++) {
             const mp = markerPositions[m];
-            const intensity = sampleIntensity(imgData.data, width, height, Math.floor(mp.x), Math.floor(mp.y), markerCheckR);
-            const isAligned = intensity < DARK_THRESHOLD;
+            const mx = Math.floor(mp.x);
+            const my = Math.floor(mp.y);
+
+            // Sample the crosshair spot (should be dark if marker is underneath)
+            const spotIntensity = sampleIntensity(imgData.data, width, height, mx, my, markerCheckR);
+
+            // Sample surrounding paper area (average of 4 points offset from center)
+            const offsets = [
+                { x: mx - surroundR, y: my },
+                { x: mx + surroundR, y: my },
+                { x: mx, y: my - surroundR },
+                { x: mx, y: my + surroundR },
+            ];
+            let surroundSum = 0;
+            let surroundN = 0;
+            for (const off of offsets) {
+                if (off.x >= 0 && off.x < width && off.y >= 0 && off.y < height) {
+                    surroundSum += sampleIntensity(imgData.data, width, height, off.x, off.y, markerCheckR);
+                    surroundN++;
+                }
+            }
+            const surroundAvg = surroundN > 0 ? surroundSum / surroundN : 255;
+
+            // Marker is "aligned" if spot is significantly darker than surroundings
+            const isAligned = (surroundAvg - spotIntensity) > RELATIVE_GAP;
             if (isAligned) alignedCount++;
 
             // Draw feedback: green if aligned, keep orange if not
