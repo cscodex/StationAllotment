@@ -185,8 +185,9 @@ export async function parseOMRImageData(
         expectedBR = { x: MARKER_BR.x * roughScale, y: h - (MARKER_TL.y * roughScale) };
     }
 
-    // Use a tighter search radius for rotated live camera feeds since geometric projection is now ultra-precise
-    const searchRadius = Math.floor((anchor ? 40 : 60) * (anchor ? anchor.scale : w / PDF_W));
+    // Use a wider search radius for manual camera captures (150) because user prints ("Fit to page")
+    // often break the strict A4 aspect ratio, causing physical markers to be far from the expected guide.
+    const searchRadius = Math.floor((anchor ? 40 : 150) * (anchor ? anchor.scale : w / PDF_W));
     
     const mTL = findMarker(imgData.data, w, h, expectedTL.x, expectedTL.y, searchRadius);
     const mTR = findMarker(imgData.data, w, h, expectedTR.x, expectedTR.y, searchRadius);

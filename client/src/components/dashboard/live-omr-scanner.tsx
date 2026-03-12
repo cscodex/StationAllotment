@@ -446,7 +446,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         // Draw Expected QR Zone indicator (only in global mode where QR matters)
         if (!prelockedStudent) {
             const qrPdfX = 440;
-            const qrPdfY = 130;  // PDF height(841) - 170(bottom) - 90(height) = ~170 from top. Give some padding.
+            const qrPdfY = 50;  // PDF drawImage(y=170) is from bottom. Top = 841-170-90 = 80. Add padding.
             const qrPdfW = 160;
             const qrPdfH = 160;
             const qrPixelX = guideX + (qrPdfX / PDF_W) * guideWidth;
@@ -558,10 +558,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                 let code = await decodeQRHybrid(cropImgData);
 
                 // Strategy 3 & 4: Zoom into expected QR location (top-right of OMR form)
-                // QR is at PDF coords Canvas Y=130-290
+                // QR is at PDF coords Canvas Y=80
                 if (!code) {
                     const qrPdfX = 440;  // slightly wider crop for margin
-                    const qrPdfY = 130;
+                    const qrPdfY = 50;
                     const qrPdfW = 160;
                     const qrPdfH = 160;
 
