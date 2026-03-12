@@ -519,134 +519,35 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         overCtx.textAlign = "center";
         overCtx.fillText(alignText, width / 2, guideY + guideHeight + Math.max(20, guideHeight * 0.04));
 
-        // --- DEBUG OVERLAY: Project the OMR Grid onto the screen if markers are somewhat aligned ---
-        if (alignedCount >= 2) {
-            const pdfW = 510.28; // 552.78 - 42.5
-            const pdfH = 756.89; // 799.39 - 42.5
-            const toPixel = (pdfX: number, pdfY: number) => {
-                const tx = (pdfX - MARKER_TL.x) / pdfW;
-                const ty = (pdfY - MARKER_TL.y) / pdfH;
-                const px = (1 - tx) * (1 - ty) * targetTL.x + tx * (1 - ty) * targetTR.x + (1 - tx) * ty * targetBL.x + tx * ty * targetBR.x;
-                const py = (1 - tx) * (1 - ty) * targetTL.y + tx * (1 - ty) * targetTR.y + (1 - tx) * ty * targetBL.y + tx * ty * targetBR.y;
-                return { x: px, y: py };
-            };
+        // --- DEBUG OVERLAY: Constantly project the OMR Grid onto the screen based on raw fiducial anchors ---
+        const pdfW = 510.28; // 552.78 - 42.5
+        const pdfH = 756.89; // 799.39 - 42.5
+        const toPixel = (pdfX: number, pdfY: number) => {
+            const tx = (pdfX - MARKER_TL.x) / pdfW;
+            const ty = (pdfY - MARKER_TL.y) / pdfH;
+            const px = (1 - tx) * (1 - ty) * targetTL.x + tx * (1 - ty) * targetTR.x + (1 - tx) * ty * targetBL.x + tx * ty * targetBR.x;
+            const py = (1 - tx) * (1 - ty) * targetTL.y + tx * (1 - ty) * targetTR.y + (1 - tx) * ty * targetBL.y + tx * ty * targetBR.y;
+            return { x: px, y: py };
+        };
 
-            // Draw Stream Dots (Cyan)
-            overCtx.fillStyle = "rgba(0, 255, 255, 0.8)";
-            STREAM_POS.forEach(pos => {
-                const p = toPixel(pos.x, pos.y);
+        // Draw Stream Dots (Cyan)
+        overCtx.fillStyle = "rgba(0, 255, 255, 0.8)";
+        STREAM_POS.forEach(pos => {
+            const p = toPixel(pos.x, pos.y);
+            overCtx.beginPath();
+            overCtx.arc(p.x, p.y, Math.max(3, guideWidth * 0.005), 0, Math.PI * 2);
+            overCtx.fill();
+        });
+
+        // Draw Choice Grid Dots (Pink)
+        overCtx.fillStyle = "rgba(255, 0, 255, 0.7)";
+        for (let r = 0; r < 10; r++) {
+            for (let c = 0; c < 10; c++) {
+                const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
                 overCtx.beginPath();
-                overCtx.arc(p.x, p.y, Math.max(3, guideWidth * 0.005), 0, Math.PI * 2);
+                overCtx.arc(p.x, p.y, Math.max(2, guideWidth * 0.004), 0, Math.PI * 2);
                 overCtx.fill();
-            });
-
-            // Draw Choice Grid Dots (Pink)
-            overCtx.fillStyle = "rgba(255, 0, 255, 0.7)";
-            for (let r = 0; r < 10; r++) {
-                for (let c = 0; c < 10; c++) {
-                    const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
-                    overCtx.beginPath();
-                    overCtx.arc(p.x, p.y, Math.max(2, guideWidth * 0.004), 0, Math.PI * 2);
-                    overCtx.fill();
-                }
             }
-        }
-
-        // ===== UNIFIED AUTO-CAPTURE: ≥3 markers aligned for 3 frames =====
-        if (alignedCount >= 3) {
-            markerStabilityCounter.current++;
-
-            // Show capturing progress
-            overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
-            overCtx.font = `bold ${Math.max(16, guideWidth * 0.03)}px sans-serif`;
-            overCtx.textAlign = "center";
-            overCtx.fillText(
-                markerStabilityCounter.current >= 3 ? "✓ Capturing..." : `Locking... ${markerStabilityCounter.current}/3`,
-                width / 2,
-                guideY + guideHeight + Math.max(40, guideHeight * 0.06)
-            );
-
-            if (markerStabilityCounter.current >= 3) {
-                markerStabilityCounter.current = 0;
-
-                // For prelocked student, skip QR entirely — capture and process directly
-                if (prelockedStudent) {
-                    const success = await captureAndProcess(prelockedStudent);
-                    if (success) return;
-                    requestAnimationFrame(processFrame);
-                    return;
-                }
-
-                // For global mode, we need to find the student via QR
-                // Try QR detection on the guide region with multiple strategies
-                const cropImgData = ctx.getImageData(
-                    Math.max(0, Math.floor(guideX)),
-                    Math.max(0, Math.floor(guideY)),
-                    Math.min(Math.floor(guideWidth), width - Math.floor(guideX)),
-                    Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
-                );
-
-                // Strategy 1 & 2: Native BarcodeDetector + jsQR fallback + contrast enhancement on full guide region
-                let code = await decodeQRHybrid(cropImgData);
-
-                // Strategy 3 & 4: Zoom into expected QR location (top-right of OMR form)
-                // QR is at PDF coords Canvas Y=80
-                if (!code) {
-                    const qrPdfX = 440;  // slightly wider crop for margin
-                    const qrPdfY = 50;
-                    const qrPdfW = 160;
-                    const qrPdfH = 160;
-
-                    const qrPixelX = Math.floor((qrPdfX / PDF_W) * cropImgData.width);
-                    const qrPixelY = Math.floor((qrPdfY / PDF_H) * cropImgData.height);
-                    const qrPixelW = Math.floor((qrPdfW / PDF_W) * cropImgData.width);
-                    const qrPixelH = Math.floor((qrPdfH / PDF_H) * cropImgData.height);
-
-                    // Extract the QR region from the guide image
-                    const zoomCanvas = document.createElement("canvas");
-                    zoomCanvas.width = qrPixelW * 2; // 2x upscale for better detection
-                    zoomCanvas.height = qrPixelH * 2;
-                    const zoomCtx = zoomCanvas.getContext("2d");
-                    if (zoomCtx) {
-                        // Put the crop data on a temp canvas first
-                        const tempCanvas = document.createElement("canvas");
-                        tempCanvas.width = cropImgData.width;
-                        tempCanvas.height = cropImgData.height;
-                        const tempCtx = tempCanvas.getContext("2d");
-                        if (tempCtx) {
-                            tempCtx.putImageData(cropImgData, 0, 0);
-                            // Draw the QR region upscaled
-                            zoomCtx.drawImage(tempCanvas, qrPixelX, qrPixelY, qrPixelW, qrPixelH, 0, 0, qrPixelW * 2, qrPixelH * 2);
-                            const zoomData = zoomCtx.getImageData(0, 0, qrPixelW * 2, qrPixelH * 2);
-
-                            // Strategy 3 & 4: Native + jsQR fallback + contrast enhancement on Zoomed Region
-                            code = await decodeQRHybrid(zoomData);
-                        }
-                    }
-                }
-
-                if (code) {
-                    let detectedStudent: Student | null = null;
-                    try {
-                        const qrPayload = JSON.parse(code.data);
-                        if (qrPayload.id) {
-                            detectedStudent = students.find(s => s.id === qrPayload.id) || null;
-                        }
-                    } catch (e) { }
-
-                    if (detectedStudent) {
-                        const success = await captureAndProcess(detectedStudent);
-                        if (success) return;
-                    }
-                }
-
-                // QR not found or student not matched — reset and keep scanning
-                stabilityCounter.current = 0;
-                requestAnimationFrame(processFrame);
-                return;
-            }
-        } else {
-            markerStabilityCounter.current = 0;
         }
 
         requestAnimationFrame(processFrame);
@@ -758,16 +659,6 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                     {isScanning && cameraOk && (
                         <>
                             <div className="absolute top-4 right-4 flex items-center space-x-2">
-                                <Button 
-                                    variant="secondary" 
-                                    size="sm" 
-                                    onClick={toggleFlash}
-                                    disabled={!flashSupported}
-                                    className={`bg-black/60 border border-white/20 text-white rounded-full p-2 h-auto transition-opacity ${flashSupported ? 'hover:bg-black/80' : 'opacity-50 cursor-not-allowed'}`}
-                                    title={flashSupported ? (flashOn ? "Turn off flash" : "Turn on flash") : "Flash not supported"}
-                                >
-                                    {flashOn ? <Zap className="w-4 h-4 text-yellow-500 fill-yellow-500" /> : <ZapOff className="w-4 h-4" />}
-                                </Button>
                                 <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
                                     <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
                                     <span className="text-xs font-semibold text-white tracking-widest uppercase">Scanning</span>
@@ -775,9 +666,23 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                                 <div className="bg-black/60 px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/20">
                                     <div className={`w-2.5 h-2.5 rounded-full ${'BarcodeDetector' in window ? 'bg-green-500' : 'bg-yellow-500'}`} />
                                     <span className="text-xs font-semibold text-white tracking-widest uppercase" title="Hardware Acceleration (BarcodeDetector API)">
-                                        {'BarcodeDetector' in window ? 'HW Scanner' : 'JS Scanner'}
+                                        {'BarcodeDetector' in window ? 'HW Scanner' : 'WASM Scanner'}
                                     </span>
                                 </div>
+                            </div>
+
+                            {/* Flashlight toggle at bottom left to avoid mobile collisions */}
+                            <div className="absolute bottom-6 left-6 z-30">
+                                <Button 
+                                    variant="secondary" 
+                                    size="icon" 
+                                    onClick={toggleFlash}
+                                    disabled={!flashSupported}
+                                    className={`bg-black/60 shadow-xl border-2 border-white/20 text-white rounded-full w-14 h-14 flex items-center justify-center transition-transform ${flashSupported ? 'hover:bg-black/80 active:scale-90' : 'opacity-50 cursor-not-allowed'}`}
+                                    title={flashSupported ? (flashOn ? "Turn off flash" : "Turn on flash") : "Flash not supported"}
+                                >
+                                    {flashOn ? <Zap className="w-6 h-6 text-yellow-500 fill-yellow-500" /> : <ZapOff className="w-6 h-6" />}
+                                </Button>
                             </div>
 
                             {/* Gyroscope Level Indicator */}
