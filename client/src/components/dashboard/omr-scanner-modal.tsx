@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import jsQR from "jsqr";
 import { UploadCloud, Camera, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
 import { type Student } from "@shared/schema";
 import { decodeQRHybrid } from "@/lib/omr-utils";

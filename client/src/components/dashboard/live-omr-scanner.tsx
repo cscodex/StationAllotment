@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff, Crosshair } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR, sampleIntensity, decodeQRHybrid, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP } from "@/lib/omr-utils";
-import jsQR from "jsqr";
 import type { Student } from "@shared/schema";
 
 interface LiveOMRScannerModalProps {

@@ -1,5 +1,5 @@
 import { type Student } from "@shared/schema";
-import jsQR from "jsqr";
+import { readBarcodesFromImageData } from "zxing-wasm/reader";
 
 export const PDF_W = 595.28;
 export const PDF_H = 841.89;
@@ -121,7 +121,7 @@ export function drawTarget(ctx: CanvasRenderingContext2D, center: { x: number; y
 /**
  * Extracts QR code from image element
  */
-export function extractQRFromImage(img: HTMLImageElement): { studentId: string | null; qrBounds: any | null } {
+export async function extractQRFromImage(img: HTMLImageElement): Promise<{ studentId: string | null; qrBounds: any | null }> {
     const c = document.createElement("canvas");
     c.width = img.width;
     c.height = img.height;
@@ -129,21 +129,26 @@ export function extractQRFromImage(img: HTMLImageElement): { studentId: string |
     if (!ctx) return { studentId: null, qrBounds: null };
     ctx.drawImage(img, 0, 0);
     const imgData = ctx.getImageData(0, 0, c.width, c.height);
-    const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: "dontInvert" });
 
-    if (code) {
-        const data = code.data;
-        try {
-            const parsed = JSON.parse(data);
-            if (parsed.id) return { studentId: parsed.id, qrBounds: code.location };
-        } catch {
-            // Direct string format fallback
-            if (data && data.length > 5 && !data.includes("{")) {
-                return { studentId: data, qrBounds: code.location };
+    try {
+        const results = await readBarcodesFromImageData(imgData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+        if (results && results.length > 0) {
+            const data = results[0].text;
+            const location = results[0].position;
+
+            try {
+                const parsed = JSON.parse(data);
+                if (parsed.id) return { studentId: parsed.id, qrBounds: location };
+            } catch {
+                // Direct string format fallback
+                if (data && data.length > 5 && !data.includes("{")) {
+                    return { studentId: data, qrBounds: location };
+                }
             }
+            return { studentId: data, qrBounds: location };
         }
-        return { studentId: data, qrBounds: code.location };
-    }
+    } catch (err) {}
+
     return { studentId: null, qrBounds: null };
 }
 
@@ -301,7 +306,7 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
     // 1. Try native hardware BarcodeDetector API (Chromium only)
     if ('BarcodeDetector' in window) {
         try {
-            const detector = new BarcodeDetector({ formats: ['qr_code'] });
+            const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
             const results = await detector.detect(imageData);
             if (results && results.length > 0) {
                 const res = results[0];
@@ -322,11 +327,26 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
         }
     }
 
-    // 2. Try normal jsQR
-    let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-    if (code) return { data: code.data, location: code.location };
+    // 2. Try ZXing WASM fallback (Lightning fast compared to jsQR for Safari/iOS)
+    try {
+        const results = await readBarcodesFromImageData(imageData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+        if (results && results.length > 0) {
+            const pos = results[0].position;
+            return {
+                data: results[0].text,
+                location: {
+                    topLeftCorner: pos.topLeft,
+                    topRightCorner: pos.topRight,
+                    bottomRightCorner: pos.bottomRight,
+                    bottomLeftCorner: pos.bottomLeft
+                }
+            };
+        }
+    } catch(err) {
+        // ZXing failed 
+    }
 
-    // 3. Try contrast-enhanced jsQR (fallback for faint prints)
+    // 3. Try contrast-enhanced ZXing WASM (fallback for faint prints)
     const enhanced = new Uint8ClampedArray(imageData.data);
     for (let i = 0; i < enhanced.length; i += 4) {
         for (let ch = 0; ch < 3; ch++) {
@@ -334,7 +354,22 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
             enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
         }
     }
-    code = jsQR(enhanced, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+    const enhancedData = new ImageData(enhanced, imageData.width, imageData.height);
+    try {
+        const results = await readBarcodesFromImageData(enhancedData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+         if (results && results.length > 0) {
+            const pos = results[0].position;
+            return {
+                data: results[0].text,
+                location: {
+                    topLeftCorner: pos.topLeft,
+                    topRightCorner: pos.topRight,
+                    bottomRightCorner: pos.bottomRight,
+                    bottomLeftCorner: pos.bottomLeft
+                }
+            };
+        }
+    } catch(err) {}
 
-    return code ? { data: code.data, location: code.location } : null;
+    return null;
 }

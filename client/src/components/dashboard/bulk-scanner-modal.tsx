@@ -10,7 +10,6 @@ import { Loader2, UploadCloud, Save, CheckCircle2, AlertCircle, Camera, ChevronL
 import { type Student } from "@shared/schema";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-import jsQR from "jsqr";
 import { parseOMRImageData, extractQRFromImage, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP, decodeQRHybrid } from "@/lib/omr-utils";
 
 // Initialize PDF.js worker using Vite's URL import
