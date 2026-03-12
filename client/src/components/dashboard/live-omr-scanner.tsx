@@ -498,113 +498,125 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         overCtx.textAlign = "center";
         overCtx.fillText(alignText, width / 2, guideY + guideHeight + Math.max(20, guideHeight * 0.04));
 
-        // ===== AUTO-CAPTURE LOGIC =====
-        if (prelockedStudent) {
-            // For prelocked student mode, auto-capture when >=2 markers are aligned for 3 consecutive frames
-            if (alignedCount >= 2) {
-                markerStabilityCounter.current++;
-                if (markerStabilityCounter.current >= 3) {
-                    markerStabilityCounter.current = 0;
-                    const success = await captureAndProcess(prelockedStudent);
-                    if (success) return; // EXIT loop — show result
-                    // If extraction failed, keep scanning
-                }
-            } else {
-                markerStabilityCounter.current = 0;
-            }
-            requestAnimationFrame(processFrame);
-            return;
-        }
+        // ===== UNIFIED AUTO-CAPTURE: ≥3 markers aligned for 3 frames =====
+        if (alignedCount >= 3) {
+            markerStabilityCounter.current++;
 
-        // Auto-detect QR for the global live scan mode
-        try {
-            const cropImgData = ctx.getImageData(
-                Math.max(0, Math.floor(guideX)),
-                Math.max(0, Math.floor(guideY)),
-                Math.min(Math.floor(guideWidth), width - Math.floor(guideX)),
-                Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
-            );
-
-            // Use attemptBoth for faint prints
-            let code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
-
-            // If normal detection fails, try contrast-enhanced image (helps with faint prints)
-            if (!code) {
-                const enhanced = new Uint8ClampedArray(cropImgData.data);
-                for (let i = 0; i < enhanced.length; i += 4) {
-                    // Increase contrast: stretch pixel values away from midpoint
-                    for (let ch = 0; ch < 3; ch++) {
-                        const v = enhanced[i + ch];
-                        enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
-                    }
-                }
-                code = jsQR(enhanced, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
-            }
-
-            if (!code) {
-                stabilityCounter.current = 0;
-                lastQrData.current = "";
-                requestAnimationFrame(processFrame);
-                return;
-            }
-
-            // Green box around detected QR
-            const ox = Math.floor(guideX);
-            const oy = Math.floor(guideY);
-            overCtx.strokeStyle = "#22c55e";
-            overCtx.lineWidth = 4;
-            overCtx.beginPath();
-            overCtx.moveTo(ox + code.location.topLeftCorner.x, oy + code.location.topLeftCorner.y);
-            overCtx.lineTo(ox + code.location.topRightCorner.x, oy + code.location.topRightCorner.y);
-            overCtx.lineTo(ox + code.location.bottomRightCorner.x, oy + code.location.bottomRightCorner.y);
-            overCtx.lineTo(ox + code.location.bottomLeftCorner.x, oy + code.location.bottomLeftCorner.y);
-            overCtx.closePath();
-            overCtx.stroke();
-
-            // Stability check: same QR data for 3 consecutive frames (reduced from 5)
-            if (code.data === lastQrData.current) {
-                stabilityCounter.current++;
-            } else {
-                lastQrData.current = code.data;
-                stabilityCounter.current = 1;
-            }
-
-            // Progress indicator
+            // Show capturing progress
             overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
             overCtx.font = `bold ${Math.max(16, guideWidth * 0.03)}px sans-serif`;
             overCtx.textAlign = "center";
             overCtx.fillText(
-                stabilityCounter.current >= 3 ? "✓ Capturing..." : `Stabilizing... ${stabilityCounter.current}/3`,
+                markerStabilityCounter.current >= 3 ? "✓ Capturing..." : `Locking... ${markerStabilityCounter.current}/3`,
                 width / 2,
-                guideY + guideHeight + Math.max(20, guideHeight * 0.04)
+                guideY + guideHeight + Math.max(40, guideHeight * 0.06)
             );
 
-            if (stabilityCounter.current >= 3) {
-                let detectedStudent: Student | null = null;
-                try {
-                    const qrPayload = JSON.parse(code.data);
-                    if (qrPayload.id) {
-                        detectedStudent = students.find(s => s.id === qrPayload.id) || null;
-                    }
-                } catch (e) { }
+            if (markerStabilityCounter.current >= 3) {
+                markerStabilityCounter.current = 0;
 
-                if (!detectedStudent) {
-                    stabilityCounter.current = 0;
+                // For prelocked student, skip QR entirely — capture and process directly
+                if (prelockedStudent) {
+                    const success = await captureAndProcess(prelockedStudent);
+                    if (success) return;
                     requestAnimationFrame(processFrame);
                     return;
                 }
 
-                const success = await captureAndProcess(detectedStudent);
-                if (!success) {
-                    stabilityCounter.current = 0;
+                // For global mode, we need to find the student via QR
+                // Try QR detection on the guide region with multiple strategies
+                const cropImgData = ctx.getImageData(
+                    Math.max(0, Math.floor(guideX)),
+                    Math.max(0, Math.floor(guideY)),
+                    Math.min(Math.floor(guideWidth), width - Math.floor(guideX)),
+                    Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
+                );
+
+                // Strategy 1: Normal QR scan on full guide region
+                let code = jsQR(cropImgData.data, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
+
+                // Strategy 2: Contrast-enhanced full guide region
+                if (!code) {
+                    const enhanced = new Uint8ClampedArray(cropImgData.data);
+                    for (let i = 0; i < enhanced.length; i += 4) {
+                        for (let ch = 0; ch < 3; ch++) {
+                            const v = enhanced[i + ch];
+                            enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
+                        }
+                    }
+                    code = jsQR(enhanced, cropImgData.width, cropImgData.height, { inversionAttempts: "attemptBoth" });
                 }
-                if (!success) {
-                    requestAnimationFrame(processFrame);
+
+                // Strategy 3: Zoom into expected QR location (top-right of OMR form)
+                // QR is at PDF coords x:472-562, y:622-712 — map to guide region pixels
+                if (!code) {
+                    const qrPdfX = 440;  // slightly wider crop for margin
+                    const qrPdfY = 590;
+                    const qrPdfW = 160;
+                    const qrPdfH = 160;
+
+                    const qrPixelX = Math.floor((qrPdfX / PDF_W) * cropImgData.width);
+                    const qrPixelY = Math.floor((qrPdfY / PDF_H) * cropImgData.height);
+                    const qrPixelW = Math.floor((qrPdfW / PDF_W) * cropImgData.width);
+                    const qrPixelH = Math.floor((qrPdfH / PDF_H) * cropImgData.height);
+
+                    // Extract the QR region from the guide image
+                    const zoomCanvas = document.createElement("canvas");
+                    zoomCanvas.width = qrPixelW * 2; // 2x upscale for better detection
+                    zoomCanvas.height = qrPixelH * 2;
+                    const zoomCtx = zoomCanvas.getContext("2d");
+                    if (zoomCtx) {
+                        // Put the crop data on a temp canvas first
+                        const tempCanvas = document.createElement("canvas");
+                        tempCanvas.width = cropImgData.width;
+                        tempCanvas.height = cropImgData.height;
+                        const tempCtx = tempCanvas.getContext("2d");
+                        if (tempCtx) {
+                            tempCtx.putImageData(cropImgData, 0, 0);
+                            // Draw the QR region upscaled
+                            zoomCtx.drawImage(tempCanvas, qrPixelX, qrPixelY, qrPixelW, qrPixelH, 0, 0, qrPixelW * 2, qrPixelH * 2);
+                            const zoomData = zoomCtx.getImageData(0, 0, qrPixelW * 2, qrPixelH * 2);
+
+                            // Try normal
+                            code = jsQR(zoomData.data, zoomData.width, zoomData.height, { inversionAttempts: "attemptBoth" });
+
+                            // Try contrast-enhanced zoom
+                            if (!code) {
+                                const zoomEnhanced = new Uint8ClampedArray(zoomData.data);
+                                for (let i = 0; i < zoomEnhanced.length; i += 4) {
+                                    for (let ch = 0; ch < 3; ch++) {
+                                        const v = zoomEnhanced[i + ch];
+                                        zoomEnhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 2.2 + 128)));
+                                    }
+                                }
+                                code = jsQR(zoomEnhanced, zoomData.width, zoomData.height, { inversionAttempts: "attemptBoth" });
+                            }
+                        }
+                    }
                 }
+
+                if (code) {
+                    let detectedStudent: Student | null = null;
+                    try {
+                        const qrPayload = JSON.parse(code.data);
+                        if (qrPayload.id) {
+                            detectedStudent = students.find(s => s.id === qrPayload.id) || null;
+                        }
+                    } catch (e) { }
+
+                    if (detectedStudent) {
+                        const success = await captureAndProcess(detectedStudent);
+                        if (success) return;
+                    }
+                }
+
+                // QR not found or student not matched — reset and keep scanning
+                stabilityCounter.current = 0;
+                requestAnimationFrame(processFrame);
                 return;
             }
-        } catch (err) {
-            // Ignore frame errors
+        } else {
+            markerStabilityCounter.current = 0;
         }
 
         requestAnimationFrame(processFrame);
