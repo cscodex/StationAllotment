@@ -302,11 +302,11 @@ export interface QRResult {
  * 2. Falls back to normal jsQR
  * 3. Falls back to contrast-enhanced jsQR
  */
-export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | null> {
+export async function decodeQRHybrid(imageData: ImageData, skipAdvancedMath: boolean = false): Promise<QRResult | null> {
     // 1. Try native hardware BarcodeDetector API (Chromium only)
     if ('BarcodeDetector' in window) {
         try {
-            const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+            const detector = new (window as any).BarcodeDetector();
             const results = await detector.detect(imageData);
             if (results && results.length > 0) {
                 const res = results[0];
@@ -329,7 +329,7 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
 
     // 2. Try ZXing WASM fallback (Lightning fast compared to jsQR for Safari/iOS)
     try {
-        const results = await readBarcodesFromImageData(imageData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+        const results = await readBarcodesFromImageData(imageData, { maxNumberOfSymbols: 1 });
         if (results && results.length > 0) {
             const pos = results[0].position;
             return {
@@ -348,9 +348,10 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
 
     // 3. Mathematical Morphology (Grayscale -> Local Contrast/CLAHE-lite -> Blur -> Adaptive Threshold -> Morphological Closing)
     // This rescues extremely faint, washed out, or noisy printed QR codes
-    const advanced = new Uint8ClampedArray(imageData.data);
-    const w = imageData.width;
-    const h = imageData.height;
+    if (!skipAdvancedMath) {
+        const advanced = new Uint8ClampedArray(imageData.data);
+        const w = imageData.width;
+        const h = imageData.height;
     
     // Step A: Grayscale
     for (let i = 0; i < advanced.length; i += 4) {
@@ -405,22 +406,23 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
         }
     }
 
-    const advancedData = new ImageData(closed, w, h);
-    try {
-        const results = await readBarcodesFromImageData(advancedData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
-         if (results && results.length > 0) {
-            const pos = results[0].position;
-            return {
-                data: results[0].text,
-                location: {
-                    topLeftCorner: pos.topLeft,
-                    topRightCorner: pos.topRight,
-                    bottomRightCorner: pos.bottomRight,
-                    bottomLeftCorner: pos.bottomLeft
-                }
-            };
-        }
-    } catch(err) {}
+        const advancedData = new ImageData(closed, w, h);
+        try {
+            const results = await readBarcodesFromImageData(advancedData, { maxNumberOfSymbols: 1 });
+            if (results && results.length > 0) {
+                const pos = results[0].position;
+                return {
+                    data: results[0].text,
+                    location: {
+                        topLeftCorner: pos.topLeft,
+                        topRightCorner: pos.topRight,
+                        bottomRightCorner: pos.bottomRight,
+                        bottomLeftCorner: pos.bottomLeft
+                    }
+                };
+            }
+        } catch(err) {}
+    }
 
     return null;
 }

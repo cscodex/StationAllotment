@@ -38,6 +38,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
     const stabilityCounter = useRef(0);
     const lastQrData = useRef("");
     const markerStabilityCounter = useRef(0);
+    
+    // Continuous Background Barcode tracking
+    const isScanningBarcodeRef = useRef(false);
+    const scannedBarcodeBoxRef = useRef<{ topLeftCorner: { x: number, y: number }, topRightCorner: { x: number, y: number }, bottomRightCorner: { x: number, y: number }, bottomLeftCorner: { x: number, y: number }, time: number } | null>(null);
 
     // Start Webcam
     useEffect(() => {
@@ -554,6 +558,56 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             }
         }
 
+        // ====================================================
+        // Continuous Background Barcode/QR Tracker (Visual Feedback)
+        // ====================================================
+        if (!isScanningBarcodeRef.current && !prelockedStudent) {
+            const now = Date.now();
+            const lastScanTime = scannedBarcodeBoxRef.current?.time || 0;
+            if (now - lastScanTime > 300) { // Throttle ~3 FPS
+                isScanningBarcodeRef.current = true;
+                const cropImgData = ctx.getImageData(
+                    Math.max(0, Math.floor(guideX)),
+                    Math.max(0, Math.floor(guideY)),
+                    Math.min(Math.floor(guideWidth), width - Math.floor(guideX)),
+                    Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
+                );
+
+                decodeQRHybrid(cropImgData, true).then(code => {
+                    if (code && code.location) {
+                        scannedBarcodeBoxRef.current = {
+                            ...code.location,
+                            time: Date.now()
+                        };
+                    }
+                    isScanningBarcodeRef.current = false;
+                }).catch(() => {
+                    isScanningBarcodeRef.current = false;
+                });
+            }
+        }
+
+        // Draw the barcode bounding box if detected recently (within last 1s)
+        const box = scannedBarcodeBoxRef.current;
+        if (box && Date.now() - box.time < 1000) {
+            overCtx.strokeStyle = "#22c55e"; // bright green
+            overCtx.lineWidth = 4;
+            overCtx.beginPath();
+            overCtx.moveTo(guideX + box.topLeftCorner.x, guideY + box.topLeftCorner.y);
+            overCtx.lineTo(guideX + box.topRightCorner.x, guideY + box.topRightCorner.y);
+            overCtx.lineTo(guideX + box.bottomRightCorner.x, guideY + box.bottomRightCorner.y);
+            overCtx.lineTo(guideX + box.bottomLeftCorner.x, guideY + box.bottomLeftCorner.y);
+            overCtx.closePath();
+            overCtx.stroke();
+            
+            // Draw a label
+            overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
+            overCtx.fillRect(guideX + box.topLeftCorner.x, guideY + box.topLeftCorner.y - 24, 70, 24);
+            overCtx.fillStyle = "white";
+            overCtx.font = "bold 12px sans-serif";
+            overCtx.fillText("Barcode", guideX + box.topLeftCorner.x + 10, guideY + box.topLeftCorner.y - 8);
+        }
+
         requestAnimationFrame(processFrame);
     }, [isScanning, students, prelockedStudent, captureAndProcess]);
 
@@ -702,10 +756,10 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                             })()}
 
                             {/* MANUAL CAPTURE BUTTON — always visible at bottom center */}
-                            <div className="absolute bottom-6 left-0 right-0 flex justify-center z-30">
+                            <div className="absolute bottom-6 left-0 right-0 flex justify-center z-30 pointer-events-none">
                                 <Button
                                     onClick={handleManualCapture}
-                                    className="bg-white/90 hover:bg-white text-black rounded-full w-16 h-16 shadow-xl border-4 border-white/50 flex items-center justify-center transition-transform active:scale-90"
+                                    className="bg-white/90 hover:bg-white text-black rounded-full w-16 h-16 shadow-xl border-4 border-white/50 flex items-center justify-center transition-transform active:scale-90 pointer-events-auto"
                                     title="Manual Capture"
                                 >
                                     <Crosshair className="w-7 h-7" />
