@@ -41,7 +41,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
     
     // Continuous Background Barcode tracking
     const isScanningBarcodeRef = useRef(false);
-    const scannedBarcodeBoxRef = useRef<{ topLeftCorner: { x: number, y: number }, topRightCorner: { x: number, y: number }, bottomRightCorner: { x: number, y: number }, bottomLeftCorner: { x: number, y: number }, time: number } | null>(null);
+    const scannedBarcodeBoxRef = useRef<{ topLeftCorner: { x: number, y: number }, topRightCorner: { x: number, y: number }, bottomRightCorner: { x: number, y: number }, bottomLeftCorner: { x: number, y: number }, time: number, format?: string } | null>(null);
 
     // Start Webcam
     useEffect(() => {
@@ -577,7 +577,8 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                     if (code && code.location) {
                         scannedBarcodeBoxRef.current = {
                             ...code.location,
-                            time: Date.now()
+                            time: Date.now(),
+                            format: code.format
                         };
                     }
                     isScanningBarcodeRef.current = false;
@@ -590,22 +591,56 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         // Draw the barcode bounding box if detected recently (within last 1s)
         const box = scannedBarcodeBoxRef.current;
         if (box && Date.now() - box.time < 1000) {
-            overCtx.strokeStyle = "#22c55e"; // bright green
-            overCtx.lineWidth = 4;
-            overCtx.beginPath();
-            overCtx.moveTo(guideX + box.topLeftCorner.x, guideY + box.topLeftCorner.y);
-            overCtx.lineTo(guideX + box.topRightCorner.x, guideY + box.topRightCorner.y);
-            overCtx.lineTo(guideX + box.bottomRightCorner.x, guideY + box.bottomRightCorner.y);
-            overCtx.lineTo(guideX + box.bottomLeftCorner.x, guideY + box.bottomLeftCorner.y);
-            overCtx.closePath();
-            overCtx.stroke();
+            const isQR = box.format === 'qr_code' || box.format === 'QRCode';
             
-            // Draw a label
-            overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
-            overCtx.fillRect(guideX + box.topLeftCorner.x, guideY + box.topLeftCorner.y - 24, 70, 24);
-            overCtx.fillStyle = "white";
-            overCtx.font = "bold 12px sans-serif";
-            overCtx.fillText("Barcode", guideX + box.topLeftCorner.x + 10, guideY + box.topLeftCorner.y - 8);
+            if (isQR) {
+                // Standard Green Bounding Box for QR Codes
+                overCtx.strokeStyle = "#22c55e"; // bright green
+                overCtx.lineWidth = 4;
+                overCtx.beginPath();
+                overCtx.moveTo(guideX + box.topLeftCorner.x, guideY + box.topLeftCorner.y);
+                overCtx.lineTo(guideX + box.topRightCorner.x, guideY + box.topRightCorner.y);
+                overCtx.lineTo(guideX + box.bottomRightCorner.x, guideY + box.bottomRightCorner.y);
+                overCtx.lineTo(guideX + box.bottomLeftCorner.x, guideY + box.bottomLeftCorner.y);
+                overCtx.closePath();
+                overCtx.stroke();
+                
+                // Draw a label
+                overCtx.fillStyle = "rgba(34, 197, 94, 0.9)";
+                overCtx.fillRect(guideX + box.topLeftCorner.x, guideY + box.topLeftCorner.y - 24, 70, 24);
+                overCtx.fillStyle = "white";
+                overCtx.font = "bold 12px sans-serif";
+                overCtx.fillText("QR Code", guideX + box.topLeftCorner.x + 10, guideY + box.topLeftCorner.y - 8);
+            } else {
+                // Vertical Red Laser Indicator for 1D Barcodes
+                const midTopX = guideX + (box.topLeftCorner.x + box.topRightCorner.x) / 2;
+                const midTopY = guideY + (box.topLeftCorner.y + box.topRightCorner.y) / 2;
+                const midBotX = guideX + (box.bottomLeftCorner.x + box.bottomRightCorner.x) / 2;
+                const midBotY = guideY + (box.bottomLeftCorner.y + box.bottomRightCorner.y) / 2;
+                
+                // Draw the laser line
+                overCtx.strokeStyle = "rgba(239, 68, 68, 0.9)"; // bright red
+                overCtx.lineWidth = 3;
+                
+                // Add a glow
+                overCtx.shadowColor = "rgba(239, 68, 68, 0.8)";
+                overCtx.shadowBlur = 10;
+                
+                overCtx.beginPath();
+                overCtx.moveTo(midTopX, midTopY - 20); // extend laser slightly above and below
+                overCtx.lineTo(midBotX, midBotY + 20);
+                overCtx.stroke();
+                
+                // Reset shadow
+                overCtx.shadowBlur = 0;
+                
+                // Draw label
+                overCtx.fillStyle = "rgba(239, 68, 68, 0.9)";
+                overCtx.fillRect(midTopX - 35, midTopY - 30, 70, 24);
+                overCtx.fillStyle = "white";
+                overCtx.font = "bold 12px sans-serif";
+                overCtx.fillText("Barcode", midTopX - 25, midTopY - 14);
+            }
         }
 
         requestAnimationFrame(processFrame);

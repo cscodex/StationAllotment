@@ -1,5 +1,6 @@
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
 import QRCode from 'qrcode';
+import bwipjs from 'bwip-js';
 import { storage } from './storage';
 import { SCHOOL_DISTRICTS } from '@shared/schema';
 
@@ -48,6 +49,25 @@ export class OMRService {
             y: height - 170,
             width: 90,
             height: 90
+        });
+
+        // 3.5. Insert Vertical 1D Barcode (Left Margin)
+        const barcodeBuffer = await bwipjs.toBuffer({
+            bcid: 'code128',
+            text: `${student.id}-${student.appNo}`,
+            scale: 3,
+            height: 10,
+            includetext: true,
+            textxalign: 'center',
+        });
+        const barcodeImage = await doc.embedPng(barcodeBuffer);
+        // Rotate 90 degrees to make it vertical, drawn on the left side
+        frontPage.drawImage(barcodeImage, {
+            x: 50,
+            y: height / 2 - 100, // Center roughly
+            width: 250,
+            height: 50,
+            rotate: degrees(90)
         });
 
         // 4. Instructions

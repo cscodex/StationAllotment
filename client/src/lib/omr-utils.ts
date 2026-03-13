@@ -294,6 +294,7 @@ export interface QRResult {
         bottomRightCorner: { x: number; y: number };
         bottomLeftCorner: { x: number; y: number };
     };
+    format?: string;
 }
 
 /**
@@ -320,7 +321,7 @@ export async function decodeQRHybrid(imageData: ImageData, skipAdvancedMath: boo
                         bottomLeftCorner: res.cornerPoints[3]
                     };
                 }
-                return { data: res.rawValue, location };
+                return { data: res.rawValue, location, format: res.format };
             }
         } catch (err) {
             console.error('BarcodeDetector failed:', err);
@@ -339,7 +340,8 @@ export async function decodeQRHybrid(imageData: ImageData, skipAdvancedMath: boo
                     topRightCorner: pos.topRight,
                     bottomRightCorner: pos.bottomRight,
                     bottomLeftCorner: pos.bottomLeft
-                }
+                },
+                format: results[0].format
             };
         }
     } catch(err) {
@@ -418,7 +420,8 @@ export async function decodeQRHybrid(imageData: ImageData, skipAdvancedMath: boo
                         topRightCorner: pos.topRight,
                         bottomRightCorner: pos.bottomRight,
                         bottomLeftCorner: pos.bottomLeft
-                    }
+                    },
+                    format: results[0].format
                 };
             }
         } catch(err) {}
