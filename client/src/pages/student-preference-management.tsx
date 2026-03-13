@@ -90,6 +90,7 @@ export default function StudentPreferenceManagement() {
   // Bulk scanner state
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
+  const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
 
   const handleBulkSave = async (pages: ScannedPageInfo[]) => {
     let successCount = 0;
@@ -550,6 +551,15 @@ export default function StudentPreferenceManagement() {
                   >
                     <UploadCloud className="w-4 h-4 mr-2" />
                     Bulk OMR Scan
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setScannerStudent(undefined); setIsGlobalImageScanOpen(true); }}
+                    className="text-violet-600 border-violet-500 hover:bg-violet-50"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Upload Image
                   </Button>
                 </div>
               </CardTitle>
@@ -1374,7 +1384,7 @@ export default function StudentPreferenceManagement() {
         </AlertDialogContent>
       </AlertDialog >
 
-      {/* OMR Scanner Modal */}
+      {/* OMR Scanner Modal (Student-Level) */}
       < OMRScannerModal
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)
@@ -1390,6 +1400,28 @@ export default function StudentPreferenceManagement() {
             setIsEditModalOpen(true);
             setIsScannerOpen(false);
           }
+        }}
+      />
+
+      {/* OMR Scanner Modal (Global Image Upload - auto-detect student via QR/Barcode) */}
+      <OMRScannerModal
+        isOpen={isGlobalImageScanOpen}
+        onClose={() => setIsGlobalImageScanOpen(false)}
+        onScanComplete={(scannedStudentId, parsedData) => {
+          // Find the student from the scanned student ID
+          const allStudents = (studentsData as any)?.students || [];
+          const matchedStudent = allStudents.find((s: Student) => s.id.toString() === scannedStudentId.toString());
+          if (matchedStudent) {
+            const preferences: any = { stream: parsedData.stream };
+            for (let i = 0; i < 10; i++) {
+              preferences[`choice${i + 1}`] = parsedData.choices[i] || "";
+            }
+            updatePreferencesMutation.mutate({ studentId: scannedStudentId.toString(), preferences });
+            toast({ title: "Scan Complete", description: `Preferences saved for ${matchedStudent.name} (${matchedStudent.appNo}).` });
+          } else {
+            toast({ title: "Student Not Found", description: `No student matched with ID ${scannedStudentId}. Please verify the OMR form.`, variant: "destructive" });
+          }
+          setIsGlobalImageScanOpen(false);
         }}
       />
 

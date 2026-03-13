@@ -35,15 +35,15 @@ const MARKER_TL = { x: 42.5, y: 42.5 };
 const MARKER_TR = { x: 569.5, y: 42.5 };
 const MARKER_SIZE_PT = 25;
 
-// Stream circles (from top-left in PDF points)
+// Stream circles (from top-left in PDF points) - calibrated values
 const STREAM_POS = [
-  { x: 150, y: 246 },
-  { x: 270, y: 246 },
-  { x: 390, y: 246 },
+  { x: 154, y: 246 },
+  { x: 274, y: 246 },
+  { x: 394, y: 246 },
 ];
 
-// Choice grid (from top-left in PDF points)
-const GRID_ORIGIN = { x: 150, y: 350 };
+// Choice grid (from top-left in PDF points) - calibrated values
+const GRID_ORIGIN = { x: 154, y: 346 };
 const COL_STEP = 35;
 const ROW_STEP = 35;
 const CIRCLE_R_PT = 8;
@@ -377,7 +377,7 @@ export default function OMRScannerModal({
     let selectedStream = "";
     const sMin = Math.min(...streamI);
     const sMax = Math.max(...streamI);
-    if (sMax - sMin > 25) {
+    if (sMax - sMin > 5) {
       const idx = streamI.indexOf(sMin);
       if (idx >= 0 && idx < STREAMS.length) selectedStream = STREAMS[idx];
     }
@@ -395,7 +395,7 @@ export default function OMRScannerModal({
       const rMax = Math.max(...rowI);
       const priorityIdx = rowI.indexOf(rMin);
       console.log(`[OMR] ${DISTRICTS[r]}: [${rowI.map((v) => v.toFixed(0)).join(", ")}] min=${rMin.toFixed(0)} priority=${priorityIdx + 1} gap=${(rMax - rMin).toFixed(0)}`);
-      if (rMax - rMin > 25 && priorityIdx >= 0 && priorityIdx < 10) {
+      if (rMax - rMin > 5 && priorityIdx >= 0 && priorityIdx < 10) {
         // This district is the student's (priorityIdx+1)th choice
         choices[priorityIdx] = DISTRICTS[r];
       }
