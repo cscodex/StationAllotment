@@ -586,10 +586,11 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
                 decodeQRHybrid(cropImgData, true).then(code => {
                     if (code && code.location) {
+                        console.log("Barcode format tracked:", code.format);
                         scannedBarcodeBoxRef.current = {
                             ...code.location,
                             time: Date.now(),
-                            format: code.format
+                            format: String(code.format) // ensure it's a string
                         };
                     }
                     isScanningBarcodeRef.current = false;

@@ -19,7 +19,7 @@ export const STREAM_POS = [
     { x: 390, y: 246 }, // Commerce
 ];
 
-export const GRID_ORIGIN = { x: 150, y: 350 };
+export const GRID_ORIGIN = { x: 150, y: 346 };
 export const COL_STEP = 35;
 export const ROW_STEP = 35; 
 export const CIRCLE_R_PT = 8;
