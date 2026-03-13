@@ -1404,11 +1404,12 @@ export default function StudentPreferenceManagement() {
         isOpen={isLiveScannerOpen}
         onClose={() => setIsLiveScannerOpen(false)}
         students={(studentsData as any)?.students || []}
-        onSaveData={(studentId, stream, choices) => {
+        onSaveData={(studentId, stream, choices, imageUrl) => {
           const preferences: any = { stream };
           for (let i = 0; i < 10; i++) {
               preferences[`choice${i + 1}`] = choices[i] || "";
           }
+          if (imageUrl) preferences.imageUrl = imageUrl;
           updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
         }}
       />
@@ -1419,11 +1420,12 @@ export default function StudentPreferenceManagement() {
         onClose={() => setPerStudentLiveScanStudent(null)}
         students={(studentsData as any)?.students || []}
         prelockedStudent={perStudentLiveScanStudent || undefined}
-        onSaveData={(studentId, stream, choices) => {
+        onSaveData={(studentId, stream, choices, imageUrl) => {
           const preferences: any = { stream };
           for (let i = 0; i < 10; i++) {
               preferences[`choice${i + 1}`] = choices[i] || "";
           }
+          if (imageUrl) preferences.imageUrl = imageUrl;
           updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
           setPerStudentLiveScanStudent(null);
         }}

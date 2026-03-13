@@ -10,7 +10,7 @@ interface LiveOMRScannerModalProps {
     isOpen: boolean;
     onClose: () => void;
     students: Student[];
-    onSaveData: (studentId: string, stream: string, choices: string[]) => void;
+    onSaveData: (studentId: string, stream: string, choices: string[], imageUrl?: string) => void;
     /** If provided, skip QR detection and use this student directly */
     prelockedStudent?: Student;
 }
@@ -24,7 +24,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
     const [isScanning, setIsScanning] = useState(false);
     const [cameraOk, setCameraOk] = useState<boolean | null>(null);
     const [lockedStudent, setLockedStudent] = useState<Student | null>(null);
-    const [scanData, setScanData] = useState<{ stream: string | null, choices: string[] } | null>(null);
+    const [scanData, setScanData] = useState<{ stream: string | null, choices: string[], imageUrl?: string } | null>(null);
     const [flashSupported, setFlashSupported] = useState(false);
     const [flashOn, setFlashOn] = useState(false);
     const [showCaptureFlash, setShowCaptureFlash] = useState(false);
@@ -222,7 +222,11 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
             if (selectedStream && choices.filter(c => c && c.trim() !== "").length > 0) {
                 setLockedStudent(detectedStudent);
-                setScanData({ stream: selectedStream, choices });
+                setScanData({ 
+                    stream: selectedStream, 
+                    choices,
+                    imageUrl: captureCanvas.toDataURL("image/jpeg", 0.75)
+                });
                 setIsScanning(false);
                 return true;
             } else {
@@ -562,7 +566,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
     const handleConfirm = () => {
         if (lockedStudent && scanData && scanData.stream) {
-            onSaveData(lockedStudent.id.toString(), scanData.stream, scanData.choices);
+            onSaveData(lockedStudent.id.toString(), scanData.stream, scanData.choices, scanData.imageUrl);
             toast({ title: "Saved", description: `Data for ${lockedStudent.name} saved successfully.` });
             
             // Resume scanning for next paper

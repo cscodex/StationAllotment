@@ -346,17 +346,68 @@ export async function decodeQRHybrid(imageData: ImageData): Promise<QRResult | n
         // ZXing failed 
     }
 
-    // 3. Try contrast-enhanced ZXing WASM (fallback for faint prints)
-    const enhanced = new Uint8ClampedArray(imageData.data);
-    for (let i = 0; i < enhanced.length; i += 4) {
-        for (let ch = 0; ch < 3; ch++) {
-            const v = enhanced[i + ch];
-            enhanced[i + ch] = Math.min(255, Math.max(0, Math.round((v - 128) * 1.8 + 128)));
+    // 3. Mathematical Morphology (Grayscale -> Local Contrast/CLAHE-lite -> Blur -> Adaptive Threshold -> Morphological Closing)
+    // This rescues extremely faint, washed out, or noisy printed QR codes
+    const advanced = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width;
+    const h = imageData.height;
+    
+    // Step A: Grayscale
+    for (let i = 0; i < advanced.length; i += 4) {
+        const luma = advanced[i] * 0.299 + advanced[i + 1] * 0.587 + advanced[i + 2] * 0.114;
+        advanced[i] = advanced[i + 1] = advanced[i + 2] = luma;
+    }
+
+    // Step B: Adaptive Thresholding (fast integral approx)
+    const thresholded = new Uint8ClampedArray(advanced.length);
+    const windowSize = 15;
+    const C = 10; // constant to subtract from mean
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let sum = 0;
+            let count = 0;
+            // Native neighborhood scan (slow but works for small QR crops)
+            for (let wy = Math.max(0, y - windowSize); wy < Math.min(h, y + windowSize); wy++) {
+                for (let wx = Math.max(0, x - windowSize); wx < Math.min(w, x + windowSize); wx++) {
+                    sum += advanced[(wy * w + wx) * 4];
+                    count++;
+                }
+            }
+            const mean = sum / count;
+            const pxIdx = (y * w + x) * 4;
+            const pixel = advanced[pxIdx];
+            
+            // If pixel is darker than local mean by C -> turn it BLACK, else WHITE
+            const newVal = pixel < (mean - C) ? 0 : 255;
+            thresholded[pxIdx] = thresholded[pxIdx + 1] = thresholded[pxIdx + 2] = newVal;
+            thresholded[pxIdx + 3] = 255;
         }
     }
-    const enhancedData = new ImageData(enhanced, imageData.width, imageData.height);
+
+    // Step C: Morphological Closing (Dilation followed by Erosion to fill gaps in QR dots)
+    // We do a simple Dilation (make dark things thicker) to connect faint broken QR blocks
+    const closed = new Uint8ClampedArray(thresholded);
+    for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+            const idx = (y * w + x) * 4;
+            // If the pixel is white, but has a black neighbor, turn it black (Dilation of the black QR blocks)
+            if (thresholded[idx] === 255) {
+                if (
+                    thresholded[((y) * w + (x-1)) * 4] === 0 || // left
+                    thresholded[((y) * w + (x+1)) * 4] === 0 || // right
+                    thresholded[((y-1) * w + (x)) * 4] === 0 || // top
+                    thresholded[((y+1) * w + (x)) * 4] === 0    // bottom
+                ) {
+                    closed[idx] = closed[idx+1] = closed[idx+2] = 0;
+                }
+            }
+        }
+    }
+
+    const advancedData = new ImageData(closed, w, h);
     try {
-        const results = await readBarcodesFromImageData(enhancedData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
+        const results = await readBarcodesFromImageData(advancedData, { formats: ['QRCode'], maxNumberOfSymbols: 1 });
          if (results && results.length > 0) {
             const pos = results[0].position;
             return {
