@@ -106,20 +106,21 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                         const code = await decodeQRHybrid(imgData);
                         if (code) {
                             try {
-                                const parsed = JSON.parse(code.data);
-                                studentId = parsed.id;
-                            } catch {
-                                if (code.data && !code.data.includes("{")) {
+                                if (code.data.startsWith('{')) {
+                                    studentId = JSON.parse(code.data).id?.toString();
+                                } else if (code.data.includes('-')) {
+                                    studentId = code.data.split('-')[0];
+                                } else {
                                     studentId = code.data;
                                 }
-                            }
+                            } catch (e) { }
                         }
                     } catch (e) {
                         console.error("jsQR error: ", e);
                     }
 
                     if (studentId) {
-                        matchedStudent = students.find(s => s.id === studentId);
+                        matchedStudent = students.find(s => s.id.toString() === studentId?.toString());
                     }
 
                     // 2. Parse OMR (Circles) safely

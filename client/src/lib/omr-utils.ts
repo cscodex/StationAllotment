@@ -14,9 +14,9 @@ export const MARKER_SIZE_PT = 25;
 // Stream selection circles (based on exact X/Y offsets from original PDF outputs)
 // PDF uses Bottom-Left origin. QR Y=h-170 -> Canvas Y=170. Stream Y=h-250 -> Canvas Y=250.
 export const STREAM_POS = [
-    { x: 153, y: 250 }, // Medical
-    { x: 273, y: 250 }, // NonMedical
-    { x: 393, y: 250 }, // Commerce
+    { x: 150, y: 246 }, // Medical
+    { x: 270, y: 246 }, // NonMedical
+    { x: 390, y: 246 }, // Commerce
 ];
 
 export const GRID_ORIGIN = { x: 150, y: 350 };
@@ -252,7 +252,7 @@ export async function parseOMRImageData(
     const sMin = Math.min(...streamI);
     const sMax = Math.max(...streamI);
     let selectedStream: string | null = null;
-    if (sMax - sMin > 15) {
+    if (sMax - sMin > 10) {
         const sIdx = streamI.indexOf(sMin);
         selectedStream = STREAMS[sIdx];
     }
@@ -268,7 +268,7 @@ export async function parseOMRImageData(
         const rMin = Math.min(...rowI);
         const rMax = Math.max(...rowI);
         const priorityIdx = rowI.indexOf(rMin);
-        if (rMax - rMin > 15 && priorityIdx >= 0 && priorityIdx < 10) {
+        if (rMax - rMin > 10 && priorityIdx >= 0 && priorityIdx < 10) {
             choices[priorityIdx] = DISTRICTS[r];
         }
     }

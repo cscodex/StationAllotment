@@ -280,20 +280,27 @@ export default function OMRScannerModal({
       }
 
       let payload: any;
+      let studentId = null;
       try {
-        payload = JSON.parse(qr.data);
+        if (qr.data.startsWith('{')) {
+            payload = JSON.parse(qr.data);
+            studentId = payload.id;
+        } else if (qr.data.includes('-')) {
+            studentId = qr.data.split('-')[0];
+        } else {
+            studentId = qr.data;
+        }
       } catch {
-        throw new Error("QR code found but it's not a Station Allotment form. The QR code contains unrecognized data.");
+        throw new Error("QR/Barcode found but it's not a Station Allotment form. The code contains unrecognized data.");
       }
 
-      const studentId = payload?.id;
       if (!studentId) {
-        throw new Error("QR code found but it doesn't contain a valid student ID. This may not be a Station Allotment OMR form.");
+        throw new Error("QR/Barcode found but it doesn't contain a valid student ID. This may not be a Station Allotment OMR form.");
       }
 
-      if (expectedStudent && studentId !== expectedStudent.id) {
+      if (expectedStudent && studentId.toString() !== expectedStudent.id.toString()) {
         throw new Error(
-          `Wrong form! This form belongs to ${payload.appNo || "another student"}, but you're editing ${expectedStudent.appNo}. Please upload the correct student's form.`
+          `Wrong form! This form belongs to ${payload?.appNo || "another student"}, but you're editing ${expectedStudent.appNo}. Please upload the correct student's form.`
         );
       }
 

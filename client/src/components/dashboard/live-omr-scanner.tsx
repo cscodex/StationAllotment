@@ -327,11 +327,22 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
         let detectedStudent: Student | null = null;
         try {
-            const qrPayload = JSON.parse(code.data);
-            if (qrPayload.id) {
-                detectedStudent = students.find(s => s.id === qrPayload.id) || null;
+            // First try to parse as JSON (QR Code Format)
+            if (code.data.startsWith('{')) {
+                const qrPayload = JSON.parse(code.data);
+                if (qrPayload.id) {
+                    detectedStudent = students.find(s => s.id.toString() === qrPayload.id.toString()) || null;
+                }
+            } else if (code.data.includes('-')) {
+                // If it's a 1D Barcode (Format: "ID-APPNO")
+                const idStr = code.data.split('-')[0];
+                if (idStr) {
+                    detectedStudent = students.find(s => s.id.toString() === idStr.toString()) || null;
+                }
             }
-        } catch (e) { }
+        } catch (e) {
+            console.warn("Failed to parse barcode data:", code.data);
+        }
 
         if (!detectedStudent) {
             toast({
