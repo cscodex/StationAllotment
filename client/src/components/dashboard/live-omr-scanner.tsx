@@ -41,7 +41,7 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
     
     // Continuous Background Barcode tracking
     const isScanningBarcodeRef = useRef(false);
-    const scannedBarcodeBoxRef = useRef<{ topLeftCorner: { x: number, y: number }, topRightCorner: { x: number, y: number }, bottomRightCorner: { x: number, y: number }, bottomLeftCorner: { x: number, y: number }, time: number, format?: string } | null>(null);
+    const scannedBarcodeBoxRef = useRef<{ topLeftCorner: { x: number, y: number }, topRightCorner: { x: number, y: number }, bottomRightCorner: { x: number, y: number }, bottomLeftCorner: { x: number, y: number }, time: number, format?: string, data?: string } | null>(null);
 
     // Start Webcam
     useEffect(() => {
@@ -307,13 +307,28 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
             Math.min(Math.floor(guideHeight), height - Math.floor(guideY))
         );
 
-        // Try with new Hybrid QR Decoder
-        let code = await decodeQRHybrid(cropImgData);
-        
-        // If guide region failed, try the full frame
-        if (!code) {
-            const fullImgData = tCtx.getImageData(0, 0, width, height);
-            code = await decodeQRHybrid(fullImgData);
+        // Optimistic check: if the loop already found a stable barcode in the last 1s, use it!
+        const lastBox = scannedBarcodeBoxRef.current;
+        let code: any = null;
+        if (lastBox && Date.now() - lastBox.time < 1000 && lastBox.data) {
+            console.log("Using cached barcode from tracker:", lastBox.format);
+            code = { data: lastBox.data, location: lastBox, format: lastBox.format };
+        } else {
+            // Try QR from guide region
+            const cropImgData = tCtx.getImageData(
+                Math.max(0, Math.floor(guideX - 20)), // 20px padding
+                Math.max(0, Math.floor(guideY - 20)),
+                Math.min(Math.floor(guideWidth + 40), width - Math.floor(guideX)),
+                Math.min(Math.floor(guideHeight + 40), height - Math.floor(guideY))
+            );
+            
+            code = await decodeQRHybrid(cropImgData);
+            
+            // If guide region failed, try the full frame
+            if (!code) {
+                const fullImgData = tCtx.getImageData(0, 0, width, height);
+                code = await decodeQRHybrid(fullImgData);
+            }
         }
 
         if (!code) {
@@ -590,7 +605,8 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
                         scannedBarcodeBoxRef.current = {
                             ...code.location,
                             time: Date.now(),
-                            format: String(code.format) // ensure it's a string
+                            format: String(code.format), // ensure it's a string
+                            data: code.data // Store the raw data so capture can use it
                         };
                     }
                     isScanningBarcodeRef.current = false;
@@ -602,8 +618,9 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
         // Draw the barcode bounding box if detected recently (within last 1s)
         const box = scannedBarcodeBoxRef.current;
-        if (box && Date.now() - box.time < 1000) {
-            const isQR = box.format === 'qr_code' || box.format === 'QRCode';
+        if (box && box.format && Date.now() - box.time < 1000) {
+            // Check for normalized format strings (qrcode, 4, etc)
+            const isQR = box.format.toLowerCase().includes('qr') || box.format === '4';
             
             if (isQR) {
                 // Standard Green Bounding Box for QR Codes

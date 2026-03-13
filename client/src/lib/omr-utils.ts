@@ -13,13 +13,14 @@ export const MARKER_SIZE_PT = 25;
 
 // Stream selection circles (based on exact X/Y offsets from original PDF outputs)
 // PDF uses Bottom-Left origin. QR Y=h-170 -> Canvas Y=170. Stream Y=h-250 -> Canvas Y=250.
+// Added +4 horizontal nudge to center better on the physical bubbles
 export const STREAM_POS = [
-    { x: 150, y: 246 }, // Medical
-    { x: 270, y: 246 }, // NonMedical
-    { x: 390, y: 246 }, // Commerce
+    { x: 154, y: 246 }, // Medical
+    { x: 274, y: 246 }, // NonMedical
+    { x: 394, y: 246 }, // Commerce
 ];
 
-export const GRID_ORIGIN = { x: 150, y: 346 };
+export const GRID_ORIGIN = { x: 154, y: 346 };
 export const COL_STEP = 35;
 export const ROW_STEP = 35; 
 export const CIRCLE_R_PT = 8;
@@ -81,7 +82,8 @@ export function findMarker(data: Uint8ClampedArray, w: number, h: number, startX
     // 2. Find the center of mass STRICTLY around the detected darkest core.
     // This prevents massive dark background objects (like black shirts) from pulling the mathematical gravity away from the fiducial.
     let sumX = 0, sumY = 0, count = 0;
-    const tightRadius = Math.max(10, Math.floor(searchRadius * 0.4)); // The marker is small, so only look in its immediate vicinity 
+    // Cap tightRadius to avoid capturing the barcode which is on the left margin
+    const tightRadius = Math.min(30, Math.max(10, Math.floor(searchRadius * 0.4))); 
     
     for (let y = minY - tightRadius; y <= minY + tightRadius; y += 1) {
         for (let x = minX - tightRadius; x <= minX + tightRadius; x += 1) {
@@ -252,7 +254,7 @@ export async function parseOMRImageData(
     const sMin = Math.min(...streamI);
     const sMax = Math.max(...streamI);
     let selectedStream: string | null = null;
-    if (sMax - sMin > 10) {
+    if (sMax - sMin > 5) {
         const sIdx = streamI.indexOf(sMin);
         selectedStream = STREAMS[sIdx];
     }
@@ -268,7 +270,8 @@ export async function parseOMRImageData(
         const rMin = Math.min(...rowI);
         const rMax = Math.max(...rowI);
         const priorityIdx = rowI.indexOf(rMin);
-        if (rMax - rMin > 10 && priorityIdx >= 0 && priorityIdx < 10) {
+        // Compare darkest bubble against the lightest paper section in that same row
+        if (rMax - rMin > 5 && priorityIdx >= 0 && priorityIdx < 10) {
             choices[priorityIdx] = DISTRICTS[r];
         }
     }
@@ -321,7 +324,11 @@ export async function decodeQRHybrid(imageData: ImageData, skipAdvancedMath: boo
                         bottomLeftCorner: res.cornerPoints[3]
                     };
                 }
-                return { data: res.rawValue, location, format: res.format };
+                return { 
+                    data: res.rawValue, 
+                    location, 
+                    format: String(res.format).toLowerCase().replace(/[^a-z0-9]/g, '') 
+                };
             }
         } catch (err) {
             console.error('BarcodeDetector failed:', err);
@@ -341,7 +348,7 @@ export async function decodeQRHybrid(imageData: ImageData, skipAdvancedMath: boo
                     bottomRightCorner: pos.bottomRight,
                     bottomLeftCorner: pos.bottomLeft
                 },
-                format: results[0].format
+                format: String(results[0].format).toLowerCase().replace(/[^a-z0-9]/g, '')
             };
         }
     } catch(err) {
