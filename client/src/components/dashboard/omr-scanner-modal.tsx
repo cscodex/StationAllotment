@@ -9,9 +9,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Camera, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { UploadCloud, Camera, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
 import { type Student } from "@shared/schema";
-import { decodeQRHybrid } from "@/lib/omr-utils";
+import {
+  decodeQRHybrid,
+  parseOMRImageData,
+  STREAM_POS,
+  GRID_ORIGIN,
+  COL_STEP,
+  ROW_STEP,
+  CIRCLE_R_PT,
+  DISTRICTS,
+  STREAMS,
+} from "@/lib/omr-utils";
 
 interface OMRScannerModalProps {
   isOpen: boolean;
@@ -21,102 +31,15 @@ interface OMRScannerModalProps {
     parsedData: { stream: string; choices: string[] },
   ) => void;
   expectedStudent?: Student;
-}
-
-// ============================================================
-// PDF Layout Constants (from server/omrService.ts)
-// Y positions are "from top-left" for image coordinate consistency.
-// ============================================================
-const PDF_W = 612;
-const PDF_H = 792;
-
-// Fiducial markers: markerSize=25, padding=30
-const MARKER_TL = { x: 42.5, y: 42.5 };
-const MARKER_TR = { x: 569.5, y: 42.5 };
-const MARKER_SIZE_PT = 25;
-
-// Stream circles (from top-left in PDF points) - calibrated values
-const STREAM_POS = [
-  { x: 154, y: 246 },
-  { x: 274, y: 246 },
-  { x: 394, y: 246 },
-];
-
-// Choice grid (from top-left in PDF points) - calibrated values
-const GRID_ORIGIN = { x: 154, y: 346 };
-const COL_STEP = 35;
-const ROW_STEP = 35;
-const CIRCLE_R_PT = 8;
-
-const DISTRICTS = [
-  "Amritsar", "Bathinda", "Ferozepur", "Gurdaspur", "Jalandhar",
-  "Ludhiana", "Patiala", "SAS Nagar (Mohali)", "Sangrur", "Talwara",
-];
-const STREAMS = ["Medical", "NonMedical", "Commerce"];
-
-// ============================================================
-// Helpers
-// ============================================================
-
-function sampleIntensity(
-  data: Uint8ClampedArray, w: number, h: number,
-  cx: number, cy: number, r: number,
-): number {
-  const rad = Math.max(1, Math.floor(r));
-  let sum = 0, n = 0;
-  for (let dy = -rad; dy <= rad; dy++) {
-    for (let dx = -rad; dx <= rad; dx++) {
-      if (dx * dx + dy * dy > rad * rad) continue;
-      const px = Math.round(cx + dx);
-      const py = Math.round(cy + dy);
-      if (px >= 0 && px < w && py >= 0 && py < h) {
-        const i = (py * w + px) * 4;
-        sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        n++;
-      }
-    }
-  }
-  return n > 0 ? sum / n : 255;
-}
-
-/**
- * Find a fiducial marker using sliding-window darkest-block approach.
- */
-function findMarker(
-  data: Uint8ClampedArray, w: number, h: number,
-  approxX: number, approxY: number, markerPx: number,
-): { x: number; y: number } {
-  const half = Math.floor(markerPx / 2);
-  const searchR = Math.floor(markerPx * 1.5);
-  const step = Math.max(1, Math.floor(markerPx / 8));
-  let bestX = approxX, bestY = approxY, bestAvg = 255;
-
-  for (let cy = approxY - searchR; cy <= approxY + searchR; cy += step) {
-    for (let cx = approxX - searchR; cx <= approxX + searchR; cx += step) {
-      let sum = 0, count = 0;
-      for (let dy = -half; dy <= half; dy += step) {
-        for (let dx = -half; dx <= half; dx += step) {
-          const px = Math.round(cx + dx);
-          const py = Math.round(cy + dy);
-          if (px >= 0 && px < w && py >= 0 && py < h) {
-            const i = (py * w + px) * 4;
-            sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            count++;
-          }
-        }
-      }
-      const avg = count > 0 ? sum / count : 255;
-      if (avg < bestAvg) { bestAvg = avg; bestX = cx; bestY = cy; }
-    }
-  }
-  return { x: bestX, y: bestY };
+  /** All students for the global scanner to look up by QR/barcode ID */
+  allStudents?: Student[];
 }
 
 // ============================================================
 // Component
 // ============================================================
 export default function OMRScannerModal({
-  isOpen, onClose, onScanComplete, expectedStudent,
+  isOpen, onClose, onScanComplete, expectedStudent, allStudents,
 }: OMRScannerModalProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,13 +54,20 @@ export default function OMRScannerModal({
   const [nudgeY, setNudgeY] = useState(0);
   const [scanState, setScanState] = useState<{
     imgData: ImageData;
-    w: number; h: number;
-    scale: number; offsetX: number; offsetY: number;
+    toPixel: (pdfX: number, pdfY: number) => { x: number, y: number };
     sampleR: number;
     studentId: string;
-    payload: any;
+    studentName?: string;
     originalImage: HTMLImageElement | null;
+    markerTL: { x: number, y: number };
+    markerTR: { x: number, y: number };
+    markerBL: { x: number, y: number };
+    markerBR: { x: number, y: number };
   } | null>(null);
+
+  // Overwrite confirmation
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [pendingScanData, setPendingScanData] = useState<{ studentId: string, stream: string, choices: string[] } | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -145,6 +75,8 @@ export default function OMRScannerModal({
       setNudgeX(0);
       setNudgeY(0);
       setScanState(null);
+      setShowOverwriteConfirm(false);
+      setPendingScanData(null);
       if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
         setUseCamera(false);
@@ -183,11 +115,12 @@ export default function OMRScannerModal({
     };
   }, [useCamera]);
 
-  // Draw overlay on canvas with current nudge offsets
+  // Draw overlay on canvas with current nudge offsets using the proven bilinear toPixel function
   const drawOverlay = useCallback((
     canvas: HTMLCanvasElement,
     originalImg: HTMLImageElement,
-    scale: number, baseOffsetX: number, baseOffsetY: number, sampleR: number,
+    toPixel: (pdfX: number, pdfY: number) => { x: number, y: number },
+    sampleR: number,
     extraNudgeX: number, extraNudgeY: number,
   ) => {
     const ctx = canvas.getContext("2d")!;
@@ -199,19 +132,16 @@ export default function OMRScannerModal({
     // Redraw original image
     ctx.drawImage(originalImg, 0, 0, w, h);
 
-    const ox = baseOffsetX + extraNudgeX;
-    const oy = baseOffsetY + extraNudgeY;
+    const nudgedToPixel = (pdfX: number, pdfY: number) => {
+      const p = toPixel(pdfX, pdfY);
+      return { x: p.x + extraNudgeX, y: p.y + extraNudgeY };
+    };
 
-    const toPixel = (pdfX: number, pdfY: number) => ({
-      x: pdfX * scale + ox,
-      y: pdfY * scale + oy,
-    });
-
-    // Draw stream positions (magenta)
-    ctx.strokeStyle = "magenta";
+    // Draw stream positions (cyan)
+    ctx.strokeStyle = "cyan";
     ctx.lineWidth = 3;
     for (const s of STREAM_POS) {
-      const p = toPixel(s.x, s.y);
+      const p = nudgedToPixel(s.x, s.y);
       ctx.beginPath();
       ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
       ctx.stroke();
@@ -222,7 +152,7 @@ export default function OMRScannerModal({
     ctx.lineWidth = 2;
     for (let r = 0; r < 10; r++) {
       for (let c = 0; c < 10; c++) {
-        const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
+        const p = nudgedToPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
         ctx.beginPath();
         ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
         ctx.stroke();
@@ -239,7 +169,7 @@ export default function OMRScannerModal({
     if (showAlignment && scanState && scanState.originalImage && canvasRef.current) {
       drawOverlay(
         canvasRef.current, scanState.originalImage,
-        scanState.scale, scanState.offsetX, scanState.offsetY, scanState.sampleR,
+        scanState.toPixel, scanState.sampleR,
         nudgeX, nudgeY,
       );
     }
@@ -267,7 +197,7 @@ export default function OMRScannerModal({
       ctx.drawImage(el, 0, 0, w, h);
       const imgData = ctx.getImageData(0, 0, w, h);
 
-      // ── Step 1: QR Code Detection ──
+      // ── Step 1: QR / Barcode Detection (MANDATORY first step) ──
       let qr;
       try {
         qr = await decodeQRHybrid(imgData);
@@ -276,17 +206,19 @@ export default function OMRScannerModal({
       }
 
       if (!qr) {
-        throw new Error("No QR code found. This doesn't appear to be a valid Station Allotment OMR form. Please upload the correct form image.");
+        throw new Error("No QR code or barcode found. This may be an instruction page or not a valid OMR form. Please upload a filled OMR form with a visible QR code.");
       }
 
-      let payload: any;
-      let studentId = null;
+      let studentId: string | null = null;
+      let studentName: string | null = null;
       try {
         if (qr.data.startsWith('{')) {
-            payload = JSON.parse(qr.data);
+            const payload = JSON.parse(qr.data);
             studentId = payload.id;
+            studentName = payload.appNo || null;
         } else if (qr.data.includes('-')) {
             studentId = qr.data.split('-')[0];
+            studentName = qr.data; // Show the full barcode content
         } else {
             studentId = qr.data;
         }
@@ -298,54 +230,50 @@ export default function OMRScannerModal({
         throw new Error("QR/Barcode found but it doesn't contain a valid student ID. This may not be a Station Allotment OMR form.");
       }
 
+      // Validate against expected student if provided
       if (expectedStudent && studentId.toString() !== expectedStudent.id.toString()) {
         throw new Error(
-          `Wrong form! This form belongs to ${payload?.appNo || "another student"}, but you're editing ${expectedStudent.appNo}. Please upload the correct student's form.`
+          `Wrong form! This form belongs to ${studentName || "another student"}, but you're editing ${expectedStudent.appNo}. Please upload the correct student's form.`
         );
       }
 
-      // ── Step 2: Locate Fiducial Markers ──
-      const roughScale = w / PDF_W;
-      if (roughScale < 1 || roughScale > 20) {
-        throw new Error("Image dimensions don't match expected OMR form proportions. Please upload a full-page scan or export.");
-      }
+      // ── Step 2: Use the proven parseOMRImageData with 4-corner bilinear interpolation ──
+      const parsedOMR = await parseOMRImageData(imgData, 0, 0, true);
+      const { toPixel, markerTL, markerTR, markerBL, markerBR } = parsedOMR;
 
-      const markerPx = Math.round(MARKER_SIZE_PT * roughScale);
-
-      const tlApprox = { x: MARKER_TL.x * roughScale, y: MARKER_TL.y * roughScale };
-      const trApprox = { x: MARKER_TR.x * roughScale, y: MARKER_TR.y * roughScale };
-
-      const tl = findMarker(imgData.data, w, h, tlApprox.x, tlApprox.y, markerPx);
-      const tr = findMarker(imgData.data, w, h, trApprox.x, trApprox.y, markerPx);
-
-      const pdfDist = MARKER_TR.x - MARKER_TL.x;
-      const pxDist = Math.hypot(tr.x - tl.x, tr.y - tl.y);
-
-      if (pxDist < 100) {
-        throw new Error("Could not locate the corner alignment markers. Ensure the full form page is visible including the black squares in the corners.");
-      }
-
-      const scale = pxDist / pdfDist;
-
-      const offsetX = tl.x - MARKER_TL.x * scale + 40;
-      const offsetY = tl.y - MARKER_TL.y * scale + 55;
+      // Derive sampleR from the toPixel scale
+      const tlPx = toPixel(42.5, 42.5);
+      const trPx = toPixel(552.78, 42.5);
+      const pxDist = Math.hypot(trPx.x - tlPx.x, trPx.y - tlPx.y);
+      const pdfW = 510.28;
+      const scale = pxDist / pdfW || (w / 595.28);
       const sampleR = CIRCLE_R_PT * scale * 0.70;
 
-      console.log(`[OMR] Image: ${w}x${h}, TL:(${tl.x.toFixed(0)},${tl.y.toFixed(0)}), TR:(${tr.x.toFixed(0)},${tr.y.toFixed(0)})`);
-      console.log(`[OMR] Scale: ${scale.toFixed(3)}, Offset: (${offsetX.toFixed(1)}, ${offsetY.toFixed(1)})`);
+      console.log(`[OMR Upload] Image: ${w}x${h}, Scale: ${scale.toFixed(3)}, Barcode: ${qr.format || 'unknown'}`);
+
+      // Look up student info for display in overwrite check
+      if (allStudents) {
+        const matched = allStudents.find(s => s.id.toString() === studentId!.toString());
+        if (matched) {
+          studentName = `${matched.name} (${matched.appNo})`;
+        }
+      }
 
       // ── Step 3: Show Alignment UI ──
       const origImg = el instanceof HTMLImageElement ? el : null;
-      setScanState({ imgData, w, h, scale, offsetX, offsetY, sampleR, studentId, payload, originalImage: origImg });
+      setScanState({ 
+        imgData, toPixel, sampleR, studentId, studentName: studentName || undefined,
+        originalImage: origImg, markerTL, markerTR, markerBL, markerBR
+      });
       setNudgeX(0);
       setNudgeY(0);
       setShowAlignment(true);
 
       if (origImg) {
-        drawOverlay(canvas, origImg, scale, offsetX, offsetY, sampleR, 0, 0);
+        drawOverlay(canvas, origImg, toPixel, sampleR, 0, 0);
       }
 
-      toast({ title: "Grid Overlay Ready", description: "Align the red circles with the OMR bubbles, then click Verify & Autofill." });
+      toast({ title: "✅ Form Identified", description: `Student: ${studentName || studentId}. Align circles then Verify & Autofill.` });
     } catch (error: any) {
       if (!silent) {
         toast({ title: "Scan Failed", description: error.message || "An unexpected error occurred. Please try again with a different image.", variant: "destructive" });
@@ -357,20 +285,38 @@ export default function OMRScannerModal({
 
   const handleVerifyAndAutofill = () => {
     if (!scanState) return;
-    const { imgData, w, h, scale, offsetX, offsetY, sampleR, studentId, payload } = scanState;
+    const { imgData, toPixel, sampleR, studentId } = scanState;
+    const w = imgData.width;
+    const h = imgData.height;
 
-    const ox = offsetX + nudgeX;
-    const oy = offsetY + nudgeY;
+    // Apply nudge to the toPixel function
+    const nudgedToPixel = (pdfX: number, pdfY: number) => {
+      const p = toPixel(pdfX, pdfY);
+      return { x: p.x + nudgeX, y: p.y + nudgeY };
+    };
 
-    const toPixel = (pdfX: number, pdfY: number) => ({
-      x: pdfX * scale + ox,
-      y: pdfY * scale + oy,
-    });
+    // Import sampleIntensity from omr-utils
+    const sampleIntensity = (data: Uint8ClampedArray, w: number, h: number, cx: number, cy: number, r: number) => {
+      let sum = 0, count = 0;
+      for (let y = cy - r; y <= cy + r; y++) {
+        for (let x = cx - r; x <= cx + r; x++) {
+          if (x >= 0 && x < w && y >= 0 && y < h) {
+            if ((x - cx) ** 2 + (y - cy) ** 2 <= r ** 2) {
+              const idx = (Math.floor(y) * w + Math.floor(x)) * 4;
+              const gray = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+              sum += gray;
+              count++;
+            }
+          }
+        }
+      }
+      return count > 0 ? sum / count : 255;
+    };
 
     // Sample Stream
     const streamI: number[] = [];
     for (const s of STREAM_POS) {
-      const p = toPixel(s.x, s.y);
+      const p = nudgedToPixel(s.x, s.y);
       streamI.push(sampleIntensity(imgData.data, w, h, p.x, p.y, sampleR));
     }
 
@@ -382,34 +328,25 @@ export default function OMRScannerModal({
       if (idx >= 0 && idx < STREAMS.length) selectedStream = STREAMS[idx];
     }
 
-    // Sample Transposed Grid: rows = districts, cols = priority numbers
-    // For each district row, find the filled column → that's the priority number
+    // Sample Choices using bilinear-interpolated grid
     const choices: string[] = new Array(10).fill("");
     for (let r = 0; r < 10; r++) {
       const rowI: number[] = [];
       for (let c = 0; c < 10; c++) {
-        const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
+        const p = nudgedToPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
         rowI.push(sampleIntensity(imgData.data, w, h, p.x, p.y, sampleR));
       }
       const rMin = Math.min(...rowI);
       const rMax = Math.max(...rowI);
       const priorityIdx = rowI.indexOf(rMin);
-      console.log(`[OMR] ${DISTRICTS[r]}: [${rowI.map((v) => v.toFixed(0)).join(", ")}] min=${rMin.toFixed(0)} priority=${priorityIdx + 1} gap=${(rMax - rMin).toFixed(0)}`);
+      console.log(`[OMR Upload] ${DISTRICTS[r]}: [${rowI.map((v) => v.toFixed(0)).join(", ")}] min=${rMin.toFixed(0)} priority=${priorityIdx + 1} gap=${(rMax - rMin).toFixed(0)}`);
       if (rMax - rMin > 5 && priorityIdx >= 0 && priorityIdx < 10) {
-        // This district is the student's (priorityIdx+1)th choice
         choices[priorityIdx] = DISTRICTS[r];
       }
     }
 
-    console.log(`[OMR] Stream: [${streamI.map((v) => v.toFixed(0)).join(", ")}] → ${selectedStream || "N/A"}`);
-    console.log(`[OMR] Choices: ${choices.map((c, i) => `${i + 1}:${c || "—"}`).join(", ")}`);
-
-    toast({
-      title: "Scanning Complete",
-      description: `Stream: ${selectedStream || "N/A"}. ${choices.filter(Boolean).length}/10 choices detected.`,
-    });
-
-    const dbStream = selectedStream;
+    console.log(`[OMR Upload] Stream: [${streamI.map((v) => v.toFixed(0)).join(", ")}] → ${selectedStream || "N/A"}`);
+    console.log(`[OMR Upload] Choices: ${choices.map((c, i) => `${i + 1}:${c || "—"}`).join(", ")}`);
 
     // Upload the canvas image with overlay
     if (canvasRef.current && studentId) {
@@ -429,9 +366,32 @@ export default function OMRScannerModal({
       }, 'image/jpeg', 0.8);
     }
 
-    onScanComplete(studentId as string, { stream: dbStream, choices });
+    // Check for overwrite: if student already has choices filled
+    const matchedStudent = allStudents?.find(s => s.id.toString() === studentId.toString()) 
+      || (expectedStudent?.id.toString() === studentId.toString() ? expectedStudent : null);
+
+    if (matchedStudent && (matchedStudent.choice1 || matchedStudent.stream)) {
+      // Existing data found — show overwrite confirmation
+      setPendingScanData({ studentId, stream: selectedStream, choices });
+      setShowOverwriteConfirm(true);
+      return;
+    }
+
+    // No existing data, proceed directly
+    finalizeScan(studentId, selectedStream, choices);
+  };
+
+  const finalizeScan = (studentId: string, stream: string, choices: string[]) => {
+    toast({
+      title: "Scanning Complete",
+      description: `Stream: ${stream || "N/A"}. ${choices.filter(Boolean).length}/10 choices detected.`,
+    });
+
+    onScanComplete(studentId, { stream, choices });
     setShowAlignment(false);
     setScanState(null);
+    setShowOverwriteConfirm(false);
+    setPendingScanData(null);
     onClose();
   };
 
@@ -453,12 +413,48 @@ export default function OMRScannerModal({
           <DialogTitle>Optical Form Scanner</DialogTitle>
           <DialogDescription>
             {showAlignment
-              ? "Align the red circles with the OMR bubbles using the arrow controls, then click Verify & Autofill."
+              ? `${scanState?.studentName ? `Student: ${scanState.studentName}. ` : ""}Align the red circles with the OMR bubbles using the arrow controls, then click Verify & Autofill.`
               : expectedStudent
                 ? `Upload or scan the OMR form for ${expectedStudent.name} (${expectedStudent.appNo}).`
-                : "Upload a physical OMR form. The system will auto-detect the student via QR code."}
+                : "Upload a physical OMR form image. The system will auto-detect the student via QR code or barcode. Instruction pages without QR/barcode will be automatically skipped."}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Overwrite Confirmation Dialog */}
+        {showOverwriteConfirm && pendingScanData && (
+          <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-semibold text-amber-800">Existing Data Found</h4>
+                <p className="text-sm text-amber-700 mt-1">
+                  This student already has preferences saved. Proceeding will overwrite the existing data.
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <Button 
+                    size="sm" 
+                    variant="destructive"
+                    onClick={() => {
+                      finalizeScan(pendingScanData.studentId, pendingScanData.stream, pendingScanData.choices);
+                    }}
+                  >
+                    Overwrite
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setShowOverwriteConfirm(false);
+                      setPendingScanData(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showAlignment ? (
           <div className="flex flex-col gap-3">
@@ -507,7 +503,7 @@ export default function OMRScannerModal({
             </div>
 
             <p className="text-xs text-slate-500 text-center">
-              🔴 Red = choice positions &nbsp; 🟣 Magenta = stream.
+              🔴 Red = choice positions &nbsp; 🔵 Cyan = stream.
               Align circles over bubbles, then tap Verify & Autofill.
             </p>
           </div>
@@ -533,7 +529,7 @@ export default function OMRScannerModal({
               <div className="text-center">
                 <UploadCloud className="mx-auto h-12 w-12 text-slate-400 mb-4" />
                 <h3 className="text-lg font-medium text-slate-900">Upload Scanned Image</h3>
-                <p className="text-sm text-slate-500 mb-4">Must be a clear JPEG/PNG of the single form page.</p>
+                <p className="text-sm text-slate-500 mb-4">Must be a clear JPEG/PNG of the single form page. Pages without a QR code or barcode will be rejected.</p>
                 <div className="flex gap-4 justify-center">
                   <Input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className="hidden" />
                   <Button onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>Browse Files</Button>

@@ -637,6 +637,15 @@ export default function StudentPreferenceManagement() {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="h-8 px-2 text-violet-600 border-violet-300"
+                                  onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                  title="Upload OMR Image"
+                                >
+                                  <UploadCloud className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   className="h-8 px-2"
                                   onClick={() => openEditModal(student)}
                                 >
@@ -842,8 +851,16 @@ export default function StudentPreferenceManagement() {
                                         Scan
                                       </Button>
 
-
-
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                        className="text-violet-600 border-violet-300 hover:bg-violet-50 ml-2"
+                                        title="Upload OMR Image"
+                                      >
+                                        <UploadCloud className="w-4 h-4 mr-1" />
+                                        Upload
+                                      </Button>
                                       <Button
                                         asChild
                                         variant="outline"
@@ -920,8 +937,16 @@ export default function StudentPreferenceManagement() {
                                         Scan
                                       </Button>
 
-
-
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                        className="text-violet-600 border-violet-300 hover:bg-violet-50 ml-2"
+                                        title="Upload OMR Image"
+                                      >
+                                        <UploadCloud className="w-4 h-4 mr-1" />
+                                        Upload
+                                      </Button>
                                       <Button
                                         asChild
                                         variant="outline"
@@ -1390,6 +1415,7 @@ export default function StudentPreferenceManagement() {
         onClose={() => setIsScannerOpen(false)
         }
         expectedStudent={scannerStudent || undefined}
+        allStudents={(studentsData as any)?.students || []}
         onScanComplete={(scannedStudentId, parsedData) => {
           if (scannerStudent && scannerStudent.id === scannedStudentId) {
             form.setValue('stream', (STREAM_DISPLAY_MAP[parsedData.stream] || parsedData.stream) as any);
@@ -1407,6 +1433,7 @@ export default function StudentPreferenceManagement() {
       <OMRScannerModal
         isOpen={isGlobalImageScanOpen}
         onClose={() => setIsGlobalImageScanOpen(false)}
+        allStudents={(studentsData as any)?.students || []}
         onScanComplete={(scannedStudentId, parsedData) => {
           // Find the student from the scanned student ID
           const allStudents = (studentsData as any)?.students || [];
