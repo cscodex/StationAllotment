@@ -403,18 +403,24 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
         let detectedStudent: Student | null = null;
         try {
+            let studentId: string | null = null;
+            let studentName: string | null = null;
+
             // First try to parse as JSON (QR Code Format)
             if (code.data.startsWith('{')) {
-                const qrPayload = JSON.parse(code.data);
-                if (qrPayload.id) {
-                    detectedStudent = students.find(s => s.id.toString() === qrPayload.id.toString()) || null;
-                }
-            } else if (code.data.includes('-')) {
-                // If it's a 1D Barcode (Format: "ID-APPNO")
-                const idStr = code.data.split('-')[0];
-                if (idStr) {
-                    detectedStudent = students.find(s => s.id.toString() === idStr.toString()) || null;
-                }
+                const payload = JSON.parse(code.data);
+                studentId = payload.id;
+                studentName = payload.appNo;
+            } else if (code.data.includes('-') && code.data.length >= 36) {
+                // Postgres UUIDs are 36 chars long. The barcode contains `${student.id}-${student.appNo}`
+                studentId = code.data.substring(0, 36);
+                studentName = code.data.substring(37) || code.data;
+            } else {
+                studentId = code.data;
+            }
+
+            if (studentId) {
+                detectedStudent = students.find(s => s.id.toString() === studentId.toString()) || null;
             }
         } catch (e) {
             console.warn("Failed to parse barcode data:", code.data);

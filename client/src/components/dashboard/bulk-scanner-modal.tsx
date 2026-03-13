@@ -108,8 +108,8 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                             try {
                                 if (code.data.startsWith('{')) {
                                     studentId = JSON.parse(code.data).id?.toString();
-                                } else if (code.data.includes('-')) {
-                                    studentId = code.data.split('-')[0];
+                                } else if (code.data.includes('-') && code.data.length >= 36) {
+                                    studentId = code.data.substring(0, 36);
                                 } else {
                                     studentId = code.data;
                                 }

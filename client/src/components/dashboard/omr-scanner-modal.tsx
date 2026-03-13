@@ -216,9 +216,10 @@ export default function OMRScannerModal({
             const payload = JSON.parse(qr.data);
             studentId = payload.id;
             studentName = payload.appNo || null;
-        } else if (qr.data.includes('-')) {
-            studentId = qr.data.split('-')[0];
-            studentName = qr.data; // Show the full barcode content
+        } else if (qr.data.includes('-') && qr.data.length >= 36) {
+            // Postgres UUIDs are 36 chars long. The barcode contains `${student.id}-${student.appNo}`
+            studentId = qr.data.substring(0, 36);
+            studentName = qr.data.substring(37) || qr.data; // Show the appNo
         } else {
             studentId = qr.data;
         }
