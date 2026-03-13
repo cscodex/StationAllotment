@@ -1454,7 +1454,7 @@ export class DatabaseStorage implements IStorage {
       marks: result.marks,
       gender: result.gender,
       category: result.category,
-      stream: result.stream || 'NonMedical', // Default to NonMedical if not specified
+      stream: result.stream || 'NA', // Default to NA if not specified
       counselingDistrict: district,
       choice1: '',
       choice2: '',
@@ -1506,7 +1506,7 @@ export class DatabaseStorage implements IStorage {
         counselingDistrict: counselingDistrict,
         districtAdmin: districtAdmin,
         isReleased: false,
-        stream: sql`COALESCE(${students.stream}, 'Non-Medical')`, // Set default stream to Non-Medical if null
+        stream: sql`COALESCE(${students.stream}, 'NA')`, // Set default stream to NA if null
         updatedAt: new Date()
       })
       .where(eq(students.id, studentId))

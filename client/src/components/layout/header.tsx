@@ -67,9 +67,12 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
 
   // Calculate locked student counts for central admin
   const students = studentsData?.students || [];
+  // Locked students = those forcibly locked by an admin
   const lockedStudents = students.filter(s => s.lockedBy).length;
-  const totalStudents = students.length;
-  const unlockedStudents = totalStudents - lockedStudents;
+  // Unlocked students = those who have filled their preferences but are NOT locked (only count those with choice1 and stream set)
+  const unlockedStudents = students.filter(s => !s.lockedBy && s.choice1 && s.stream).length;
+  // Total eligible students are the sum of those locked and those ready to be locked (unlocked)
+  const totalStudents = lockedStudents + unlockedStudents;
 
   return (
     <header className="bg-card border-b border-border p-4 md:p-6">

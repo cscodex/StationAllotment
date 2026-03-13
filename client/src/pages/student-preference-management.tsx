@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSidebarToggle } from "@/components/layout/main-layout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -37,6 +37,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Filter
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Student } from "@shared/schema";
@@ -46,11 +47,11 @@ import { BulkScannerModal, type ScannedPageInfo } from "@/components/dashboard/b
 import { LiveOMRScannerModal } from "@/components/dashboard/live-omr-scanner";
 
 const DISTRICTS = SCHOOL_DISTRICTS;
-const STREAMS = ["Medical", "Non-Medical", "Commerce"];
+const STREAMS = ["NA", "Medical", "Non-Medical", "Commerce"];
 
 // Map display names to DB-stored values
-const STREAM_DB_MAP: Record<string, string> = { "Medical": "Medical", "Non-Medical": "NonMedical", "Commerce": "Commerce" };
-const STREAM_DISPLAY_MAP: Record<string, string> = { "Medical": "Medical", "NonMedical": "Non-Medical", "Commerce": "Commerce" };
+const STREAM_DB_MAP: Record<string, string> = { "NA": "NA", "Medical": "Medical", "Non-Medical": "NonMedical", "Commerce": "Commerce" };
+const STREAM_DISPLAY_MAP: Record<string, string> = { "NA": "NA", "Medical": "Medical", "NonMedical": "Non-Medical", "Commerce": "Commerce" };
 
 // Normalize district display: 'Mohali' → 'SAS Nagar (Mohali)'
 const normalizeDistrict = (d: string | null | undefined) => {
@@ -60,7 +61,7 @@ const normalizeDistrict = (d: string | null | undefined) => {
 };
 
 const updatePreferencesSchema = z.object({
-  stream: z.enum(['Medical', 'Commerce', 'NonMedical', 'Non-Medical']).transform(v => v === 'Non-Medical' ? 'NonMedical' : v),
+  stream: z.enum(['NA', 'Medical', 'Commerce', 'NonMedical', 'Non-Medical']).transform(v => v === 'Non-Medical' ? 'NonMedical' : v),
   choice1: z.string().transform(val => val === " " ? "" : val).optional(),
   choice2: z.string().transform(val => val === " " ? "" : val).optional(),
   choice3: z.string().transform(val => val === " " ? "" : val).optional(),
@@ -86,6 +87,11 @@ export default function StudentPreferenceManagement() {
   const [isUnlockConfirmDialogOpen, setIsUnlockConfirmDialogOpen] = useState(false);
   const [isReleaseConfirmDialogOpen, setIsReleaseConfirmDialogOpen] = useState(false);
   const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
+
+  // Pagination & Filters
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(50);
+  const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
 
   // Bulk scanner state
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
@@ -161,7 +167,7 @@ export default function StudentPreferenceManagement() {
   const form = useForm({
     resolver: zodResolver(updatePreferencesSchema),
     defaultValues: {
-      stream: "Non-Medical" as const,
+      stream: "NA" as const,
       choice1: "",
       choice2: "",
       choice3: "",
@@ -219,6 +225,48 @@ export default function StudentPreferenceManagement() {
     }
   });
 
+  const { data: studentsData, isLoading } = useQuery({
+    queryKey: ["/api/students"],
+    staleTime: 60000,
+  });
+
+  // Derived state: Filtered students based on search term & status toggle
+  const filteredStudents = useMemo(() => {
+    if (!(studentsData as any)?.students) return [];
+    
+    let filtered = (studentsData as any).students;
+
+    // 1. Status Filter
+    if (statusFilter === "locked") {
+      filtered = filtered.filter((s: Student) => s.lockedBy);
+    } else if (statusFilter === "unlocked") {
+      filtered = filtered.filter((s: Student) => !s.lockedBy && s.choice1 && s.stream);
+    }
+
+    // 2. Search Filter
+    if (!searchTerm) return filtered;
+    
+    const lowerSearch = searchTerm.toLowerCase();
+    return filtered.filter((s: Student) => 
+      s.name?.toLowerCase().includes(lowerSearch) ||
+      s.meritNumber?.toString().includes(lowerSearch) ||
+      s.appNo?.toLowerCase().includes(lowerSearch) ||
+      s.stream?.toLowerCase().includes(lowerSearch)
+    );
+  }, [(studentsData as any)?.students, searchTerm, statusFilter]);
+
+  // Derived state: Paginated students
+  const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
+  const paginatedStudents = useMemo(() => {
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    return filteredStudents.slice(startIndex, startIndex + recordsPerPage);
+  }, [filteredStudents, currentPage, recordsPerPage]);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, recordsPerPage]);
+
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
     mutationFn: async (data: { studentId: string, preferences: any }) => {
@@ -244,10 +292,6 @@ export default function StudentPreferenceManagement() {
     }
   });
 
-  const { data: studentsData, isLoading } = useQuery({
-    queryKey: ["/api/students", { limit: 200, offset: 0 }],
-  });
-
   // Query settings to check if allocation is finalized
   const { data: settingsData } = useQuery({
     queryKey: ["/api/settings"],
@@ -257,14 +301,6 @@ export default function StudentPreferenceManagement() {
   const isAllocationFinalized = Array.isArray(settingsData) && settingsData.some((setting: any) =>
     setting.key === 'allocation_finalized' && setting.value === 'true'
   );
-
-  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.meritNumber.toString().includes(searchTerm) ||
-    student.appNo?.includes(searchTerm) ||
-    student.counselingDistrict?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.districtAdmin?.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
 
 
   // Release assignment mutation
@@ -341,7 +377,7 @@ export default function StudentPreferenceManagement() {
     // Directly open edit modal without locking
     setSelectedStudentForEdit(student);
     form.reset({
-      stream: (STREAM_DISPLAY_MAP[student.stream || ''] || student.stream || 'Non-Medical') as any,
+      stream: (STREAM_DISPLAY_MAP[student.stream || 'NA'] || student.stream || 'NA') as any,
       choice1: student.choice1 || '',
       choice2: student.choice2 || '',
       choice3: student.choice3 || '',
@@ -565,15 +601,30 @@ export default function StudentPreferenceManagement() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 md:p-6 pt-0">
-              <div className="relative w-full">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search by name, merit, app no..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-search-students"
-                />
+              <div className="flex flex-col sm:flex-row gap-4 w-full">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                  <Input
+                    placeholder="Search by name, merit, app no..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search-students"
+                  />
+                </div>
+                <div className="w-full sm:w-[180px]">
+                  <Select value={statusFilter} onValueChange={(v: "all"|"locked"|"unlocked") => setStatusFilter(v)}>
+                    <SelectTrigger>
+                      <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="locked">Only Locked</SelectItem>
+                      <SelectItem value="unlocked">Only Unlocked (Filled)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -595,18 +646,20 @@ export default function StudentPreferenceManagement() {
                 </div>
               )}
             </CardHeader>
-            <CardContent className="p-0 md:p-6 md:pt-0">
-              {/* ── MOBILE CARD VIEW (<md) ── */}
-              <div className="md:hidden divide-y">
-                {isLoading ? (
-                  <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                  </div>
-                ) : filteredStudents.length === 0 ? (
-                  <p className="text-center py-8 text-muted-foreground">No students found</p>
-                ) : (
-                  filteredStudents.map((student: Student) => {
-                    const isExpanded = expandedCardIds.has(student.id);
+
+            <div className="max-h-[65vh] overflow-y-auto border-t border-b custom-scrollbar">
+              <CardContent className="p-0 md:p-6 md:pt-0">
+                {/* ── MOBILE CARD VIEW (<md) ── */}
+                <div className="md:hidden divide-y">
+                  {isLoading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                    </div>
+                  ) : paginatedStudents.length === 0 ? (
+                    <p className="text-center py-8 text-muted-foreground">No students found</p>
+                  ) : (
+                    paginatedStudents.map((student: Student) => {
+                      const isExpanded = expandedCardIds.has(student.id);
                     return (
                       <div key={student.id} className="p-3">
                         {/* Collapsed: Name, stream badge, actions */}
@@ -737,14 +790,14 @@ export default function StudentPreferenceManagement() {
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
                         </TableCell>
                       </TableRow>
-                    ) : filteredStudents.length === 0 ? (
+                    ) : paginatedStudents.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                           No students found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredStudents.map((student: Student) => (
+                      paginatedStudents.map((student: Student) => (
                         <TableRow key={student.id}>
                           <TableCell>
                             <Checkbox
@@ -983,7 +1036,57 @@ export default function StudentPreferenceManagement() {
                 </Table>
               </div>
             </CardContent>
-          </Card>
+          </div>
+          
+          {/* Pagination Controls */}
+          {filteredStudents.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-muted/20 border-t gap-4">
+              <div className="flex items-center text-sm text-muted-foreground">
+                Showing {(currentPage - 1) * recordsPerPage + 1} to {Math.min(currentPage * recordsPerPage, filteredStudents.length)} of {filteredStudents.length} entries
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Records per page:</span>
+                  <Select
+                    value={recordsPerPage.toString()}
+                    onValueChange={(val) => setRecordsPerPage(Number(val))}
+                  >
+                    <SelectTrigger className="w-[80px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="25">25</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm font-medium px-2">Page {currentPage} of {Math.max(1, totalPages)}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
         </div>
       </main >
 

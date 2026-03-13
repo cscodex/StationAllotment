@@ -2323,7 +2323,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           statuses = await storage.getAllDistrictStatuses(activeRound?.id);
         }
 
-        res.json(statuses);
+        // Dynamically overwrite the locked and studentsWithChoices counters using real time studentData
+        const dynamicStatuses = statuses.map((status) => {
+          const districtSts = studentsData.filter(s => s.counselingDistrict === status.district && s.districtAdmin && s.choice1);
+          return {
+            ...status,
+            totalStudents: districtSts.length,
+            lockedStudents: districtSts.filter(s => s.isLocked).length,
+            studentsWithChoices: districtSts.filter(s => s.choice1).length
+          };
+        });
+
+        res.json(dynamicStatuses);
       } else if (user.role === 'district_admin') {
         // District admin can only see their own district status
         const status = await storage.getDistrictStatus(user.district, activeRound?.id);
@@ -2345,7 +2356,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeRound = await storage.getActiveCounselingRound(academicYear);
 
       const status = await storage.getDistrictStatus(district, activeRound?.id);
-      res.json(status || { district, isFinalized: false, totalStudents: 0, lockedStudents: 0, studentsWithChoices: 0 });
+      
+      // Merge live student counts into the static status object
+      const districtStudents = await storage.getStudentsByDistrict(district, 10000, 0);
+      const eligibleStudents = districtStudents.students.filter(s => s.counselingDistrict === district && s.districtAdmin && s.choice1);
+      
+      const responseStatus = status || { district, isFinalized: false, totalStudents: 0, lockedStudents: 0, studentsWithChoices: 0 };
+      res.json({
+        ...responseStatus,
+        totalStudents: eligibleStudents.length,
+        lockedStudents: eligibleStudents.filter(s => s.isLocked).length,
+        studentsWithChoices: eligibleStudents.filter(s => s.choice1).length
+      });
     } catch (error) {
       console.error("Get district status error:", error);
       res.status(500).json({ message: "Failed to fetch district status" });
