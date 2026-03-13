@@ -67,7 +67,7 @@ export default function OMRScannerModal({
 
   // Overwrite confirmation
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
-  const [pendingScanData, setPendingScanData] = useState<{ studentId: string, stream: string, choices: string[] } | null>(null);
+  const [pendingScanData, setPendingScanData] = useState<{ studentId: string, stream: string, choices: string[], annotatedImageUrl: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -348,6 +348,70 @@ export default function OMRScannerModal({
     console.log(`[OMR Upload] Stream: [${streamI.map((v) => v.toFixed(0)).join(", ")}] → ${selectedStream || "N/A"}`);
     console.log(`[OMR Upload] Choices: ${choices.map((c, i) => `${i + 1}:${c || "—"}`).join(", ")}`);
 
+    // Draw green highlights on detected bubbles for the annotated image
+    if (canvasRef.current && scanState.originalImage) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d")!;
+      const w2 = scanState.originalImage.naturalWidth;
+      const h2 = scanState.originalImage.naturalHeight;
+      canvas.width = w2;
+      canvas.height = h2;
+      ctx.drawImage(scanState.originalImage, 0, 0, w2, h2);
+
+      // Green highlight on detected stream
+      const streamIdx = selectedStream ? STREAMS.indexOf(selectedStream) : -1;
+      for (let si = 0; si < STREAM_POS.length; si++) {
+        const p = nudgedToPixel(STREAM_POS[si].x, STREAM_POS[si].y);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, sampleR + 2, 0, 2 * Math.PI);
+        if (si === streamIdx) {
+          ctx.fillStyle = "rgba(34, 197, 94, 0.4)";
+          ctx.fill();
+          ctx.strokeStyle = "#22c55e";
+          ctx.lineWidth = 3;
+        } else {
+          ctx.strokeStyle = "rgba(0, 200, 200, 0.5)";
+          ctx.lineWidth = 1.5;
+        }
+        ctx.stroke();
+      }
+
+      // Green highlight on detected choice bubbles
+      for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+          const p = nudgedToPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
+          const isDetected = choices[c] === DISTRICTS[r] && choices[c] !== "";
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, sampleR + 1, 0, 2 * Math.PI);
+          if (isDetected) {
+            ctx.fillStyle = "rgba(34, 197, 94, 0.4)";
+            ctx.fill();
+            ctx.strokeStyle = "#22c55e";
+            ctx.lineWidth = 3;
+          } else {
+            ctx.strokeStyle = "rgba(255, 100, 100, 0.3)";
+            ctx.lineWidth = 1;
+          }
+          ctx.stroke();
+        }
+      }
+
+      // Fiducial markers as orange crosshairs
+      const markers = [scanState.markerTL, scanState.markerTR, scanState.markerBL, scanState.markerBR];
+      for (const mk of markers) {
+        if (!mk) continue;
+        ctx.strokeStyle = "#ff6b35";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(mk.x - 10, mk.y); ctx.lineTo(mk.x + 10, mk.y);
+        ctx.moveTo(mk.x, mk.y - 10); ctx.lineTo(mk.x, mk.y + 10);
+        ctx.stroke();
+      }
+    }
+
+    // Generate annotated image URL
+    const annotatedImageUrl = canvasRef.current?.toDataURL("image/jpeg", 0.8) || "";
+
     // Upload the canvas image with overlay
     if (canvasRef.current && studentId) {
       canvasRef.current.toBlob(async (blob) => {
@@ -366,19 +430,17 @@ export default function OMRScannerModal({
       }, 'image/jpeg', 0.8);
     }
 
-    // Check for overwrite: if student already has choices filled
+    // Show confirmation screen (don't auto-save)
+    setPendingScanData({ studentId, stream: selectedStream, choices, annotatedImageUrl });
+    setShowAlignment(false);
+
+    // Check for overwrite
     const matchedStudent = allStudents?.find(s => s.id.toString() === studentId.toString()) 
       || (expectedStudent?.id.toString() === studentId.toString() ? expectedStudent : null);
 
     if (matchedStudent && (matchedStudent.choice1 || matchedStudent.stream)) {
-      // Existing data found — show overwrite confirmation
-      setPendingScanData({ studentId, stream: selectedStream, choices });
       setShowOverwriteConfirm(true);
-      return;
     }
-
-    // No existing data, proceed directly
-    finalizeScan(studentId, selectedStream, choices);
   };
 
   const finalizeScan = (studentId: string, stream: string, choices: string[]) => {
@@ -408,55 +470,89 @@ export default function OMRScannerModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={showAlignment ? "w-[95vw] max-w-4xl max-h-[95vh] overflow-auto" : "sm:max-w-xl"}>
+      <DialogContent className={(showAlignment || pendingScanData) ? "w-[95vw] max-w-4xl max-h-[95vh] overflow-auto" : "sm:max-w-xl"}>
         <DialogHeader>
           <DialogTitle>Optical Form Scanner</DialogTitle>
           <DialogDescription>
-            {showAlignment
-              ? `${scanState?.studentName ? `Student: ${scanState.studentName}. ` : ""}Align the red circles with the OMR bubbles using the arrow controls, then click Verify & Autofill.`
-              : expectedStudent
-                ? `Upload or scan the OMR form for ${expectedStudent.name} (${expectedStudent.appNo}).`
-                : "Upload a physical OMR form image. The system will auto-detect the student via QR code or barcode. Instruction pages without QR/barcode will be automatically skipped."}
+            {pendingScanData
+              ? `Review the detected data below. ${showOverwriteConfirm ? '⚠️ This student already has saved preferences — saving will overwrite.' : ''}`
+              : showAlignment
+                ? `${scanState?.studentName ? `Student: ${scanState.studentName}. ` : ""}Align the red circles with the OMR bubbles using the arrow controls, then click Verify & Autofill.`
+                : expectedStudent
+                  ? `Upload or scan the OMR form for ${expectedStudent.name} (${expectedStudent.appNo}).`
+                  : "Upload a physical OMR form image. The system will auto-detect the student via QR code or barcode. Instruction pages without QR/barcode will be automatically skipped."}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Overwrite Confirmation Dialog */}
-        {showOverwriteConfirm && pendingScanData && (
-          <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+        {/* Visual Confirmation Screen — shows after Verify & Autofill */}
+        {pendingScanData ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center space-x-3">
+              <CheckCircle2 className="w-7 h-7 text-green-500 flex-shrink-0" />
               <div>
-                <h4 className="font-semibold text-amber-800">Existing Data Found</h4>
-                <p className="text-sm text-amber-700 mt-1">
-                  This student already has preferences saved. Proceeding will overwrite the existing data.
+                <h3 className="text-base sm:text-lg font-bold">Scan Complete — Review Before Saving</h3>
+                <p className="text-xs text-zinc-600">Student ID: <strong>{pendingScanData.studentId}</strong></p>
+              </div>
+            </div>
+
+            {/* Overwrite Warning */}
+            {showOverwriteConfirm && (
+              <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-amber-700">
+                  <strong>Warning:</strong> This student already has preferences saved. Confirming will overwrite the existing data.
                 </p>
-                <div className="flex gap-2 mt-3">
-                  <Button 
-                    size="sm" 
-                    variant="destructive"
-                    onClick={() => {
-                      finalizeScan(pendingScanData.studentId, pendingScanData.stream, pendingScanData.choices);
-                    }}
-                  >
-                    Overwrite
-                  </Button>
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => {
-                      setShowOverwriteConfirm(false);
-                      setPendingScanData(null);
-                    }}
-                  >
-                    Cancel
-                  </Button>
+              </div>
+            )}
+
+            {/* Annotated Image */}
+            {pendingScanData.annotatedImageUrl && (
+              <div className="border rounded-lg overflow-auto bg-slate-50" style={{ maxHeight: '45vh' }}>
+                <img src={pendingScanData.annotatedImageUrl} alt="Scanned OMR with detected bubbles highlighted" className="w-full" />
+              </div>
+            )}
+
+            {/* Detected Values */}
+            <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 border rounded-lg">
+              <div>
+                <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-1">Detected Stream</h4>
+                <p className="text-sm sm:text-base font-bold text-primary">{pendingScanData.stream || "Not detected"}</p>
+              </div>
+              <div>
+                <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-1">Detected Choices</h4>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
+                  {pendingScanData.choices.map((c, i) => (
+                    <div key={i} className="flex">
+                      <span className="w-5 text-zinc-400 font-mono">{i + 1}.</span>
+                      <span className={c ? 'font-medium' : 'text-rose-500 italic'}>{c || "—"}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {showAlignment ? (
+            <p className="text-xs text-center text-slate-500">🟢 Green = detected filled bubble &nbsp; 🟠 Orange = fiducial markers. Review the image above before saving.</p>
+
+            <div className="flex space-x-4">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setPendingScanData(null);
+                  setShowOverwriteConfirm(false);
+                }}
+                className="flex-1"
+              >
+                ← Go Back
+              </Button>
+              <Button
+                onClick={() => finalizeScan(pendingScanData.studentId, pendingScanData.stream, pendingScanData.choices)}
+                className="flex-1"
+              >
+                {showOverwriteConfirm ? "Overwrite & Save" : "Confirm & Save"}
+              </Button>
+            </div>
+          </div>
+        ) : showAlignment ? (
           <div className="flex flex-col gap-3">
             {/* Alignment Controls - stacks on mobile */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between bg-slate-100 rounded-lg p-3 gap-2">
@@ -545,3 +641,4 @@ export default function OMRScannerModal({
     </Dialog>
   );
 }
+

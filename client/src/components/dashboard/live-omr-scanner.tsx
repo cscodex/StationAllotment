@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff, Crosshair } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR, sampleIntensity, decodeQRHybrid, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP } from "@/lib/omr-utils";
+import { parseOMRImageData, PDF_W, PDF_H, MARKER_TL, MARKER_TR, MARKER_BL, MARKER_BR, sampleIntensity, decodeQRHybrid, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP, STREAMS, DISTRICTS } from "@/lib/omr-utils";
 import type { Student } from "@shared/schema";
 
 interface LiveOMRScannerModalProps {
@@ -222,7 +222,68 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
         // Run OMR extraction
         try {
             const parsedOMR = await parseOMRImageData(capturedImgData, 0, 0, false);
-            const { selectedStream, choices } = parsedOMR;
+            const { selectedStream, choices, toPixel, markerTL, markerTR, markerBL, markerBR } = parsedOMR;
+
+            // Derive sampleR for overlay drawing
+            const pxDist = Math.hypot(
+                (markerTR?.x || 0) - (markerTL?.x || 0),
+                (markerTR?.y || 0) - (markerTL?.y || 0)
+            );
+            const overlayScale = pxDist / 510.28 || (targetW / 595.28);
+            const overlaySampleR = 8 * overlayScale * 0.70;
+
+            // Draw highlighted overlays on the captured image
+            if (toPixel) {
+                // Draw green filled circles on detected stream bubble
+                const streamIdx = selectedStream ? STREAMS.indexOf(selectedStream) : -1;
+                for (let si = 0; si < STREAM_POS.length; si++) {
+                    const p = toPixel(STREAM_POS[si].x, STREAM_POS[si].y);
+                    captureCtx.beginPath();
+                    captureCtx.arc(p.x, p.y, overlaySampleR + 2, 0, 2 * Math.PI);
+                    if (si === streamIdx) {
+                        captureCtx.fillStyle = "rgba(34, 197, 94, 0.4)";
+                        captureCtx.fill();
+                        captureCtx.strokeStyle = "#22c55e";
+                        captureCtx.lineWidth = 3;
+                    } else {
+                        captureCtx.strokeStyle = "rgba(0, 200, 200, 0.5)";
+                        captureCtx.lineWidth = 1.5;
+                    }
+                    captureCtx.stroke();
+                }
+
+                // Draw highlighted circles on all grid bubbles, green for detected ones
+                for (let r = 0; r < 10; r++) {
+                    for (let c = 0; c < 10; c++) {
+                        const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
+                        const isDetected = choices[c] === DISTRICTS[r] && choices[c] !== "";
+                        captureCtx.beginPath();
+                        captureCtx.arc(p.x, p.y, overlaySampleR + 1, 0, 2 * Math.PI);
+                        if (isDetected) {
+                            captureCtx.fillStyle = "rgba(34, 197, 94, 0.4)";
+                            captureCtx.fill();
+                            captureCtx.strokeStyle = "#22c55e";
+                            captureCtx.lineWidth = 3;
+                        } else {
+                            captureCtx.strokeStyle = "rgba(255, 100, 100, 0.3)";
+                            captureCtx.lineWidth = 1;
+                        }
+                        captureCtx.stroke();
+                    }
+                }
+
+                // Draw fiducial marker indicators
+                const markers = [markerTL, markerTR, markerBL, markerBR];
+                for (const mk of markers) {
+                    if (!mk) continue;
+                    captureCtx.strokeStyle = "#ff6b35";
+                    captureCtx.lineWidth = 2;
+                    captureCtx.beginPath();
+                    captureCtx.moveTo(mk.x - 10, mk.y); captureCtx.lineTo(mk.x + 10, mk.y);
+                    captureCtx.moveTo(mk.x, mk.y - 10); captureCtx.lineTo(mk.x, mk.y + 10);
+                    captureCtx.stroke();
+                }
+            }
 
             if (selectedStream && choices.filter(c => c && c.trim() !== "").length > 0) {
                 setLockedStudent(detectedStudent);
@@ -834,39 +895,48 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
                     {/* Result Overlay */}
                     {!isScanning && lockedStudent && scanData && (
-                        <div className="absolute inset-x-4 inset-y-4 sm:inset-x-8 sm:inset-y-8 bg-white/95 text-black rounded-xl shadow-2xl p-4 sm:p-6 flex flex-col justify-center border-2 border-primary/20 backdrop-blur-md animate-in zoom-in-95 duration-200 overflow-auto">
-                            <div className="flex items-center space-x-3 mb-4 sm:mb-6">
-                                <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10 text-green-500 flex-shrink-0" />
+                        <div className="absolute inset-x-2 inset-y-2 sm:inset-x-4 sm:inset-y-4 bg-white/95 text-black rounded-xl shadow-2xl p-3 sm:p-5 flex flex-col border-2 border-primary/20 backdrop-blur-md animate-in zoom-in-95 duration-200 overflow-auto">
+                            <div className="flex items-center space-x-3 mb-3">
+                                <CheckCircle2 className="w-7 h-7 text-green-500 flex-shrink-0" />
                                 <div>
-                                    <h3 className="text-lg sm:text-xl font-bold">Scan Complete</h3>
-                                    <p className="text-xs sm:text-sm text-zinc-600">Student: <strong>{lockedStudent.name}</strong> (Merit #: {lockedStudent.meritNumber})</p>
+                                    <h3 className="text-base sm:text-lg font-bold">Scan Complete — Review Before Saving</h3>
+                                    <p className="text-xs text-zinc-600">Student: <strong>{lockedStudent.name}</strong> (Merit #: {lockedStudent.meritNumber})</p>
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-4 flex-1 overflow-auto bg-slate-50 p-3 sm:p-4 border rounded-lg">
+                            {/* Scanned Image with Highlighted Bubbles */}
+                            {scanData.imageUrl && (
+                                <div className="border rounded-lg overflow-auto bg-slate-50 mb-3" style={{ maxHeight: '35vh' }}>
+                                    <img src={scanData.imageUrl} alt="Scanned OMR with detected bubbles" className="w-full" />
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 border rounded-lg">
                                 <div>
-                                    <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-2">Detected Stream</h4>
-                                    <p className="text-base sm:text-lg font-bold text-primary">{scanData.stream}</p>
+                                    <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-1">Detected Stream</h4>
+                                    <p className="text-sm sm:text-base font-bold text-primary">{scanData.stream}</p>
                                 </div>
                                 <div>
-                                    <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-2">Detected Choices</h4>
-                                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-xs sm:text-sm">
+                                    <h4 className="font-semibold text-xs text-muted-foreground uppercase mb-1">Detected Choices</h4>
+                                    <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs">
                                         {scanData.choices.map((c, i) => (
                                             <div key={i} className="flex">
-                                                <span className="w-6 text-zinc-400 font-mono">{i + 1}.</span>
-                                                <span className={c ? 'font-medium' : 'text-rose-500 italic text-xs'}>{c || "Missing"}</span>
+                                                <span className="w-5 text-zinc-400 font-mono">{i + 1}.</span>
+                                                <span className={c ? 'font-medium' : 'text-rose-500 italic'}>{c || "—"}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex space-x-4 mt-4 sm:mt-6">
+                            <p className="text-xs text-center text-slate-500 mt-2">🟢 Green = detected filled bubble. Review the image above before saving.</p>
+
+                            <div className="flex space-x-4 mt-3">
                                 <Button variant="destructive" onClick={handleReject} className="flex-1">
-                                    <RefreshCw className="w-4 h-4 mr-2" /> Resume Scanning
+                                    <RefreshCw className="w-4 h-4 mr-2" /> Rescan
                                 </Button>
                                 <Button onClick={handleConfirm} className="flex-1">
-                                    Confirm & Save to Record
+                                    Confirm & Save
                                 </Button>
                             </div>
                         </div>
