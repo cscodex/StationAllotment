@@ -33,10 +33,16 @@ import {
   Unlock,
   RotateCcw,
   Shield,
-  Loader2
+  Loader2,
+  Camera,
+  UploadCloud,
+  FileText
 } from "lucide-react";
 import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
+import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
+import { BulkScannerModal, type ScannedPageInfo } from "@/components/dashboard/bulk-scanner-modal";
+import { LiveOMRScannerModal } from "@/components/dashboard/live-omr-scanner";
 
 // Use school districts for choice selection (where schools are located)
 const DISTRICTS = SCHOOL_DISTRICTS;
@@ -73,6 +79,14 @@ export default function DistrictAdmin() {
   const [selectedStudentForUnlock, setSelectedStudentForUnlock] = useState<Student | null>(null);
   const [selectedStudentForLock, setSelectedStudentForLock] = useState<Student | null>(null);
   const [unlockReason, setUnlockReason] = useState("");
+
+  // Scanner states
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerStudent, setScannerStudent] = useState<Student | undefined>(undefined);
+  const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
+  const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
+  const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
+  const [perStudentLiveScanStudent, setPerStudentLiveScanStudent] = useState<Student | null>(null);
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -625,6 +639,36 @@ export default function DistrictAdmin() {
     autoLoadMutation.mutate();
   };
 
+  // Bulk scanner save handler
+  const handleBulkSave = async (pages: ScannedPageInfo[]) => {
+    let successCount = 0;
+    for (const page of pages) {
+      if (!page.studentId || !page.stream || (page.status !== 'success' && page.status !== 'warning')) continue;
+      try {
+        const payload: Record<string, any> = { stream: page.stream };
+        page.choices.forEach((choice, index) => {
+          if (index < 10) {
+            payload[`choice${index + 1}`] = choice || null;
+          }
+        });
+        await apiRequest("PUT", `/api/students/${page.studentId}/preferences`, payload);
+        if (page.imageBlob) {
+          const formData = new FormData();
+          formData.append('image', page.imageBlob, `omr_bulk_${page.studentId}.jpg`);
+          await fetch(`/api/students/${page.studentId}/omr-image`, {
+            method: 'POST',
+            body: formData,
+          });
+        }
+        successCount++;
+      } catch (err) {
+        console.error("Failed to save student", page.studentId, err);
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+    toast({ title: "Bulk Scan Complete", description: `${successCount} of ${pages.length} students saved successfully.` });
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'allotted':
@@ -807,6 +851,40 @@ export default function DistrictAdmin() {
                         </>
                       )}
                     </div>
+
+                    {/* Scanner Buttons */}
+                    <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsLiveScannerOpen(true)}
+                        className="text-orange-500 border-orange-500 hover:bg-orange-50"
+                        disabled={isDeadlinePassed || isFinalized}
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Live Scan
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsBulkScannerOpen(true)}
+                        className="text-primary border-primary hover:bg-primary/10"
+                        disabled={isDeadlinePassed || isFinalized}
+                      >
+                        <UploadCloud className="w-4 h-4 mr-2" />
+                        Bulk PDF Scan
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setScannerStudent(undefined); setIsGlobalImageScanOpen(true); }}
+                        className="text-violet-600 border-violet-500 hover:bg-violet-50"
+                        disabled={isDeadlinePassed || isFinalized}
+                      >
+                        <FileText className="w-4 h-4 mr-2" />
+                        Upload Image
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -885,16 +963,41 @@ export default function DistrictAdmin() {
                                 <TableCell>
                                   <div className="flex gap-1">
                                     {canEditStudent(student) ? (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => openEditModal(student)}
-                                        disabled={isDeadlinePassed || student.isLocked === true}
-                                        data-testid={`button-edit-${student.meritNumber}`}
-                                      >
-                                        <Edit className="w-3 h-3 mr-1" />
-                                        Edit
-                                      </Button>
+                                      <>
+                                        {/* Per-student scan buttons */}
+                                        {!student.isLocked && !isDeadlinePassed && !isFinalized && (
+                                          <>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-8 px-2 text-emerald-600 border-emerald-300"
+                                              onClick={() => setPerStudentLiveScanStudent(student)}
+                                              title="Live Camera Scan"
+                                            >
+                                              <Camera className="w-3 h-3" />
+                                            </Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-8 px-2 text-violet-600 border-violet-300"
+                                              onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                              title="Upload OMR Image"
+                                            >
+                                              <UploadCloud className="w-3 h-3" />
+                                            </Button>
+                                          </>
+                                        )}
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => openEditModal(student)}
+                                          disabled={isDeadlinePassed || student.isLocked === true}
+                                          data-testid={`button-edit-${student.meritNumber}`}
+                                        >
+                                          <Edit className="w-3 h-3 mr-1" />
+                                          Edit
+                                        </Button>
+                                      </>
                                     ) : (
                                       <Button
                                         variant="ghost"
@@ -1364,6 +1467,87 @@ export default function DistrictAdmin() {
         </div>
 
       </main>
+
+      {/* OMR Scanner Modal (Student-Level) */}
+      <OMRScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        expectedStudent={scannerStudent || undefined}
+        allStudents={(studentsData as any)?.students || []}
+        onScanComplete={(scannedStudentId, parsedData) => {
+          if (scannerStudent && scannerStudent.id === scannedStudentId) {
+            form.setValue('stream', (STREAM_DISPLAY_MAP[parsedData.stream] || parsedData.stream) as any);
+            parsedData.choices.forEach((choice, idx) => {
+              form.setValue(`choice${idx + 1}` as any, choice);
+            });
+            setSelectedStudentForEdit(scannerStudent);
+            setIsEditModalOpen(true);
+            setIsScannerOpen(false);
+          }
+        }}
+      />
+
+      {/* OMR Scanner Modal (Global Image Upload) */}
+      <OMRScannerModal
+        isOpen={isGlobalImageScanOpen}
+        onClose={() => setIsGlobalImageScanOpen(false)}
+        allStudents={(studentsData as any)?.students || []}
+        onScanComplete={(scannedStudentId, parsedData) => {
+          const allStudents = (studentsData as any)?.students || [];
+          const matchedStudent = allStudents.find((s: Student) => s.id.toString() === scannedStudentId.toString());
+          if (matchedStudent) {
+            const preferences: any = { stream: parsedData.stream };
+            for (let i = 0; i < 10; i++) {
+              preferences[`choice${i + 1}`] = parsedData.choices[i] || "";
+            }
+            updatePreferencesMutation.mutate({ studentId: scannedStudentId.toString(), preferences });
+            toast({ title: "Scan Complete", description: `Preferences saved for ${matchedStudent.name} (${matchedStudent.appNo}).` });
+          } else {
+            toast({ title: "Student Not Found", description: `No student matched with ID ${scannedStudentId}. Please verify the OMR form.`, variant: "destructive" });
+          }
+          setIsGlobalImageScanOpen(false);
+        }}
+      />
+
+      {/* Bulk PDF Scanner */}
+      <BulkScannerModal
+        isOpen={isBulkScannerOpen}
+        onClose={() => setIsBulkScannerOpen(false)}
+        students={(studentsData as any)?.students || []}
+        onSaveSelected={handleBulkSave}
+      />
+
+      {/* Global Live Scanner */}
+      <LiveOMRScannerModal
+        isOpen={isLiveScannerOpen}
+        onClose={() => setIsLiveScannerOpen(false)}
+        students={(studentsData as any)?.students || []}
+        onSaveData={(studentId, stream, choices, imageUrl) => {
+          const preferences: any = { stream };
+          for (let i = 0; i < 10; i++) {
+            preferences[`choice${i + 1}`] = choices[i] || "";
+          }
+          if (imageUrl) preferences.imageUrl = imageUrl;
+          updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
+        }}
+      />
+
+      {/* Per-Student Live Camera Scanner */}
+      <LiveOMRScannerModal
+        isOpen={!!perStudentLiveScanStudent}
+        onClose={() => setPerStudentLiveScanStudent(null)}
+        students={(studentsData as any)?.students || []}
+        prelockedStudent={perStudentLiveScanStudent || undefined}
+        onSaveData={(studentId, stream, choices, imageUrl) => {
+          const preferences: any = { stream };
+          for (let i = 0; i < 10; i++) {
+            preferences[`choice${i + 1}`] = choices[i] || "";
+          }
+          if (imageUrl) preferences.imageUrl = imageUrl;
+          updatePreferencesMutation.mutate({ studentId: studentId.toString(), preferences });
+          setPerStudentLiveScanStudent(null);
+        }}
+      />
     </div>
   );
 }
