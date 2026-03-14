@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { resizeCanvasToA4 } from "@/lib/image-utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Camera, CheckCircle2, AlertCircle, RefreshCw, Zap, ZapOff, Crosshair } from "lucide-react";
@@ -287,10 +288,12 @@ export function LiveOMRScannerModal({ isOpen, onClose, students, onSaveData, pre
 
             if (selectedStream && choices.filter(c => c && c.trim() !== "").length > 0) {
                 setLockedStudent(detectedStudent);
+                // Pre-compress the capture canvas to A4 proportions before generating dataURL
+                const resizedCapture = resizeCanvasToA4(captureCanvas);
                 setScanData({ 
                     stream: selectedStream, 
                     choices,
-                    imageUrl: captureCanvas.toDataURL("image/jpeg", 0.75)
+                    imageUrl: resizedCapture.toDataURL("image/jpeg", 0.75)
                 });
                 setIsScanning(false);
                 return true;

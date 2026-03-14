@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { resizeCanvasToA4 } from "@/lib/image-utils";
 import {
   Dialog,
   DialogContent,
@@ -413,9 +414,10 @@ export default function OMRScannerModal({
     // Generate annotated image URL
     const annotatedImageUrl = canvasRef.current?.toDataURL("image/jpeg", 0.8) || "";
 
-    // Upload the canvas image with overlay
+    // Upload the canvas image with overlay (pre-compressed to A4 proportions)
     if (canvasRef.current && studentId) {
-      canvasRef.current.toBlob(async (blob) => {
+      const resizedCanvas = resizeCanvasToA4(canvasRef.current);
+      resizedCanvas.toBlob(async (blob) => {
         if (blob) {
           const formData = new FormData();
           formData.append('image', blob, `omr_scan_${studentId}.jpg`);

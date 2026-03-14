@@ -175,8 +175,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { db } = await import("./db");
       const { students } = await import("@shared/schema");
       const { eq } = await import("drizzle-orm");
+      const { compressToA4 } = await import("./imageCompressor");
 
       const studentId = req.params.id;
+
+      // Compress the uploaded image (A4 fit, max 2 MB, preserves aspect ratio)
+      try {
+        const result = await compressToA4(req.file.path);
+        console.log(`OMR image compressed: ${result.sizeKB} KB, ${result.width}×${result.height}, quality ${result.quality}`);
+      } catch (compressErr) {
+        console.warn("Image compression skipped (non-fatal):", compressErr);
+        // Continue with the original file if compression fails
+      }
+
       const omrImageUrl = `/uploads/${req.file.filename}`;
 
       const [updated] = await db
