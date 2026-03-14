@@ -64,11 +64,24 @@ export default function OMRScannerModal({
     markerTR: { x: number, y: number };
     markerBL: { x: number, y: number };
     markerBR: { x: number, y: number };
+    qrLocation?: { topLeftCorner: { x: number; y: number }; topRightCorner: { x: number; y: number }; bottomRightCorner: { x: number; y: number }; bottomLeftCorner: { x: number; y: number } };
+    barcodeLocation?: { topLeftCorner: { x: number; y: number }; topRightCorner: { x: number; y: number }; bottomRightCorner: { x: number; y: number }; bottomLeftCorner: { x: number; y: number } };
+    qrFormat?: string;
+    originalSizeKB: number;
   } | null>(null);
 
   // Overwrite confirmation
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
-  const [pendingScanData, setPendingScanData] = useState<{ studentId: string, stream: string, choices: string[], annotatedImageUrl: string } | null>(null);
+  const [pendingScanData, setPendingScanData] = useState<{
+    studentId: string;
+    stream: string;
+    choices: string[];
+    annotatedImageUrl: string;
+    originalSizeKB: number;
+    compressedSizeKB: number;
+    qrDetected: boolean;
+    barcodeDetected: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
@@ -198,6 +211,9 @@ export default function OMRScannerModal({
       ctx.drawImage(el, 0, 0, w, h);
       const imgData = ctx.getImageData(0, 0, w, h);
 
+      // Track original image size
+      const originalSizeKB = Math.round((w * h * 4) / 1024); // rough uncompressed RGBA estimate
+
       // ── Step 1: QR / Barcode Detection (MANDATORY first step) ──
       let qr;
       try {
@@ -261,11 +277,18 @@ export default function OMRScannerModal({
         }
       }
 
+      // Determine QR vs barcode location
+      const isQRFormat = qr.format?.includes('qr') || qr.data.startsWith('{');
+      const qrLocation = isQRFormat ? qr.location : undefined;
+      const barcodeLocation = !isQRFormat ? qr.location : undefined;
+
       // ── Step 3: Show Alignment UI ──
       const origImg = el instanceof HTMLImageElement ? el : null;
       setScanState({ 
         imgData, toPixel, sampleR, studentId, studentName: studentName || undefined,
-        originalImage: origImg, markerTL, markerTR, markerBL, markerBR
+        originalImage: origImg, markerTL, markerTR, markerBL, markerBR,
+        qrLocation, barcodeLocation, qrFormat: qr.format || undefined,
+        originalSizeKB,
       });
       setNudgeX(0);
       setNudgeY(0);
@@ -409,16 +432,83 @@ export default function OMRScannerModal({
         ctx.moveTo(mk.x, mk.y - 10); ctx.lineTo(mk.x, mk.y + 10);
         ctx.stroke();
       }
+
+      // ── Draw QR/Barcode visual indicator borders ──
+      // Green border = detected, Red border = not detected
+      const qrDetected = !!scanState.qrLocation;
+      const barcodeDetected = !!scanState.barcodeLocation;
+
+      // Draw QR code indicator
+      if (scanState.qrLocation) {
+        const loc = scanState.qrLocation;
+        ctx.strokeStyle = "#22c55e"; // green
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
+        ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
+        ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
+        ctx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
+        // Label
+        ctx.fillStyle = "#22c55e";
+        ctx.font = `bold ${Math.max(14, sampleR * 2)}px sans-serif`;
+        ctx.fillText("✓ QR", loc.topLeftCorner.x, loc.topLeftCorner.y - 6);
+      } else {
+        // Draw a red placeholder box in the expected QR area (top-right of form)
+        const qrX = w * 0.75, qrY = h * 0.02, qrS = Math.min(w, h) * 0.12;
+        ctx.strokeStyle = "#ef4444"; // red
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(qrX, qrY, qrS, qrS);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ef4444";
+        ctx.font = `bold ${Math.max(12, sampleR * 1.5)}px sans-serif`;
+        ctx.fillText("✗ QR not found", qrX, qrY - 6);
+      }
+
+      // Draw barcode indicator
+      if (scanState.barcodeLocation) {
+        const loc = scanState.barcodeLocation;
+        ctx.strokeStyle = "#22c55e"; // green
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
+        ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
+        ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
+        ctx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
+        // Label
+        ctx.fillStyle = "#22c55e";
+        ctx.font = `bold ${Math.max(14, sampleR * 2)}px sans-serif`;
+        ctx.fillText("✓ Barcode", loc.topLeftCorner.x, loc.topLeftCorner.y - 6);
+      } else {
+        // Draw a red placeholder in expected barcode area (left side middle)
+        const bcX = w * 0.02, bcY = h * 0.35, bcW = Math.min(w, h) * 0.06, bcH = Math.min(w, h) * 0.3;
+        ctx.strokeStyle = "#ef4444"; // red
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(bcX, bcY, bcW, bcH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ef4444";
+        ctx.font = `bold ${Math.max(12, sampleR * 1.5)}px sans-serif`;
+        ctx.fillText("✗ Barcode", bcX, bcY - 6);
+      }
     }
 
     // Generate annotated image URL
     const annotatedImageUrl = canvasRef.current?.toDataURL("image/jpeg", 0.8) || "";
 
     // Upload the canvas image with overlay (pre-compressed to A4 proportions)
+    let compressedSizeKB = 0;
     if (canvasRef.current && studentId) {
       const resizedCanvas = resizeCanvasToA4(canvasRef.current);
       resizedCanvas.toBlob(async (blob) => {
         if (blob) {
+          compressedSizeKB = Math.round(blob.size / 1024);
+          // Update pending scan data with actual compressed size
+          setPendingScanData(prev => prev ? { ...prev, compressedSizeKB } : prev);
           const formData = new FormData();
           formData.append('image', blob, `omr_scan_${studentId}.jpg`);
           try {
@@ -434,7 +524,18 @@ export default function OMRScannerModal({
     }
 
     // Show confirmation screen (don't auto-save)
-    setPendingScanData({ studentId, stream: selectedStream, choices, annotatedImageUrl });
+    const qrDetected = !!(scanState.qrLocation || scanState.qrFormat?.includes('qr'));
+    const barcodeDetected = !!(scanState.barcodeLocation || (scanState.qrFormat && !scanState.qrFormat.includes('qr')));
+    setPendingScanData({
+      studentId,
+      stream: selectedStream,
+      choices,
+      annotatedImageUrl,
+      originalSizeKB: scanState.originalSizeKB,
+      compressedSizeKB,
+      qrDetected: qrDetected || barcodeDetected,
+      barcodeDetected: barcodeDetected || qrDetected,
+    });
     setShowAlignment(false);
 
     // Check for overwrite
@@ -534,7 +635,31 @@ export default function OMRScannerModal({
               </div>
             </div>
 
-            <p className="text-xs text-center text-slate-500">🟢 Green = detected filled bubble &nbsp; 🟠 Orange = fiducial markers. Review the image above before saving.</p>
+            {/* Image Size and Code Detection Info */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 border rounded-lg">
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Original</p>
+                <p className="text-sm font-mono font-bold">{pendingScanData.originalSizeKB > 1024 ? `${(pendingScanData.originalSizeKB / 1024).toFixed(1)} MB` : `${pendingScanData.originalSizeKB} KB`}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Compressed</p>
+                <p className="text-sm font-mono font-bold text-green-600">{pendingScanData.compressedSizeKB > 1024 ? `${(pendingScanData.compressedSizeKB / 1024).toFixed(1)} MB` : `${pendingScanData.compressedSizeKB} KB`}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">QR Code</p>
+                <p className={`text-sm font-bold ${pendingScanData.qrDetected ? 'text-green-600' : 'text-red-500'}`}>
+                  {pendingScanData.qrDetected ? '✓ Detected' : '✗ Not Found'}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground">Barcode</p>
+                <p className={`text-sm font-bold ${pendingScanData.barcodeDetected ? 'text-green-600' : 'text-red-500'}`}>
+                  {pendingScanData.barcodeDetected ? '✓ Detected' : '✗ Not Found'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-center text-slate-500">🟢 Green = detected filled bubble &nbsp; 🟠 Orange = fiducial markers &nbsp; 🟩 Green border = code detected &nbsp; 🟥 Red dashed = code missing</p>
 
             <div className="flex space-x-4">
               <Button 
