@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { type Student } from "@shared/schema";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,7 +39,6 @@ import {
   UploadCloud,
   FileText
 } from "lucide-react";
-import type { Student } from "@shared/schema";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
 import { BulkScannerModal, type ScannedPageInfo } from "@/components/dashboard/bulk-scanner-modal";
@@ -82,6 +82,11 @@ export default function DistrictAdmin() {
 
   // Scanner states
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  // Pagination & Filters
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(50);
+  const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
   const [scannerStudent, setScannerStudent] = useState<Student | undefined>(undefined);
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
@@ -148,6 +153,10 @@ export default function DistrictAdmin() {
     enabled: !!user?.district,
     staleTime: 0, // Ensure fresh data
     gcTime: 0, // Don't cache responses
+  });
+
+  const { data: activeRound } = useQuery({
+    queryKey: ["/api/counseling/active-round"],
   });
 
   const deadline = (settings as any)?.find((s: any) => s.key === 'allocation_deadline')?.value;
@@ -296,12 +305,37 @@ export default function DistrictAdmin() {
     },
   });
 
+  // Derived state: Filtered students based on search term & status toggle
+  const filteredStudents = useMemo(() => {
+    if (!(studentsData as any)?.students) return [];
 
-  const filteredStudents = (studentsData as any)?.students?.filter((student: Student) =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.meritNumber.toString().includes(searchTerm) ||
-    student.appNo?.includes(searchTerm)
-  ) || [];
+    let filtered = (studentsData as any).students;
+
+    // 1. Status Filter
+    if (statusFilter === "locked") {
+      filtered = filtered.filter((s: Student) => s.lockedBy);
+    } else if (statusFilter === "unlocked") {
+      filtered = filtered.filter((s: Student) => !s.lockedBy && s.choice1 && s.stream);
+    }
+
+    // 2. Search Filter
+    if (!searchTerm) return filtered;
+
+    const lowerSearch = searchTerm.toLowerCase();
+    return filtered.filter((s: Student) =>
+      s.name?.toLowerCase().includes(lowerSearch) ||
+      s.meritNumber?.toString().includes(lowerSearch) ||
+      s.appNo?.toLowerCase().includes(lowerSearch) ||
+      s.stream?.toLowerCase().includes(lowerSearch)
+    );
+  }, [(studentsData as any)?.students, searchTerm, statusFilter]);
+
+  // Derived state: Paginated students
+  const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
+  const paginatedStudents = useMemo(() => {
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    return filteredStudents.slice(startIndex, startIndex + recordsPerPage);
+  }, [filteredStudents, currentPage, recordsPerPage]);
 
   // Selection helpers
   const toggleStudentSelection = (studentId: string) => {
@@ -736,11 +770,16 @@ export default function DistrictAdmin() {
                   <ShieldQuestion className="w-5 h-5 text-primary" />
                   <div>
                     <h3 className="font-semibold">District: {user?.district || 'All Districts'}</h3>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                       {isFinalized ?
                         "District data has been finalized and submitted for allocation" :
                         "You can modify student preferences until the deadline"
                       }
+                      {activeRound != null && (
+                         <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                            Active Round: {String((activeRound as any).roundName)} (Round {String((activeRound as any).roundNumber)})
+                         </Badge>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -806,6 +845,21 @@ export default function DistrictAdmin() {
                         className="pl-10"
                         data-testid="input-search-students"
                       />
+                    </div>
+                    <div className="flex-1 w-[200px]">
+                      <Select
+                        value={statusFilter}
+                        onValueChange={(val: any) => setStatusFilter(val)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Filter by status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Students</SelectItem>
+                          <SelectItem value="locked">Locked Only</SelectItem>
+                          <SelectItem value="unlocked">Unlocked (Action Required)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button

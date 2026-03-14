@@ -2385,6 +2385,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fetch the currently active counseling round
+  app.get('/api/counseling/active-round', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      
+      if (!activeRound) {
+        return res.json(null); // Return null instead of 404 if no round is active so frontend can handle it gracefully.
+      }
+      
+      res.json(activeRound);
+    } catch (error) {
+      console.error("Fetch active counseling round error:", error);
+      res.status(500).json({ message: "Failed to fetch active counseling round" });
+    }
+  });
+
   app.post('/api/district-status/:district/finalize', isDistrictAdmin, async (req: any, res) => {
     try {
       const { district } = req.params;
@@ -2395,7 +2413,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeRound = await storage.getActiveCounselingRound(academicYear);
 
       if (!activeRound) {
-        return res.status(400).json({ message: "No active counseling round found to finalize" });
+        console.warn(`[Finalization] No active counseling round found for ${academicYear}. Finalizing district ${district} without an associated round ID.`);
       }
 
       // Permission check: District admins can only finalize their own district
@@ -2428,7 +2446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const status = await storage.finalizeDistrict(district, req.session.userId, activeRound.id);
+      const status = await storage.finalizeDistrict(district, req.session.userId, activeRound?.id);
 
       await auditService.log(req.session.userId, 'district_finalized', 'district', district, {
         totalStudents: districtStudents.total,

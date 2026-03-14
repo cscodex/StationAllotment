@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Upload, Users, Play, FileText, BarChart3, Settings, Maximize2, UploadCloud } from "lucide-react";
+import { Upload, Users, Play, FileText, BarChart3, Settings, Maximize2, UploadCloud, ShieldQuestion } from "lucide-react";
 import FlowDiagramModal from "@/components/dashboard/flow-diagram-modal";
 import CounselingProgress from "@/components/dashboard/counseling-progress";
 
@@ -24,6 +24,10 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/stats"],
   });
 
+  const { data: activeRound } = useQuery({
+    queryKey: ["/api/counseling/active-round"],
+  });
+
   return (
     <div className="flex-1 flex flex-col">
       <Header
@@ -35,6 +39,21 @@ export default function Dashboard() {
       />
 
       <main className="flex-1 p-6 overflow-auto">
+        {/* Active Round Banner */}
+        {activeRound != null && (
+          <div className="mb-6 p-4 rounded-lg border-2 border-primary/20 bg-primary/5 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-primary flex items-center gap-2">
+                 <ShieldQuestion className="w-5 h-5" /> 
+                 Active Counseling Session
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                 Currently resolving <strong>{String((activeRound as any).roundName)}</strong> (Round {String((activeRound as any).roundNumber)})
+              </p>
+            </div>
+          </div>
+        )}
+
         <StatsCards stats={stats} isLoading={statsLoading} />
 
         {/* Progress Tracker */}

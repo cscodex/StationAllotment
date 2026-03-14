@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Camera, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { UploadCloud, CheckCircle2, AlertTriangle, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
 import { type Student } from "@shared/schema";
 import {
   decodeQRHybrid,
@@ -45,9 +45,7 @@ export default function OMRScannerModal({
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [useCamera, setUseCamera] = useState(false);
 
   // Alignment state
   const [showAlignment, setShowAlignment] = useState(false);
@@ -91,43 +89,8 @@ export default function OMRScannerModal({
       setScanState(null);
       setShowOverwriteConfirm(false);
       setPendingScanData(null);
-      if (videoRef.current?.srcObject) {
-        (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-        setUseCamera(false);
-      }
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    let raf: number;
-    const scan = async () => {
-      if (useCamera && videoRef.current && videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
-        try { await processImage(videoRef.current, true); } catch { }
-      }
-      if (useCamera) raf = requestAnimationFrame(scan);
-    };
-    const start = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute("playsinline", "true");
-          videoRef.current.play();
-          requestAnimationFrame(scan);
-        }
-      } catch {
-        toast({ title: "Camera Access Denied", description: "Please allow camera access.", variant: "destructive" });
-        setUseCamera(false);
-      }
-    };
-    if (useCamera) start();
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      if (videoRef.current?.srcObject) {
-        (videoRef.current.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
-      }
-    };
-  }, [useCamera]);
 
   // Draw overlay on canvas with current nudge offsets using the proven bilinear toPixel function
   const drawOverlay = useCallback((
@@ -734,35 +697,15 @@ export default function OMRScannerModal({
         ) : (
           <div className="flex flex-col items-center justify-center space-y-6 py-6 p-4 border-2 border-dashed rounded-lg bg-slate-50 relative overflow-hidden">
             <canvas ref={canvasRef} className="hidden" />
-            {useCamera ? (
-              <div className="w-full flex justify-center relative bg-black rounded overflow-hidden shadow-inner">
-                <video ref={videoRef} className="w-full h-[300px] object-cover" />
-                <div className="absolute inset-0 border-4 border-primary/50 pointer-events-none rounded m-4 flex flex-col items-center justify-center">
-                  <div className="w-48 h-48 border-2 border-dashed border-white opacity-50 relative animate-pulse">
-                    <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-400 -mt-1 -ml-1" />
-                    <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-emerald-400 -mt-1 -mr-1" />
-                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-emerald-400 -mb-1 -ml-1" />
-                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-emerald-400 -mb-1 -mr-1" />
-                  </div>
-                  <p className="text-white bg-black/50 px-3 py-1 rounded-full mt-4 text-xs font-medium backdrop-blur-sm">
-                    Align form inside grid...
-                  </p>
-                </div>
+            <div className="text-center">
+              <UploadCloud className="mx-auto h-12 w-12 text-slate-400 mb-4" />
+              <h3 className="text-lg font-medium text-slate-900">Upload Scanned Image</h3>
+              <p className="text-sm text-slate-500 mb-4">Must be a clear JPEG/PNG of the single form page. Pages without a QR code or barcode will be rejected.</p>
+              <div className="flex gap-4 justify-center">
+                <Input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className="hidden" />
+                <Button onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>Browse Files</Button>
               </div>
-            ) : (
-              <div className="text-center">
-                <UploadCloud className="mx-auto h-12 w-12 text-slate-400 mb-4" />
-                <h3 className="text-lg font-medium text-slate-900">Upload Scanned Image</h3>
-                <p className="text-sm text-slate-500 mb-4">Must be a clear JPEG/PNG of the single form page. Pages without a QR code or barcode will be rejected.</p>
-                <div className="flex gap-4 justify-center">
-                  <Input type="file" accept="image/*" onChange={handleFileUpload} ref={fileInputRef} className="hidden" />
-                  <Button onClick={() => fileInputRef.current?.click()} disabled={isProcessing}>Browse Files</Button>
-                  <Button variant="outline" onClick={() => setUseCamera(true)} disabled={isProcessing}>
-                    <Camera className="w-4 h-4 mr-2" />Use Camera
-                  </Button>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
       </DialogContent>
