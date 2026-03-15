@@ -1,9 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   BarChart3, 
   Users, 
@@ -16,9 +19,32 @@ import {
 import type { DistrictStatus, Student } from "@shared/schema";
 
 export default function DistrictAnalysis() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   // Fetch district statuses
   const { data: districtStatuses, isLoading: loadingStatuses } = useQuery<DistrictStatus[]>({
     queryKey: ["/api/district-status"],
+  });
+
+  const unfinalizeMutation = useMutation({
+    mutationFn: async (district: string) => {
+      await apiRequest("POST", `/api/district-status/${encodeURIComponent(district)}/unfinalize`);
+    },
+    onSuccess: () => {
+      toast({
+        title: "District Unfinalized",
+        description: "The district has been unlocked and can now be edited by its district administrator.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to Unfinalize",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   // Fetch students data
@@ -240,8 +266,27 @@ export default function DistrictAnalysis() {
                                     </div>
                                   )}
                                 </div>
+                              </div>
+                              <div className="ml-4 flex-shrink-0">
+                                {district.isFinalized && (
+                                  <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => {
+                                        if (confirm(`Are you sure you want to unfinalize ${district.district}? This will allow the district admin to edit student preferences again.`)) {
+                                          unfinalizeMutation.mutate(district.district);
+                                        }
+                                      }}
+                                      disabled={unfinalizeMutation.isPending}
+                                    >
+                                      {unfinalizeMutation.isPending && unfinalizeMutation.variables === district.district ? 'Unfinalizing...' : 'Unfinalize'}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
                                 
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4">
                                   <div>
                                     <span className="text-muted-foreground">Total Students:</span>
                                     <p className="font-medium" data-testid={`district-${district.district}-total`}>
@@ -267,10 +312,8 @@ export default function DistrictAnalysis() {
                                     </p>
                                   </div>
                                 </div>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                            </CardContent>
+                          </Card>
                       ))
                     )}
                   </div>

@@ -155,6 +155,7 @@ export interface IStorage {
   getAllDistrictStatuses(counselingRoundId?: string): Promise<DistrictStatus[]>;
   createOrUpdateDistrictStatus(status: InsertDistrictStatus): Promise<DistrictStatus>;
   finalizeDistrict(district: string, userId: string, counselingRoundId?: string): Promise<DistrictStatus>;
+  unfinalizeDistrict(district: string): Promise<DistrictStatus | undefined>;
 
   // Student locking operations
   lockStudent(studentId: string, userId: string): Promise<Student>;
@@ -1319,6 +1320,24 @@ export class DatabaseStorage implements IStorage {
     };
 
     return await this.createOrUpdateDistrictStatus(statusData);
+  }
+
+  async unfinalizeDistrict(district: string): Promise<DistrictStatus | undefined> {
+    const existing = await this.getDistrictStatus(district);
+    if (!existing) return undefined;
+
+    const [updated] = await db
+      .update(districtStatus)
+      .set({ 
+        isFinalized: false, 
+        finalizedAt: null, 
+        finalizedBy: null,
+        updatedAt: new Date() 
+      })
+      .where(eq(districtStatus.district, district))
+      .returning();
+      
+    return updated;
   }
 
   // Student locking operations

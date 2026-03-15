@@ -495,20 +495,7 @@ export default function CounselingRounds() {
     }
   };
 
-  if (user?.role !== 'central_admin') {
-    return (
-      <div className="flex-1 flex flex-col">
-        <Header title="Counseling Rounds" />
-        <main className="flex-1 p-6">
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">Access restricted to central administrators.</p>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
-    );
-  }
+  // Removed restrictive central admin block to allow read-only access for district admins
 
   return (
     <div className="flex-1 flex flex-col">
@@ -560,10 +547,12 @@ export default function CounselingRounds() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Counseling Rounds - {selectedAcademicYear}</CardTitle>
-                <Button onClick={() => setShowCreateDialog(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  New Counseling Title
-                </Button>
+                {user?.role === 'central_admin' && (
+                  <Button onClick={() => setShowCreateDialog(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    New Counseling Title
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -585,7 +574,7 @@ export default function CounselingRounds() {
                         <TableHead>Start Date & Time</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Prerequisites</TableHead>
-                        <TableHead>Actions</TableHead>
+                        {user?.role === 'central_admin' && <TableHead>Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -678,62 +667,64 @@ export default function CounselingRounds() {
                             <TableCell>
                               <PrerequisitesCell round={round} />
                             </TableCell>
-                            <TableCell>
-                              <div className="flex items-center space-x-2 flex-wrap gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleEdit(round)}
-                                  disabled={round.isCompleted}
-                                >
-                                  <Edit className="w-3 h-3 mr-1" />
-                                  Edit
-                                </Button>
-                                {round.roundNumber === 1 && (
+                            {user?.role === 'central_admin' && (
+                              <TableCell>
+                                <div className="flex items-center space-x-2 flex-wrap gap-1">
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleSuspend(round, !round.isSuspended)}
-                                    disabled={suspendMutation.isPending}
-                                    className={round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}
-                                    title={round.isSuspended ? "Unsuspend subsequent rounds" : "Suspend subsequent rounds"}
+                                    onClick={() => handleEdit(round)}
+                                    disabled={round.isCompleted}
                                   >
-                                    {round.isSuspended ? (
-                                      <>
-                                        <PlayCircle className="w-3 h-3 mr-1" />
-                                        Unsuspend
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Pause className="w-3 h-3 mr-1" />
-                                        Suspend
-                                      </>
-                                    )}
+                                    <Edit className="w-3 h-3 mr-1" />
+                                    Edit
                                   </Button>
-                                )}
-                                {round.isActive && !round.isCompleted && (
-                                  <>
-                                    <PrerequisitesButton
-                                      round={round}
-                                      onRunAllocation={handleRunAllocation}
-                                      isPending={runAllocationMutation.isPending}
-                                    />
-                                  </>
-                                )}
-                                {canDelete(round) && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleDelete(round)}
-                                    disabled={deleteRoundMutation.isPending || isPastRound(round)}
-                                    className="text-red-600 hover:text-red-700"
-                                    title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
+                                  {round.roundNumber === 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleSuspend(round, !round.isSuspended)}
+                                      disabled={suspendMutation.isPending}
+                                      className={round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}
+                                      title={round.isSuspended ? "Unsuspend subsequent rounds" : "Suspend subsequent rounds"}
+                                    >
+                                      {round.isSuspended ? (
+                                        <>
+                                          <PlayCircle className="w-3 h-3 mr-1" />
+                                          Unsuspend
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Pause className="w-3 h-3 mr-1" />
+                                          Suspend
+                                        </>
+                                      )}
+                                    </Button>
+                                  )}
+                                  {round.isActive && !round.isCompleted && (
+                                    <>
+                                      <PrerequisitesButton
+                                        round={round}
+                                        onRunAllocation={handleRunAllocation}
+                                        isPending={runAllocationMutation.isPending}
+                                      />
+                                    </>
+                                  )}
+                                  {canDelete(round) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleDelete(round)}
+                                      disabled={deleteRoundMutation.isPending || isPastRound(round)}
+                                      className="text-red-600 hover:text-red-700"
+                                      title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}
@@ -745,10 +736,12 @@ export default function CounselingRounds() {
                     <p className="text-muted-foreground mb-4">
                       No counseling rounds found for {selectedAcademicYear}
                     </p>
-                    <Button onClick={() => setShowCreateDialog(true)}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Counseling Title
-                    </Button>
+                    {user?.role === 'central_admin' && (
+                      <Button onClick={() => setShowCreateDialog(true)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Create Counseling Title
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>

@@ -1045,7 +1045,7 @@ export default function DistrictAdmin() {
                                           variant="outline"
                                           size="sm"
                                           onClick={() => openEditModal(student)}
-                                          disabled={isDeadlinePassed || student.isLocked === true}
+                                          disabled={isDeadlinePassed || student.isLocked === true || isFinalized}
                                           data-testid={`button-edit-${student.meritNumber}`}
                                         >
                                           <Edit className="w-3 h-3 mr-1" />

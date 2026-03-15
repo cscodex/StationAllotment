@@ -1082,6 +1082,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         preferences.districtAdmin = user.username;
       }
 
+      // Check if district is finalized
+      if (preferences.counselingDistrict) {
+        const districtStatus = await storage.getDistrictStatus(preferences.counselingDistrict);
+        if (districtStatus?.isFinalized) {
+          return res.status(403).json({ message: "Cannot edit preferences: District is already finalized" });
+        }
+      }
+
       // Set central admin info when central admin edits preferences
       if (user?.role === 'central_admin') {
         preferences.counselingDistrict = 'SAS Nagar (Mohali)';
@@ -2403,6 +2411,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/district-status/:district/unfinalize', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { district } = req.params;
+      
+      const unfinalized = await storage.unfinalizeDistrict(district);
+      if (!unfinalized) {
+        return res.status(404).json({ message: "District status not found" });
+      }
+
+      await auditService.log(req.session.userId, 'district_unfinalized', 'district', district, {
+        reason: req.body?.reason || 'unfinalized by central admin'
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(unfinalized);
+    } catch (error) {
+      console.error("Unfinalize district error:", error);
+      res.status(500).json({ message: "Failed to unfinalize district" });
+    }
+  });
+
   app.post('/api/district-status/:district/finalize', isDistrictAdmin, async (req: any, res) => {
     try {
       const { district } = req.params;
@@ -2475,6 +2503,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // District admin can only lock/unlock students in their district
       if (user?.role === 'district_admin' && student.counselingDistrict !== user.district) {
         return res.status(403).json({ message: "Can only lock/unlock students in your district" });
+      }
+
+      // Check if district is finalized
+      if (student.counselingDistrict) {
+        const districtStatus = await storage.getDistrictStatus(student.counselingDistrict);
+        if (districtStatus?.isFinalized) {
+          return res.status(403).json({ message: "Cannot change lock status: District is already finalized" });
+        }
       }
 
       // Only central admin can unlock students - district admin can only lock
