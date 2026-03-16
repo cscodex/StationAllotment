@@ -285,7 +285,7 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Districts</p>
                 <p className="text-2xl font-bold" data-testid="text-total-districts">
-                  {isDistrictAdmin ? filteredVacancies.length : (vacancies?.length || 0)}
+                  {isDistrictAdmin ? new Set(filteredVacancies.map(v => v.district)).size : new Set((vacancies || []).map(v => v.district)).size}
                 </p>
               </div>
             </div>

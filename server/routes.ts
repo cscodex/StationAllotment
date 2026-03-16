@@ -1997,14 +1997,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const districtsWithEligibleStudents = new Set<string>();
       students.forEach(student => {
         if (student.counselingDistrict) {
-          districtsWithEligibleStudents.add(student.counselingDistrict);
+          // Normalize to lowercase for reliable comparison
+          districtsWithEligibleStudents.add(student.counselingDistrict.toLowerCase());
         }
       });
-      districtsWithEligibleStudents.add('SAS Nagar (Mohali)'); // Central always included
+      districtsWithEligibleStudents.add('sas nagar (mohali)'); // Central always included
 
       const allDistrictStatuses = await storage.getAllDistrictStatuses(round.id);
       const eligibleDistrictStatuses = allDistrictStatuses.filter(ds =>
-        districtsWithEligibleStudents.has(ds.district)
+        districtsWithEligibleStudents.has(ds.district.toLowerCase())
       );
 
       const totalDistrictsCount = Array.from(districtsWithEligibleStudents).length;

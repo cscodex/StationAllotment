@@ -88,6 +88,7 @@ export default function DistrictAdmin() {
   const [currentPage, setCurrentPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(50);
   const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
   const [scannerStudent, setScannerStudent] = useState<Student | undefined>(undefined);
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
@@ -142,7 +143,7 @@ export default function DistrictAdmin() {
   });
 
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ["/api/students", { limit: 200, offset: 0, district: user?.district }],
+    queryKey: ["/api/students", { limit: 50000, offset: 0, district: user?.district }],
   });
 
   const { data: settings } = useQuery({
@@ -343,9 +344,17 @@ export default function DistrictAdmin() {
 
     // 1. Status Filter
     if (statusFilter === "locked") {
-      filtered = filtered.filter((s: Student) => s.lockedBy);
+      filtered = filtered.filter((s: Student) => s.lockedBy || s.isLocked);
     } else if (statusFilter === "unlocked") {
-      filtered = filtered.filter((s: Student) => !s.lockedBy && s.choice1 && s.stream);
+      filtered = filtered.filter((s: Student) => !s.lockedBy && !s.isLocked);
+    }
+
+    // 2. District Filter (For Central Admin)
+    if (user?.role === 'central_admin' && districtFilter !== "all") {
+      filtered = filtered.filter((s: Student) => {
+        if (districtFilter === "unassigned") return !s.counselingDistrict;
+        return s.counselingDistrict === districtFilter;
+      });
     }
 
     // 2. Search Filter
@@ -968,10 +977,31 @@ export default function DistrictAdmin() {
                         <SelectContent>
                           <SelectItem value="all">All Students</SelectItem>
                           <SelectItem value="locked">Locked Only</SelectItem>
-                          <SelectItem value="unlocked">Unlocked (Action Required)</SelectItem>
+                          <SelectItem value="unlocked">Unlocked Only</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    {user?.role === 'central_admin' && (
+                      <div className="flex-1 w-[220px]">
+                        <Select
+                          value={districtFilter}
+                          onValueChange={(val: any) => setDistrictFilter(val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Filter by district" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Districts</SelectItem>
+                            <SelectItem value="unassigned">Unassigned District</SelectItem>
+                            {COUNSELING_DISTRICTS.map((district) => (
+                              <SelectItem key={district} value={district}>
+                                {district}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"

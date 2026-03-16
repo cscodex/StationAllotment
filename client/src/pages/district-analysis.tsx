@@ -101,7 +101,8 @@ export default function DistrictAnalysis() {
   // Calculate stream-wise totals
   const streamTotals = students.reduce((acc: any, student: any) => {
     if (!student.stream) return acc;
-    acc[student.stream] = (acc[student.stream] || 0) + 1;
+    const stream = student.stream === 'Non-Medical' ? 'NonMedical' : student.stream;
+    acc[stream] = (acc[stream] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
@@ -111,7 +112,7 @@ export default function DistrictAnalysis() {
     const streamBreakdown = {
       Medical: districtStudents.filter((s: any) => s.stream === 'Medical').length,
       Commerce: districtStudents.filter((s: any) => s.stream === 'Commerce').length,
-      NonMedical: districtStudents.filter((s: any) => s.stream === 'NonMedical').length,
+      NonMedical: districtStudents.filter((s: any) => s.stream === 'NonMedical' || s.stream === 'Non-Medical').length,
     };
 
     const studentsWithChoices = districtStudents.filter((s: any) => 
@@ -137,7 +138,7 @@ export default function DistrictAnalysis() {
   }) || [];
 
   // Calculate overall metrics
-  const totalStudents = students.length;
+  const totalStudents = students.filter((s: any) => s.counselingDistrict).length;
   const totalStudentsWithChoices = students.filter((s: any) => 
     s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 ||
     s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10
