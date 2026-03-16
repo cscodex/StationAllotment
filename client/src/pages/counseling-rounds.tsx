@@ -573,7 +573,7 @@ export default function CounselingRounds() {
                         <TableHead>Round No.</TableHead>
                         <TableHead>Start Date & Time</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Prerequisites</TableHead>
+                        {user?.role === 'central_admin' && <TableHead>Prerequisites</TableHead>}
                         {user?.role === 'central_admin' && <TableHead>Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -664,9 +664,11 @@ export default function CounselingRounds() {
                                 );
                               })()}
                             </TableCell>
-                            <TableCell>
-                              <PrerequisitesCell round={round} />
-                            </TableCell>
+                            {user?.role === 'central_admin' && (
+                              <TableCell>
+                                <PrerequisitesCell round={round} />
+                              </TableCell>
+                            )}
                             {user?.role === 'central_admin' && (
                               <TableCell>
                                 <div className="flex items-center space-x-2 flex-wrap gap-1">

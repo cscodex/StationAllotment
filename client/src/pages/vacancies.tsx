@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from "@/hooks/useAuth";
 import { Building2, Users, TrendingUp, Clock, Filter, Eye, TableIcon } from "lucide-react";
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +13,7 @@ import { DISTRICTS, SCHOOL_DISTRICTS, COUNSELING_DISTRICTS, STREAMS, getCategori
 import type { Vacancy } from "@shared/schema";
 
 export default function Vacancies() {
+  const { user } = useAuth();
   const [selectedStream, setSelectedStream] = useState<string>("all");
   const [selectedGender, setSelectedGender] = useState<string>("all");
   const [selectedDistrict, setSelectedDistrict] = useState<string>("all");
@@ -29,12 +31,18 @@ export default function Vacancies() {
   ).sort();
 
   // Determine which districts to show in filter (only those with schools/vacancies)
-  const districtFilterOptions = availableDistricts.filter(district => 
+  let districtFilterOptions = availableDistricts.filter(district => 
     SCHOOL_DISTRICTS.includes(district as any)
   );
 
+  const isDistrictAdmin = user?.role === 'district_admin';
+  if (isDistrictAdmin && user?.district) {
+    districtFilterOptions = [user.district];
+  }
+
   // Filter vacancies based on selected filters
   const filteredVacancies = vacancies?.filter(vacancy => {
+    if (isDistrictAdmin && vacancy.district !== user.district) return false;
     if (selectedStream !== "all" && vacancy.stream !== selectedStream) return false;
     if (selectedGender !== "all" && vacancy.gender !== selectedGender) return false;
     if (selectedDistrict !== "all" && vacancy.district !== selectedDistrict) return false;
@@ -126,12 +134,12 @@ export default function Vacancies() {
                 />
                 <div className="flex items-center space-x-2">
                   <label className="text-sm font-medium">District:</label>
-                  <Select value={selectedDistrict} onValueChange={setSelectedDistrict}>
+                  <Select value={selectedDistrict} onValueChange={setSelectedDistrict} disabled={isDistrictAdmin}>
                     <SelectTrigger className="w-40" data-testid="filter-district">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All School Districts</SelectItem>
+                      {!isDistrictAdmin && <SelectItem value="all">All School Districts</SelectItem>}
                       {districtFilterOptions.map(district => (
                         <SelectItem key={district} value={district}>{district}</SelectItem>
                       ))}

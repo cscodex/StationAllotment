@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Download, FileText, Users, MapPin, TrendingUp } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import type { Student, Vacancy } from "@shared/schema";
 
 interface AllocationStats {
@@ -32,8 +33,26 @@ export default function Reports() {
     queryKey: ["/api/allocation/stats"],
   });
 
-  const allottedStudents = students?.filter(s => s.allocationStatus === 'allotted') || [];
-  const notAllottedStudents = students?.filter(s => s.allocationStatus === 'not_allotted') || [];
+  const { user } = useAuth();
+  const isDistrictAdmin = user?.role === 'district_admin';
+
+  const allottedStudents = students?.filter(s => 
+    s.allocationStatus === 'allotted' && 
+    (!isDistrictAdmin || s.allottedDistrict === user?.district)
+  ) || [];
+  
+  const notAllottedStudents = students?.filter(s => 
+    s.allocationStatus === 'not_allotted' && 
+    (!isDistrictAdmin || s.counselingDistrict === user?.district)
+  ) || [];
+
+  const districtStudentsList = students?.filter(s => 
+    !isDistrictAdmin || s.counselingDistrict === user?.district || s.allottedDistrict === user?.district
+  ) || [];
+
+  const filteredVacancies = vacancies?.filter(v => 
+    !isDistrictAdmin || v.district === user?.district
+  ) || [];
 
   // Group allotted students by district and stream
   const allotmentsByDistrict = allottedStudents.reduce((acc, student) => {
@@ -59,7 +78,7 @@ export default function Reports() {
   }, {} as Record<string, Record<string, Student[]>>);
 
   // Group vacancies by district and stream for calculations
-  const vacancySummaryByDistrict = vacancies?.reduce((acc, vacancy) => {
+  const vacancySummaryByDistrict = filteredVacancies?.reduce((acc, vacancy) => {
     const { district, stream } = vacancy;
     if (!district || !stream) return acc;
     
@@ -224,7 +243,7 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Total Students</p>
                 <p className="text-2xl font-bold" data-testid="text-total-students">
-                  {allocationStats?.totalStudents || students?.length || 0}
+                  {isDistrictAdmin ? districtStudentsList.length : (allocationStats?.totalStudents || students?.length || 0)}
                 </p>
               </div>
             </div>
@@ -238,7 +257,7 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Allotted</p>
                 <p className="text-2xl font-bold text-green-600" data-testid="text-allotted-students">
-                  {allocationStats?.allottedStudents || allottedStudents.length}
+                  {isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length)}
                 </p>
               </div>
             </div>
@@ -252,7 +271,7 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Not Allotted</p>
                 <p className="text-2xl font-bold text-red-600" data-testid="text-not-allotted-students">
-                  {allocationStats?.notAllottedStudents || notAllottedStudents.length}
+                  {isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length)}
                 </p>
               </div>
             </div>
@@ -266,7 +285,7 @@ export default function Reports() {
               <div>
                 <p className="text-sm text-muted-foreground">Districts</p>
                 <p className="text-2xl font-bold" data-testid="text-total-districts">
-                  {vacancies?.length || 0}
+                  {isDistrictAdmin ? filteredVacancies.length : (vacancies?.length || 0)}
                 </p>
               </div>
             </div>

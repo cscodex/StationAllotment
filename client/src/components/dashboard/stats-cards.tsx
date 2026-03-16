@@ -41,8 +41,8 @@ export default function StatsCards({ stats, isLoading }: StatsCardsProps) {
       trend: { value: 8.2, isPositive: true, label: "available seats" },
     },
     {
-      title: "Pending Allocations",
-      value: stats?.pendingAllocations || 0,
+      title: "Pending (Preferences Filled)",
+      value: (stats as any)?.pendingWithPreferences || 0,
       icon: Clock,
       color: "bg-amber-500/10 text-amber-500",
       trend: { value: 23.1, isPositive: false, label: "awaiting process" },

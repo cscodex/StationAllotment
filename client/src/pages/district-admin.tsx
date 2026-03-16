@@ -1000,10 +1000,22 @@ export default function DistrictAdmin() {
                               batchLockMutation.isPending ||
                               isDeadlinePassed ||
                               isFinalized ||
+                              Array.from(selectedStudents).some(id => {
+                                const student = filteredStudents.find((s: Student) => s.id === id);
+                                return !student?.stream || !student?.choice1;
+                              }) ||
                               Array.from(selectedStudents).every(id => {
                                 const student = filteredStudents.find((s: Student) => s.id === id);
                                 return student?.isLocked === true;
                               })
+                            }
+                            title={
+                              Array.from(selectedStudents).some(id => {
+                                const student = filteredStudents.find((s: Student) => s.id === id);
+                                return !student?.stream || !student?.choice1;
+                              }) 
+                                ? "Cannot bulk lock: One or more selected students have missing stream or station preferences" 
+                                : undefined
                             }
                             data-testid="button-batch-lock"
                           >

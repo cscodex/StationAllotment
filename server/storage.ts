@@ -43,7 +43,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { appDocuments } from "@shared/schema";
-import { eq, desc, and, asc, sql, or, ilike, isNull } from "drizzle-orm";
+import { eq, desc, and, asc, sql, or, ilike, isNull, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -56,7 +56,7 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
 
   // Student operations
-  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string): Promise<Student[]>;
+  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned?: boolean): Promise<Student[]>;
   getStudent(id: string): Promise<Student | undefined>;
   getStudentByMeritNumber(meritNumber: number): Promise<Student | undefined>;
   getStudentsByYearAndRound(academicYear: string, roundNumber: number): Promise<Student[]>;
@@ -64,7 +64,7 @@ export interface IStorage {
   updateStudent(id: string, student: Partial<InsertStudent>): Promise<Student>;
   bulkCreateStudents(students: InsertStudent[], onProgress?: (processed: number, total: number) => void): Promise<Student[]>;
   deleteAllStudents(): Promise<void>;
-  getStudentsCount(academicYear?: string, districtAdminUsername?: string): Promise<number>;
+  getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned?: boolean): Promise<number>;
   getStudentsByStatus(status: string, academicYear?: string): Promise<Student[]>;
 
   // Students entrance result operations
@@ -245,7 +245,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Student operations
-  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string): Promise<Student[]> {
+  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned: boolean = false): Promise<Student[]> {
     const conditions = [];
     if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
@@ -254,12 +254,16 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(students.counselingRoundNumber, roundNumber));
     }
     if (districtAdminUsername) {
-      conditions.push(
-        or(
-          isNull(students.districtAdmin),
-          eq(students.districtAdmin, districtAdminUsername)
-        )
-      );
+      if (excludeUnassigned) {
+        conditions.push(eq(students.districtAdmin, districtAdminUsername));
+      } else {
+        conditions.push(
+          or(
+            isNull(students.districtAdmin),
+            eq(students.districtAdmin, districtAdminUsername)
+          )
+        );
+      }
     }
 
     const query = db.select().from(students);
@@ -362,18 +366,22 @@ export class DatabaseStorage implements IStorage {
     await db.delete(students);
   }
 
-  async getStudentsCount(academicYear?: string, districtAdminUsername?: string): Promise<number> {
+  async getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned: boolean = false): Promise<number> {
     const conditions = [];
     if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
     }
     if (districtAdminUsername) {
-      conditions.push(
-        or(
-          isNull(students.districtAdmin),
-          eq(students.districtAdmin, districtAdminUsername)
-        )
-      );
+      if (excludeUnassigned) {
+        conditions.push(eq(students.districtAdmin, districtAdminUsername));
+      } else {
+        conditions.push(
+          or(
+            isNull(students.districtAdmin),
+            eq(students.districtAdmin, districtAdminUsername)
+          )
+        );
+      }
     }
 
     const query = db.select({ count: sql<number>`count(*)` }).from(students);
@@ -1240,46 +1248,85 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Statistics
-  async getDashboardStats(): Promise<{
+  async getDashboardStats(user?: import("@shared/schema").User): Promise<{
     totalStudents: number;
     totalVacancies: number;
     pendingAllocations: number;
+    pendingWithPreferences: number;
     completionRate: number;
     vacatedSeats: number;
   }> {
-    // Get total students from entrance results (all students who took the entrance exam)
-    const [entranceResultsCount] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
+    // Determine scoping based on user role
+    const isDistrictAdmin = user?.role === 'district_admin';
+    const districtFilter = isDistrictAdmin ? user.district : null;
 
-    // Get allocation status counts from students table (only those with preferences set)
-    const [studentsWithPreferencesCount] = await db.select({ count: sql<number>`count(*)` }).from(students);
-    const [pendingCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(students)
-      .where(eq(students.allocationStatus, 'pending'));
-    const [allottedCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(students)
-      .where(eq(students.allocationStatus, 'allotted'));
-    const [notAllottedCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(students)
-      .where(eq(students.allocationStatus, 'not_allotted'));
-    const [vacatedCount] = await db.select({ count: sql<number>`count(*)` })
-      .from(students)
-      .where(eq(students.allocationStatus, 'vacated'));
+    // Get total students
+    let totalStudents = 0;
+    if (isDistrictAdmin) {
+      const [districtStudentsCount] = await db.select({ count: sql<number>`count(*)` })
+        .from(students)
+        .where(eq(students.counselingDistrict, districtFilter!));
+      totalStudents = districtStudentsCount.count;
+    } else {
+      const [entranceResultsCount] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
+      totalStudents = entranceResultsCount.count;
+    }
 
-    const vacancyResults = await db.select({
-      total: sql<number>`sum(total_seats)`
-    }).from(vacancies);
+    // Get allocation status counts from students table
+    const [studentsWithPreferencesCount] = isDistrictAdmin
+      ? await db.select({ count: sql<number>`count(*)` }).from(students).where(eq(students.counselingDistrict, districtFilter!))
+      : await db.select({ count: sql<number>`count(*)` }).from(students);
+
+    const [pendingCount] = isDistrictAdmin
+      ? await db.select({ count: sql<number>`count(*)` }).from(students).where(and(eq(students.allocationStatus, 'pending'), eq(students.counselingDistrict, districtFilter!)))
+      : await db.select({ count: sql<number>`count(*)` }).from(students).where(eq(students.allocationStatus, 'pending'));
+    
+    // New metric: Pending with filled preferences (stream and choice1)
+    const [pendingWithPreferencesCount] = isDistrictAdmin
+      ? await db.select({ count: sql<number>`count(*)` })
+        .from(students)
+        .where(and(
+          eq(students.allocationStatus, 'pending'),
+          isNotNull(students.stream),
+          isNotNull(students.choice1),
+          eq(students.counselingDistrict, districtFilter!)
+        ))
+      : await db.select({ count: sql<number>`count(*)` })
+        .from(students)
+        .where(and(
+          eq(students.allocationStatus, 'pending'),
+          isNotNull(students.stream),
+          isNotNull(students.choice1)
+        ));
+
+    const [allottedCount] = isDistrictAdmin
+      ? await db.select({ count: sql<number>`count(*)` }).from(students).where(and(eq(students.allocationStatus, 'allotted'), eq(students.counselingDistrict, districtFilter!)))
+      : await db.select({ count: sql<number>`count(*)` }).from(students).where(eq(students.allocationStatus, 'allotted'));
+
+    const [notAllottedCount] = isDistrictAdmin
+      ? await db.select({ count: sql<number>`count(*)` }).from(students).where(and(eq(students.allocationStatus, 'not_allotted'), eq(students.counselingDistrict, districtFilter!)))
+      : await db.select({ count: sql<number>`count(*)` }).from(students).where(eq(students.allocationStatus, 'not_allotted'));
+
+    const [vacatedCount] = isDistrictAdmin
+      ? await db.select({ count: sql<number>`count(*)` }).from(students).where(and(eq(students.allocationStatus, 'vacated'), eq(students.counselingDistrict, districtFilter!)))
+      : await db.select({ count: sql<number>`count(*)` }).from(students).where(eq(students.allocationStatus, 'vacated'));
+
+    const vacancyResults = isDistrictAdmin
+      ? await db.select({ total: sql<number>`sum(total_seats)` }).from(vacancies).where(eq(vacancies.district, districtFilter!))
+      : await db.select({ total: sql<number>`sum(total_seats)` }).from(vacancies);
 
     const totalVacancies = vacancyResults[0]?.total || 0;
-    const totalStudents = entranceResultsCount.count; // Use entrance results count
+    
     // Pending allocations = students without preferences + students with pending status
-    const studentsWithoutPreferences = totalStudents - studentsWithPreferencesCount.count;
+    const studentsWithoutPreferences = isDistrictAdmin ? 0 : Math.max(0, totalStudents - studentsWithPreferencesCount.count);
     const pendingAllocations = studentsWithoutPreferences + pendingCount.count;
     const completionRate = totalStudents > 0 ? (allottedCount.count / totalStudents) * 100 : 0;
 
     return {
-      totalStudents, // Total from entrance results
+      totalStudents,
       totalVacancies,
-      pendingAllocations, // Students without preferences + pending students
+      pendingAllocations, // Traditional calculation
+      pendingWithPreferences: pendingWithPreferencesCount.count, // New specific metric
       completionRate: Math.round(completionRate * 10) / 10,
       vacatedSeats: vacatedCount.count,
     };

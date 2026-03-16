@@ -904,9 +904,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Show students based on role
       // Central Admins see all. District admins only see unowned or owned by them.
+      let isFinalized = false;
+      if (user?.role === 'district_admin' && user?.district) {
+        const status = await storage.getDistrictStatus(user.district);
+        isFinalized = !!status?.isFinalized;
+      }
+      
       const districtAdminUsername = user?.role === 'district_admin' ? user.username : undefined;
-      students = await storage.getStudents(limit, offset, undefined, undefined, districtAdminUsername);
-      total = await storage.getStudentsCount(undefined, districtAdminUsername);
+      students = await storage.getStudents(limit, offset, undefined, undefined, districtAdminUsername, isFinalized);
+      total = await storage.getStudentsCount(undefined, districtAdminUsername, isFinalized);
 
       // Map database fields to frontend expected fields
       const mappedStudents = students.map(student => ({
@@ -2909,9 +2915,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard stats
-  app.get('/api/dashboard/stats', isAuthenticated, async (req, res) => {
+  app.get('/api/dashboard/stats', isAuthenticated, async (req: any, res: any) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const user = await storage.getUser(req.session.userId);
+      const stats = await storage.getDashboardStats(user);
       res.json(stats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);
