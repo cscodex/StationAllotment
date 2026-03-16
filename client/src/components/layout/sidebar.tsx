@@ -129,6 +129,7 @@ export default function Sidebar({ className }: SidebarProps) {
           <div>
             <h1 className="text-lg font-semibold">Seat Allotment</h1>
             <p className="text-xs text-muted-foreground">Management System</p>
+            <p className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">Build: c2c799b</p>
           </div>
         </div>
         <div className="pt-3 border-t border-border">
