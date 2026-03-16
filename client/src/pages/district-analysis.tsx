@@ -15,8 +15,21 @@ import {
   AlertTriangle,
   TrendingUp,
   Clock,
+  X,
+  Check
 } from "lucide-react";
-import type { DistrictStatus, Student } from "@shared/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import type { DistrictStatus, Student, UnfinalizeRequest } from "@shared/schema";
 
 export default function DistrictAnalysis() {
   const { toast } = useToast();
@@ -45,6 +58,31 @@ export default function DistrictAnalysis() {
         variant: "destructive",
       });
     },
+  });
+
+  const reviewRequestMutation = useMutation({
+    mutationFn: async ({ id, status, reviewComments }: { id: string | number; status: 'approved' | 'rejected', reviewComments: string }) => {
+      await apiRequest("POST", `/api/unfinalize-requests/${id}/review`, { status, reviewComments });
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: `Request ${variables.status === 'approved' ? 'Approved' : 'Rejected'}`,
+        description: variables.status === 'approved' ? "The district has been unfinalized." : "The request was rejected.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/unfinalize-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/district-status"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to process request",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const { data: unfinalizeRequests } = useQuery<UnfinalizeRequest[]>({
+    queryKey: ["/api/unfinalize-requests"],
   });
 
   // Fetch students data
@@ -138,6 +176,112 @@ export default function DistrictAnalysis() {
 
       <main className="flex-1 p-6 overflow-auto">
         <div className="space-y-6">
+
+          {/* Pending Unfinalize Requests */}
+          {unfinalizeRequests && unfinalizeRequests.filter(r => r.status === 'pending').length > 0 && (
+            <Card className="border-amber-200 shadow-sm">
+              <CardHeader className="bg-amber-50 pb-4 border-b border-amber-100">
+                <CardTitle className="flex items-center text-amber-800 text-lg">
+                  <AlertTriangle className="w-5 h-5 mr-2 text-amber-600" />
+                  Pending Unfinalize Requests
+                  <Badge variant="secondary" className="ml-2 bg-amber-200 text-amber-800 hover:bg-amber-200">
+                    {unfinalizeRequests.filter(r => r.status === 'pending').length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-amber-100">
+                  {unfinalizeRequests.filter(r => r.status === 'pending').map((request) => (
+                    <div key={request.id} className="p-4 flex flex-col md:flex-row md:items-start justify-between gap-4 hover:bg-amber-50/50 transition-colors">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-base">{request.district}</h4>
+                          <span className="text-xs text-muted-foreground flex items-center">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {request.createdAt ? formatDistanceToNow(new Date(request.createdAt), { addSuffix: true }) : 'Just now'}
+                          </span>
+                        </div>
+                        <div className="text-sm bg-white p-3 rounded border border-amber-100 mt-2">
+                          <span className="font-medium text-amber-900 block mb-1">Reason provided:</span>
+                          <span className="text-gray-700">{request.reason}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 md:self-stretch md:items-center">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                              disabled={reviewRequestMutation.isPending}
+                            >
+                              <X className="w-4 h-4 mr-1" /> Reject
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Reject Unfinalize Request</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to reject this request from {request.district}?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => reviewRequestMutation.mutate({ 
+                                  id: request.id, 
+                                  status: 'rejected',
+                                  reviewComments: 'Rejected by Central Admin'
+                                })}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Reject Request
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button 
+                              size="sm" 
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              disabled={reviewRequestMutation.isPending}
+                            >
+                              <Check className="w-4 h-4 mr-1" /> Approve & Unfinalize
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Approve Unfinalize Request</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will approve the request and unfinalize {request.district}, allowing the district admin to resume modifying preferences.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => reviewRequestMutation.mutate({ 
+                                  id: request.id, 
+                                  status: 'approved',
+                                  reviewComments: 'Approved by Central Admin'
+                                })}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                Approve Request
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Overview Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
@@ -269,22 +413,39 @@ export default function DistrictAnalysis() {
                               </div>
                               <div className="ml-4 flex-shrink-0">
                                 {district.isFinalized && (
-                                  <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                      onClick={() => {
-                                        if (confirm(`Are you sure you want to unfinalize ${district.district}? This will allow the district admin to edit student preferences again.`)) {
-                                          unfinalizeMutation.mutate(district.district);
-                                        }
-                                      }}
-                                      disabled={unfinalizeMutation.isPending}
-                                    >
-                                      {unfinalizeMutation.isPending && unfinalizeMutation.variables === district.district ? 'Unfinalizing...' : 'Unfinalize'}
-                                    </Button>
-                                  )}
-                                </div>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        disabled={unfinalizeMutation.isPending && unfinalizeMutation.variables === district.district}
+                                      >
+                                        {unfinalizeMutation.isPending && unfinalizeMutation.variables === district.district ? 'Unfinalizing...' : 'Unfinalize'}
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This will unfinalize the district {district.district} and allow the district admin to edit student preferences again.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => unfinalizeMutation.mutate(district.district)}
+                                          className="bg-red-600 hover:bg-red-700 text-white"
+                                          disabled={unfinalizeMutation.isPending}
+                                        >
+                                          Confirm Unfinalize
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                )}
                               </div>
+                            </div>
                                 
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4">
                                   <div>

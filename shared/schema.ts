@@ -247,6 +247,22 @@ export const unlockRequests = pgTable("unlock_requests", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Unfinalize requests table for district admin unfinalize requests
+export const unfinalizeRequests = pgTable("unfinalize_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  district: varchar("district").notNull(),
+  counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id),
+  requestedBy: varchar("requested_by").references(() => users.id).notNull(),
+  reason: text("reason").notNull(),
+  status: varchar("status").default('pending'), // 'pending' | 'approved' | 'rejected'
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewComments: text("review_comments"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+
 // Year Session table for tracking academic sessions
 export const yearSession = pgTable("year_session", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -364,6 +380,12 @@ export const insertUnlockRequestSchema = createInsertSchema(unlockRequests).omit
   updatedAt: true,
 });
 
+export const insertUnfinalizeRequestSchema = createInsertSchema(unfinalizeRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertDistrictStatusSchema = createInsertSchema(districtStatus).omit({
   id: true,
   createdAt: true,
@@ -404,6 +426,8 @@ export type FileUpload = typeof fileUploads.$inferSelect;
 export type InsertFileUpload = z.infer<typeof insertFileUploadSchema>;
 export type UnlockRequest = typeof unlockRequests.$inferSelect;
 export type InsertUnlockRequest = z.infer<typeof insertUnlockRequestSchema>;
+export type UnfinalizeRequest = typeof unfinalizeRequests.$inferSelect;
+export type InsertUnfinalizeRequest = z.infer<typeof insertUnfinalizeRequestSchema>;
 export type DistrictStatus = typeof districtStatus.$inferSelect;
 export type InsertDistrictStatus = z.infer<typeof insertDistrictStatusSchema>;
 export type School = typeof schools.$inferSelect;

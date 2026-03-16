@@ -11,6 +11,7 @@ import {
   districtStatus,
   unlockRequests,
   yearSession,
+  unfinalizeRequests,
   type User,
   type InsertUser,
   type Student,
@@ -33,6 +34,8 @@ import {
   type InsertDistrictStatus,
   type UnlockRequest,
   type InsertUnlockRequest,
+  type UnfinalizeRequest,
+  type InsertUnfinalizeRequest,
   type YearSession,
   type InsertYearSession,
   type AppDocument,
@@ -53,7 +56,7 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
 
   // Student operations
-  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number): Promise<Student[]>;
+  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string): Promise<Student[]>;
   getStudent(id: string): Promise<Student | undefined>;
   getStudentByMeritNumber(meritNumber: number): Promise<Student | undefined>;
   getStudentsByYearAndRound(academicYear: string, roundNumber: number): Promise<Student[]>;
@@ -61,7 +64,7 @@ export interface IStorage {
   updateStudent(id: string, student: Partial<InsertStudent>): Promise<Student>;
   bulkCreateStudents(students: InsertStudent[], onProgress?: (processed: number, total: number) => void): Promise<Student[]>;
   deleteAllStudents(): Promise<void>;
-  getStudentsCount(academicYear?: string): Promise<number>;
+  getStudentsCount(academicYear?: string, districtAdminUsername?: string): Promise<number>;
   getStudentsByStatus(status: string, academicYear?: string): Promise<Student[]>;
 
   // Students entrance result operations
@@ -174,6 +177,13 @@ export interface IStorage {
   updateUnlockRequest(id: string, updates: Partial<UnlockRequest>): Promise<UnlockRequest>;
   getPendingUnlockRequests(): Promise<UnlockRequest[]>;
 
+  // Unfinalize request operations
+  createUnfinalizeRequest(request: InsertUnfinalizeRequest): Promise<UnfinalizeRequest>;
+  getUnfinalizeRequests(): Promise<UnfinalizeRequest[]>;
+  getUnfinalizeRequestsByDistrict(district: string): Promise<UnfinalizeRequest[]>;
+  updateUnfinalizeRequest(id: string, updates: Partial<UnfinalizeRequest>): Promise<UnfinalizeRequest>;
+  getPendingUnfinalizeRequests(): Promise<UnfinalizeRequest[]>;
+
   // Statistics
   getDashboardStats(): Promise<{
     totalStudents: number;
@@ -235,13 +245,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Student operations
-  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number): Promise<Student[]> {
+  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string): Promise<Student[]> {
     const conditions = [];
     if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
     }
     if (roundNumber !== undefined) {
       conditions.push(eq(students.counselingRoundNumber, roundNumber));
+    }
+    if (districtAdminUsername) {
+      conditions.push(
+        or(
+          isNull(students.districtAdmin),
+          eq(students.districtAdmin, districtAdminUsername)
+        )
+      );
     }
 
     const query = db.select().from(students);
@@ -344,15 +362,28 @@ export class DatabaseStorage implements IStorage {
     await db.delete(students);
   }
 
-  async getStudentsCount(academicYear?: string): Promise<number> {
+  async getStudentsCount(academicYear?: string, districtAdminUsername?: string): Promise<number> {
+    const conditions = [];
     if (academicYear) {
-      const [result] = await db.select({ count: sql<number>`count(*)` })
-        .from(students)
-        .where(eq(students.academicYear, academicYear));
-      return result.count;
+      conditions.push(eq(students.academicYear, academicYear));
     }
-    const [result] = await db.select({ count: sql<number>`count(*)` }).from(students);
-    return result.count;
+    if (districtAdminUsername) {
+      conditions.push(
+        or(
+          isNull(students.districtAdmin),
+          eq(students.districtAdmin, districtAdminUsername)
+        )
+      );
+    }
+
+    const query = db.select({ count: sql<number>`count(*)` }).from(students);
+    
+    if (conditions.length > 0) {
+      query.where(and(...conditions));
+    }
+    
+    const [result] = await query;
+    return Number(result.count);
   }
 
   async getStudentsByStatus(status: string, academicYear?: string): Promise<Student[]> {
@@ -1600,6 +1631,37 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(unlockRequests)
       .where(eq(unlockRequests.status, 'pending'))
       .orderBy(desc(unlockRequests.createdAt));
+  }
+
+  // Unfinalize request operations
+  async createUnfinalizeRequest(request: InsertUnfinalizeRequest): Promise<UnfinalizeRequest> {
+    const [created] = await db.insert(unfinalizeRequests).values(request).returning();
+    return created;
+  }
+
+  async getUnfinalizeRequests(): Promise<UnfinalizeRequest[]> {
+    return db.select().from(unfinalizeRequests).orderBy(desc(unfinalizeRequests.createdAt));
+  }
+
+  async getUnfinalizeRequestsByDistrict(district: string): Promise<UnfinalizeRequest[]> {
+    return db.select().from(unfinalizeRequests)
+      .where(eq(unfinalizeRequests.district, district))
+      .orderBy(desc(unfinalizeRequests.createdAt));
+  }
+
+  async updateUnfinalizeRequest(id: string, updates: Partial<UnfinalizeRequest>): Promise<UnfinalizeRequest> {
+    const [updated] = await db
+      .update(unfinalizeRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(unfinalizeRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getPendingUnfinalizeRequests(): Promise<UnfinalizeRequest[]> {
+    return db.select().from(unfinalizeRequests)
+      .where(eq(unfinalizeRequests.status, 'pending'))
+      .orderBy(desc(unfinalizeRequests.createdAt));
   }
 
   // Year Session operations

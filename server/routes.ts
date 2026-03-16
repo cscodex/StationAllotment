@@ -7,7 +7,7 @@ import connectPg from "connect-pg-simple";
 import multer from "multer";
 import path from "path";
 import { z } from "zod";
-import { insertUserSchema, insertStudentSchema, insertVacancySchema, insertStudentsEntranceResultSchema, USER_ROLES } from "@shared/schema";
+import { insertUserSchema, insertStudentSchema, insertVacancySchema, insertStudentsEntranceResultSchema, USER_ROLES, UnfinalizeRequest } from "@shared/schema";
 import { FileService } from "./services/fileService";
 import { AllocationService } from "./services/allocationService";
 import { ExportService } from "./services/exportService";
@@ -902,10 +902,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let students, total;
 
-      // Show all students for student preference management
-      // This allows both central and district admins to see the full picture
-      students = await storage.getStudents(limit, offset);
-      total = await storage.getStudentsCount();
+      // Show students based on role
+      // Central Admins see all. District admins only see unowned or owned by them.
+      const districtAdminUsername = user?.role === 'district_admin' ? user.username : undefined;
+      students = await storage.getStudents(limit, offset, undefined, undefined, districtAdminUsername);
+      total = await storage.getStudentsCount(undefined, districtAdminUsername);
 
       // Map database fields to frontend expected fields
       const mappedStudents = students.map(student => ({
@@ -1083,7 +1084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if district is finalized
-      if (preferences.counselingDistrict) {
+      if (user?.role !== 'central_admin' && preferences.counselingDistrict) {
         const districtStatus = await storage.getDistrictStatus(preferences.counselingDistrict);
         if (districtStatus?.isFinalized) {
           return res.status(403).json({ message: "Cannot edit preferences: District is already finalized" });
@@ -2488,6 +2489,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // District Admin Unfinalize Request
+  app.post('/api/district-status/:district/unfinalize-request', isAuthenticated, async (req: any, res) => {
+    try {
+      const { district } = req.params;
+      const { reason } = req.body;
+      const user = await storage.getUser(req.session.userId);
+
+      if (user?.role !== 'district_admin' || user.district !== district) {
+        return res.status(403).json({ message: "Only the assigned district admin can request unfinalization" });
+      }
+
+      if (!reason) {
+        return res.status(400).json({ message: "Reason is required" });
+      }
+
+      const status = await storage.getDistrictStatus(district);
+      if (!status?.isFinalized) {
+        return res.status(400).json({ message: "District is not finalized" });
+      }
+
+      // Check if there's already a pending request
+      const pendingRequests = await storage.getUnfinalizeRequestsByDistrict(district);
+      if (pendingRequests.some(r => r.status === 'pending')) {
+        return res.status(400).json({ message: "A request is already pending for this district" });
+      }
+
+      const request = await storage.createUnfinalizeRequest({
+        district,
+        counselingRoundId: status.counselingRoundId,
+        requestedBy: req.session.userId,
+        reason
+      });
+
+      await auditService.log(req.session.userId, 'unfinalize_request_created', 'unfinalizeRequests', request.id, {
+        district, reason
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(request);
+    } catch (error) {
+      console.error("Create unfinalize request error:", error);
+      res.status(500).json({ message: "Failed to create unfinalize request" });
+    }
+  });
+
+  // Central Admin Review Unfinalize Request
+  app.post('/api/unfinalize-requests/:id/review', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status, reviewComments } = req.body; // 'approved' | 'rejected'
+
+      if (status !== 'approved' && status !== 'rejected') {
+        return res.status(400).json({ message: "Invalid status. Must be approved or rejected" });
+      }
+
+      const request = (await storage.getUnfinalizeRequests()).find(r => r.id === id);
+      if (!request) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+
+      if (request.status !== 'pending') {
+        return res.status(400).json({ message: "Request is already processed" });
+      }
+
+      const updatedRequest = await storage.updateUnfinalizeRequest(id, {
+        status,
+        reviewComments,
+        reviewedBy: req.session.userId,
+        reviewedAt: new Date()
+      });
+
+      if (status === 'approved') {
+        await storage.unfinalizeDistrict(request.district);
+        await auditService.log(req.session.userId, 'district_unfinalized', 'district', request.district, {
+          reason: 'Approved unfinalize request: ' + request.reason,
+          comments: reviewComments
+        }, req.ip, req.get('User-Agent'));
+      }
+
+      await auditService.log(req.session.userId, `unfinalize_request_${status}`, 'unfinalizeRequests', id, {
+        district: request.district,
+        comments: reviewComments
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedRequest);
+    } catch (error) {
+      console.error("Review unfinalize request error:", error);
+      res.status(500).json({ message: "Failed to review unfinalize request" });
+    }
+  });
+
+  // Get unfinalize requests (Central Admin sees all, District Admin sees theirs)
+  app.get('/api/unfinalize-requests', isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId);
+      let requests: UnfinalizeRequest[] = [];
+
+      if (user?.role === 'central_admin') {
+        requests = await storage.getUnfinalizeRequests();
+      } else if (user?.role === 'district_admin' && user.district) {
+        requests = await storage.getUnfinalizeRequestsByDistrict(user.district);
+      } else {
+        requests = [];
+      }
+
+      res.json(requests);
+    } catch (error) {
+      console.error("Get unfinalize requests error:", error);
+      res.status(500).json({ message: "Failed to fetch unfinalize requests" });
+    }
+  });
+
   // Student locking routes
   app.put('/api/students/:id/lock', isAuthenticated, async (req: any, res) => {
     try {
@@ -2506,7 +2618,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if district is finalized
-      if (student.counselingDistrict) {
+      if (user?.role !== 'central_admin' && student.counselingDistrict) {
         const districtStatus = await storage.getDistrictStatus(student.counselingDistrict);
         if (districtStatus?.isFinalized) {
           return res.status(403).json({ message: "Cannot change lock status: District is already finalized" });

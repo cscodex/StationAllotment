@@ -12,13 +12,14 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { type Student } from "@shared/schema";
+import { type Student, type UnfinalizeRequest } from "@shared/schema";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { formatDistanceToNow } from "date-fns";
 import {
   Search,
   ShieldQuestion,
@@ -159,6 +160,13 @@ export default function DistrictAdmin() {
     queryKey: ["/api/counseling/active-round"],
   });
 
+  const { data: unfinalizeRequests } = useQuery<UnfinalizeRequest[]>({
+    queryKey: ["/api/unfinalize-requests"],
+  });
+
+  const pendingRequest = unfinalizeRequests?.find(r => r.status === 'pending');
+  const lastRequest = unfinalizeRequests?.[0]; // Assuming ordered by newest
+
   const deadline = (settings as any)?.find((s: any) => s.key === 'allocation_deadline')?.value;
   const deadlineDate = deadline ? new Date(deadline) : null;
   const isDeadlinePassed = deadlineDate ? new Date() > deadlineDate : false;
@@ -277,6 +285,28 @@ export default function DistrictAdmin() {
     onError: (error) => {
       toast({
         title: "Finalization Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unfinalizeRequestMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      await apiRequest("POST", `/api/district-status/${user?.district}/unfinalize-request`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/unfinalize-requests"] });
+      toast({
+        title: "Request Submitted",
+        description: "Your unfinalize request has been sent to Central Admin for review.",
+      });
+      setIsUnlockRequestModalOpen(false);
+      setUnlockReason("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Request Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -609,50 +639,54 @@ export default function DistrictAdmin() {
   };
 
   const submitUnlockRequest = async () => {
-    if (!selectedStudentForUnlock || !unlockReason.trim()) {
+    if (!unlockReason.trim()) {
       toast({
         title: "Reason Required",
-        description: "Please provide a reason for the unlock request",
+        description: "Please provide a reason",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      const response = await fetch('/api/unlock-requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          studentId: selectedStudentForUnlock.id,
-          reason: unlockReason.trim(),
-        }),
-      });
+    if (selectedStudentForUnlock) {
+      try {
+        const response = await fetch('/api/unlock-requests', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            studentId: selectedStudentForUnlock.id,
+            reason: unlockReason.trim(),
+          }),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
+        if (!response.ok) {
+          toast({
+            title: "Error",
+            description: data.message || "Failed to send unlock request",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Unlock Request Sent",
+            description: "Your unlock request has been sent to central admin for review",
+          });
+          setIsUnlockRequestModalOpen(false);
+          setSelectedStudentForUnlock(null);
+          setUnlockReason("");
+        }
+      } catch (error) {
         toast({
           title: "Error",
-          description: data.message || "Failed to send unlock request",
+          description: "Failed to send unlock request",
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Unlock Request Sent",
-          description: "Your unlock request has been sent to central admin for review",
-        });
-        setIsUnlockRequestModalOpen(false);
-        setSelectedStudentForUnlock(null);
-        setUnlockReason("");
       }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send unlock request",
-        variant: "destructive",
-      });
+    } else {
+      unfinalizeRequestMutation.mutate(unlockReason.trim());
     }
   };
 
@@ -811,6 +845,83 @@ export default function DistrictAdmin() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Request Status Banners */}
+          {pendingRequest && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg flex items-start gap-3 shadow-sm">
+              <Clock className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-amber-900">Unfinalize Request Pending</h4>
+                <p className="text-sm mt-1">
+                  Your request to unfinalize {user?.district} is currently under review by Central Admin. 
+                  Submitted {pendingRequest.createdAt ? formatDistanceToNow(new Date(pendingRequest.createdAt), { addSuffix: true }) : 'Just now'}.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {lastRequest?.status === 'rejected' && (!pendingRequest) && (
+            <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg flex items-start flex-col gap-2 shadow-sm relative overflow-hidden pr-10">
+              <div className="flex items-start gap-3 w-full">
+                <X className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-red-900">Unfinalize Request Rejected</h4>
+                  <p className="text-sm mt-1">
+                    Your previous request to unfinalize {user?.district} was rejected by Central Admin.
+                  </p>
+                  {lastRequest.reviewComments && (
+                    <div className="mt-2 p-2 bg-white rounded border border-red-100 text-sm">
+                      <span className="font-medium text-red-900">Reason: </span>
+                      {lastRequest.reviewComments}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="absolute top-2 right-2 h-6 w-6 p-0 hover:bg-red-100 text-red-500"
+                onClick={() => queryClient.setQueryData(["/api/unfinalize-requests"], (old: any) => 
+                  old?.filter((r: any) => r.id !== lastRequest.id)
+                )}
+              >
+                <X className="w-4 h-4" />
+                <span className="sr-only">Dismiss</span>
+              </Button>
+            </div>
+          )}
+
+          {lastRequest?.status === 'approved' && (!pendingRequest) && (
+            <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg flex items-start flex-col gap-2 shadow-sm relative overflow-hidden pr-10">
+              <div className="flex items-start gap-3 w-full">
+                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-green-900">District Unfinalized</h4>
+                  <p className="text-sm mt-1">
+                    Your request was approved. You can now modify student preferences again.
+                    Don't forget to finalize again when you are finished!
+                  </p>
+                  {lastRequest.reviewComments && (
+                    <div className="mt-2 p-2 bg-white rounded border border-green-100 text-sm">
+                      <span className="font-medium text-green-900">Note from Admin: </span>
+                      {lastRequest.reviewComments}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="absolute top-2 right-2 h-6 w-6 p-0 hover:bg-green-100 text-green-500"
+                onClick={() => queryClient.setQueryData(["/api/unfinalize-requests"], (old: any) => 
+                  old?.filter((r: any) => r.id !== lastRequest.id)
+                )}
+              >
+                <X className="w-4 h-4" />
+                <span className="sr-only">Dismiss</span>
+              </Button>
+            </div>
+          )}
 
           {/* Tabs Navigation */}
           <Tabs defaultValue="student-management" className="w-full">
@@ -1394,25 +1505,43 @@ export default function DistrictAdmin() {
           <Dialog open={isUnlockRequestModalOpen} onOpenChange={setIsUnlockRequestModalOpen}>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Request Unlock - {selectedStudentForUnlock?.name}</DialogTitle>
+                <DialogTitle>
+                  {selectedStudentForUnlock ? `Request Unlock - ${selectedStudentForUnlock.name}` : `Request District Unfinalize`}
+                </DialogTitle>
               </DialogHeader>
 
               <div className="space-y-4">
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                  <div className="text-sm">
-                    <div><strong>Student:</strong> {selectedStudentForUnlock?.name}</div>
-                    <div><strong>Merit Number:</strong> {selectedStudentForUnlock?.meritNumber}</div>
-                    <div><strong>App Number:</strong> {selectedStudentForUnlock?.appNo}</div>
-                  </div>
+                <div className="bg-amber-50 text-amber-800 p-3 rounded-md text-sm border border-amber-200 flex items-start">
+                  <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5 text-amber-500" />
+                  {selectedStudentForUnlock ? (
+                    <p>
+                      This will send a request to the Central Administrator to unlock this student.
+                      You must provide a valid reason for this request.
+                    </p>
+                  ) : (
+                    <p>
+                      This will send a request to the Central Administrator to unfinalize the entire {user?.district} district so you can resume modifying student preferences. Provide a valid reason.
+                    </p>
+                  )}
                 </div>
+
+                {selectedStudentForUnlock && (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                    <div className="text-sm">
+                      <div><strong>Student:</strong> {selectedStudentForUnlock?.name}</div>
+                      <div><strong>Merit Number:</strong> {selectedStudentForUnlock?.meritNumber}</div>
+                      <div><strong>App Number:</strong> {selectedStudentForUnlock?.appNo}</div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label htmlFor="unlock-reason" className="block text-sm font-medium mb-2">
-                    Reason for Unlock Request <span className="text-red-500">*</span>
+                    Reason for Request <span className="text-red-500">*</span>
                   </label>
                   <Textarea
                     id="unlock-reason"
-                    placeholder="Please provide a detailed reason for requesting to unlock this student's preferences..."
+                    placeholder={selectedStudentForUnlock ? "Please provide a detailed reason for requesting to unlock this student's preferences..." : "Please provide a detailed reason for requesting to unfinalize your district..."}
                     value={unlockReason}
                     onChange={(e) => setUnlockReason(e.target.value)}
                     className="min-h-[100px]"
@@ -1434,10 +1563,10 @@ export default function DistrictAdmin() {
                 </Button>
                 <Button
                   onClick={submitUnlockRequest}
-                  disabled={!unlockReason.trim()}
+                  disabled={!unlockReason.trim() || unfinalizeRequestMutation.isPending}
                   data-testid="button-submit-unlock-request"
                 >
-                  Send Request
+                  {unfinalizeRequestMutation.isPending ? "Submitting..." : "Send Request"}
                 </Button>
               </DialogFooter>
             </DialogContent>
