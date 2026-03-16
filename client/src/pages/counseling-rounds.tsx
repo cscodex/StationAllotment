@@ -59,6 +59,7 @@ interface PrerequisitesStatus {
   entranceResultsCount: number;
   hasStudentChoices: boolean;
   studentsWithChoicesCount: number;
+  lockedStudentsCount: number;
   studentsWithMeritDataCount: number;
   allDistrictsFinalized: boolean;
   totalDistrictsCount: number;
@@ -613,7 +614,7 @@ export default function CounselingRounds() {
                               </div>
                               <div className={`flex items-center gap-1 ${prerequisites.hasStudentChoices ? 'text-green-600' : 'text-red-600'}`}>
                                 {prerequisites.hasStudentChoices ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Choices: {prerequisites.studentsWithChoicesCount}</span>
+                                <span>Choices: {prerequisites.lockedStudentsCount}/{prerequisites.studentsWithChoicesCount}</span>
                               </div>
                               <div className={`flex items-center gap-1 ${prerequisites.allDistrictsFinalized ? 'text-green-600' : 'text-red-600'}`}>
                                 {prerequisites.allDistrictsFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}

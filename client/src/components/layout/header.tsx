@@ -30,7 +30,7 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
 
   // Fetch students for locked count display for central admin
   const { data: studentsData } = useQuery<{ students: Student[] }>({
-    queryKey: ["/api/students"],
+    queryKey: ["/api/students?limit=50000"],
     enabled: user?.role === 'central_admin',
   });
 

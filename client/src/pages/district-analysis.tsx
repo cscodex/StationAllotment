@@ -87,7 +87,7 @@ export default function DistrictAnalysis() {
 
   // Fetch students data
   const { data: studentsResponse } = useQuery<{ students: Student[] } | Student[]>({
-    queryKey: ["/api/students"],
+    queryKey: ["/api/students?limit=50000"],
   });
 
   // Fetch vacancies data

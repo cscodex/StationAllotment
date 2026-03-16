@@ -1985,7 +1985,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const notAllottedStudents = await storage.getStudentsByStatus('not_allotted', round.academicYear);
 
       const students = [...pendingStudents, ...notAllottedStudents];
-      const studentsWithChoicesCount = students.length;
+      const studentsWithChoices = students.filter(s => s.choice1 && s.stream);
+      const studentsWithChoicesCount = studentsWithChoices.length;
+      const lockedStudentsCount = students.filter(s => s.lockedBy || s.isLocked).length;
       const hasStudentChoices = studentsWithChoicesCount > 0;
 
       // 1. Check merit matching
@@ -1994,7 +1996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 2. Check if all eligible districts configured preferences and are finalized
       const districtsWithEligibleStudents = new Set<string>();
       students.forEach(student => {
-        if (student.districtAdmin && student.choice1 && student.counselingDistrict) {
+        if (student.counselingDistrict) {
           districtsWithEligibleStudents.add(student.counselingDistrict);
         }
       });
@@ -2020,6 +2022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entranceResultsCount: results.length,
         hasStudentChoices,
         studentsWithChoicesCount,
+        lockedStudentsCount,
         studentsWithMeritDataCount,
         allDistrictsFinalized,
         totalDistrictsCount,

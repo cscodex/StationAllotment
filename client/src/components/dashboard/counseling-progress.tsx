@@ -11,7 +11,7 @@ export default function CounselingProgress() {
     const { data: allocationStatus } = useQuery<any>({ queryKey: ["/api/allocation/status"] });
     const { data: files } = useQuery<any[]>({ queryKey: ["/api/files"] });
     const { data: districtStatuses } = useQuery<any[]>({ queryKey: ["/api/district-status"] });
-    const { data: studentsResponse } = useQuery<any>({ queryKey: ["/api/students"] });
+    const { data: studentsResponse } = useQuery<any>({ queryKey: ["/api/students?limit=50000"] });
 
     const { user } = useAuth();
     const { toast } = useToast();
@@ -39,14 +39,19 @@ export default function CounselingProgress() {
     });
 
     const students = Array.isArray(studentsResponse) ? studentsResponse : studentsResponse?.students || [];
-    const lockedStudents = students.filter((s: any) => s.isLocked).length;
-    const totalStudents = stats?.totalStudents || 0;
+    const lockedStudentsCount = students.filter((s: any) => s.lockedBy || s.isLocked).length;
+    const unlockedStudentsCount = students.filter((s: any) => !s.lockedBy && !s.isLocked && s.choice1 && s.stream).length;
+    
+    // Instead of using all students in DB, we only track eligible ones for locking progress
+    const eligibleForLocking = lockedStudentsCount + unlockedStudentsCount;
+    // Registration still uses total DB entries
+    const totalStudentsRegistered = stats?.totalStudents || 0;
 
     const hasFiles = files && files.some((f: any) => f.status === 'processed');
     const hasMultipleFiles = files && files.filter((f: any) => f.status === 'processed').length >= 2;
     const isFinalized = allocationStatus?.finalized;
     const isAllocated = allocationStatus?.completed;
-    const hasLocked = lockedStudents > 0;
+    const hasLocked = lockedStudentsCount > 0;
 
     const districts = districtStatuses || [];
     const finalizedCount = districts.filter(d => d.isFinalized).length;
@@ -55,8 +60,8 @@ export default function CounselingProgress() {
     const filesCount = files?.length || 0;
     const steps = [
         { title: "Upload Files", href: "/file-management", stats: `${filesCount}/3`, percent: Math.min((filesCount / 3) * 100, 100) },
-        { title: "Register Students", href: "/students", stats: `${totalStudents}`, percent: totalStudents > 0 ? 100 : 0 },
-        { title: "Lock Choices", href: "/district-admin-list", stats: `${lockedStudents}/${totalStudents}`, percent: totalStudents > 0 ? (lockedStudents / totalStudents) * 100 : 0 },
+        { title: "Register Students", href: "/students", stats: `${totalStudentsRegistered}`, percent: totalStudentsRegistered > 0 ? 100 : 0 },
+        { title: "Lock Choices", href: "/district-admin-list", stats: `${lockedStudentsCount}/${eligibleForLocking}`, percent: eligibleForLocking > 0 ? (lockedStudentsCount / eligibleForLocking) * 100 : 0 },
         { title: "Finalize Data", href: "/reports", stats: `${finalizedCount}/${totalDistricts}`, percent: totalDistricts > 0 ? (finalizedCount / totalDistricts) * 100 : 0 },
         { title: "Run Options", href: "/allocation", stats: isAllocated ? "Done" : "Wait", percent: isAllocated ? 100 : 0 },
     ];
