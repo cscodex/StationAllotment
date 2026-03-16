@@ -1348,6 +1348,22 @@ export default function DistrictAdmin() {
                             Finalized by: {currentDistrictStatus.finalizedBy}
                           </p>
                         )}
+                        {!pendingRequest && user?.role === 'district_admin' && (
+                          <div className="pt-2 mt-2 border-t border-blue-200 dark:border-blue-800">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => {
+                                setSelectedStudentForUnlock(null);
+                                setIsUnlockRequestModalOpen(true);
+                              }}
+                              className="w-full sm:w-auto text-blue-700 border-blue-300 hover:bg-blue-100 dark:text-blue-300 dark:border-blue-700 dark:hover:bg-blue-900"
+                            >
+                              <Unlock className="w-4 h-4 mr-2" />
+                              Request Unfinalize
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
