@@ -30,6 +30,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { DistrictStatus, Student, UnfinalizeRequest } from "@shared/schema";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function DistrictAnalysis() {
   const { toast } = useToast();
@@ -98,9 +99,9 @@ export default function DistrictAnalysis() {
   // Handle different API response formats
   const students = Array.isArray(studentsResponse) ? studentsResponse : (studentsResponse as any)?.students || [];
 
-  // Calculate stream-wise totals
+  // Calculate stream-wise totals (only for students with preferences)
   const streamTotals = students.reduce((acc: any, student: any) => {
-    if (!student.stream) return acc;
+    if (!student.stream || !student.choice1) return acc;
     const stream = student.stream === 'Non-Medical' ? 'NonMedical' : student.stream;
     acc[stream] = (acc[stream] || 0) + 1;
     return acc;
@@ -109,16 +110,16 @@ export default function DistrictAnalysis() {
   // Calculate district-wise, stream-wise breakdown
   const districtBreakdown = districtStatuses?.map(district => {
     const districtStudents = students.filter((s: any) => s.counselingDistrict === district.district);
-    const streamBreakdown = {
-      Medical: districtStudents.filter((s: any) => s.stream === 'Medical').length,
-      Commerce: districtStudents.filter((s: any) => s.stream === 'Commerce').length,
-      NonMedical: districtStudents.filter((s: any) => s.stream === 'NonMedical' || s.stream === 'Non-Medical').length,
-    };
-
     const studentsWithChoices = districtStudents.filter((s: any) => 
       s.choice1 || s.choice2 || s.choice3 || s.choice4 || s.choice5 ||
       s.choice6 || s.choice7 || s.choice8 || s.choice9 || s.choice10
     );
+
+    const streamBreakdown = {
+      Medical: studentsWithChoices.filter((s: any) => s.stream === 'Medical').length,
+      Commerce: studentsWithChoices.filter((s: any) => s.stream === 'Commerce').length,
+      NonMedical: studentsWithChoices.filter((s: any) => s.stream === 'NonMedical' || s.stream === 'Non-Medical').length,
+    };
 
     const lockedStudents = districtStudents.filter((s: any) => s.isLocked);
 
@@ -366,6 +367,60 @@ export default function DistrictAnalysis() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Infographic Charts */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <TrendingUp className="w-5 h-5 mr-2 text-primary" />
+                  Stream Distribution (Chart)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={Object.entries(streamTotals).map(([name, value]) => ({ name, value }))} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="value" name="Students" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <MapPin className="w-5 h-5 mr-2 text-primary" />
+                  District Finalization Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="h-[260px] flex justify-center items-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Finalized', value: finalizedDistricts },
+                        { name: 'Pending', value: totalDistricts - finalizedDistricts },
+                      ]}
+                      cx="50%" cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ${value}`}
+                      outerRadius={90}
+                      dataKey="value"
+                    >
+                      <Cell fill="#22c55e" />
+                      <Cell fill="#f59e0b" />
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* District-wise Breakdown */}
           <Card>

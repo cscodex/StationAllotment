@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Download, FileText, Users, MapPin, TrendingUp } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useAuth } from "@/hooks/useAuth";
 import type { Student, Vacancy } from "@shared/schema";
 
@@ -221,14 +222,14 @@ export default function Reports() {
               />
             </CardContent>
           </Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">Reports</h1>
-              <p className="text-muted-foreground">
-                View allocation results and remaining vacancies
-              </p>
-            </div>
-            <Button onClick={exportToCSV} data-testid="button-export-csv">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Reports</h1>
+          <p className="text-muted-foreground">
+            View allocation results and remaining vacancies
+          </p>
+        </div>
+        <Button onClick={exportToCSV} data-testid="button-export-csv">
           <Download className="w-4 h-4 mr-2" />
           Export CSV
         </Button>
@@ -289,6 +290,40 @@ export default function Reports() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Infographics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Allocation Status</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[300px] flex justify-center items-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Allotted', value: isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length) },
+                    { name: 'Not Allotted', value: isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length) },
+                  ]}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={100}
+                  dataKey="value"
+                >
+                  {[{ name: 'Allotted', value: isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length) },
+                    { name: 'Not Allotted', value: isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length) }].map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={['#22c55e', '#ef4444'][index % 2]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => [value, "Students"]} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>

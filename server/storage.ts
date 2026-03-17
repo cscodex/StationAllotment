@@ -1347,7 +1347,12 @@ export class DatabaseStorage implements IStorage {
   async getAllDistrictStatuses(counselingRoundId?: string): Promise<DistrictStatus[]> {
     if (counselingRoundId) {
       return db.select().from(districtStatus)
-        .where(eq(districtStatus.counselingRoundId, counselingRoundId))
+        .where(
+          or(
+            eq(districtStatus.counselingRoundId, counselingRoundId),
+            isNull(districtStatus.counselingRoundId)
+          )
+        )
         .orderBy(asc(districtStatus.district));
     }
     return db.select().from(districtStatus)

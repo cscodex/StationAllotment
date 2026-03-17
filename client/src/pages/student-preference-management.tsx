@@ -92,6 +92,7 @@ export default function StudentPreferenceManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [recordsPerPage, setRecordsPerPage] = useState(50);
   const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
 
   // Bulk scanner state
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
@@ -226,7 +227,7 @@ export default function StudentPreferenceManagement() {
   });
 
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ["/api/students"],
+    queryKey: ["/api/students", { limit: 50000 }],
     staleTime: 60000,
   });
 
@@ -241,6 +242,14 @@ export default function StudentPreferenceManagement() {
       filtered = filtered.filter((s: Student) => s.lockedBy);
     } else if (statusFilter === "unlocked") {
       filtered = filtered.filter((s: Student) => !s.lockedBy && s.choice1 && s.stream);
+    }
+
+    // 2. District Filter (For Central Admin)
+    if (user?.role === 'central_admin' && districtFilter !== "all") {
+      filtered = filtered.filter((s: Student) => {
+        if (districtFilter === "unassigned") return !s.counselingDistrict;
+        return s.counselingDistrict === districtFilter;
+      });
     }
 
     // 2. Search Filter
@@ -625,6 +634,25 @@ export default function StudentPreferenceManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                {user?.role === 'central_admin' && (
+                  <div className="w-full sm:w-[180px]">
+                    <Select value={districtFilter} onValueChange={(v: string) => setDistrictFilter(v)}>
+                      <SelectTrigger>
+                        <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                        <SelectValue placeholder="Filter by district" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Districts</SelectItem>
+                        <SelectItem value="unassigned">Unassigned District</SelectItem>
+                        {COUNSELING_DISTRICTS.map((district) => (
+                          <SelectItem key={district} value={district}>
+                            {district}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
