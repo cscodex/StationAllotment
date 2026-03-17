@@ -145,6 +145,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.sendFile(path.resolve(process.cwd(), "counseling_flow_diagram.drawio"));
   });
 
+  // DB Health endpoint for the frontend header
+  app.get("/api/health/database", async (req, res) => {
+    try {
+      const startTime = Date.now();
+      await storage.pingDatabase(); // Assuming storage has a ping method, or we can just run a query
+      const responseTime = Date.now() - startTime;
+      res.json({ status: 'online', responseTime, timestamp: new Date().toISOString() });
+    } catch (error) {
+      console.error("Database health check failed:", error);
+      res.status(503).json({ status: 'offline', error: "Database connection failed", timestamp: new Date().toISOString() });
+    }
+  });
+
   // GET endpoint to serve app documents like Flow Diagram from DB
   app.get('/api/documents/:name', async (req, res) => {
     try {

@@ -38,7 +38,8 @@ import {
   Loader2,
   Camera,
   UploadCloud,
-  FileText
+  FileText,
+  XCircle
 } from "lucide-react";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
@@ -142,6 +143,8 @@ export default function DistrictAdmin() {
       });
     }
   });
+
+  const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
 
   const { data: studentsData, isLoading } = useQuery({
     queryKey: ["/api/students", { limit: 50000, offset: 0, district: user?.district }],
@@ -470,7 +473,7 @@ export default function DistrictAdmin() {
 
   const handleFinalize = () => {
     if (!canFinalize) return;
-    finalizeDistrictMutation.mutate();
+    setIsFinalizeDialogOpen(true);
   };
 
   // Modal helper functions
@@ -1849,6 +1852,69 @@ export default function DistrictAdmin() {
           setPerStudentLiveScanStudent(null);
         }}
       />
+
+      {/* Finalize Allocation Dialog */}
+      <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalize District Allocation</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="space-y-4 mt-4 text-foreground">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-md text-amber-800">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" /> 
+                    Warning: Irreversible Action
+                  </h4>
+                  <p className="mt-2 text-sm">
+                    Finalizing the district will lock all student preferences from further edits and mark your district as ready for the final allotment process. This action <strong>cannot be undone</strong> without requesting Central Admin approval.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-md border text-center">
+                    <div className="text-2xl font-bold text-blue-600">{totalEligibleStudents}</div>
+                    <div className="text-xs text-muted-foreground">Total Students</div>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-md border text-center">
+                    <div className="text-2xl font-bold text-green-600">{lockedEligibleStudents}</div>
+                    <div className="text-xs text-muted-foreground">Locked Students</div>
+                  </div>
+                </div>
+
+                {lockedEligibleStudents < totalEligibleStudents ? (
+                  <div className="bg-red-50 border border-red-200 p-3 rounded-md text-red-800 text-sm flex items-start gap-2">
+                    <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Cannot Finalize:</strong> There are {totalEligibleStudents - lockedEligibleStudents} unlocked students. All district students must be locked before finalizing.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-green-50 border border-green-200 p-3 rounded-md text-green-800 text-sm flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    All students are locked and ready.
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
+              disabled={finalizeDistrictMutation.isPending || lockedEligibleStudents < totalEligibleStudents}
+              onClick={(e) => {
+                e.preventDefault();
+                finalizeDistrictMutation.mutate(undefined, {
+                  onSuccess: () => setIsFinalizeDialogOpen(false)
+                });
+              }}
+            >
+              {finalizeDistrictMutation.isPending ? "Finalizing..." : "Confirm Finalization"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

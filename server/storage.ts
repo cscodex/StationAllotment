@@ -200,9 +200,17 @@ export interface IStorage {
   createYearSession(session: InsertYearSession): Promise<YearSession>;
   updateYearSession(id: string, updates: Partial<InsertYearSession>): Promise<YearSession>;
   setCurrentYearSession(id: string): Promise<YearSession>;
+
+  // Database Health
+  pingDatabase(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
+  // Database Health
+  async pingDatabase(): Promise<void> {
+    await db.execute(sql`SELECT 1`);
+  }
+
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));

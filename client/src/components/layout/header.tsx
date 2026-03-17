@@ -17,7 +17,7 @@ interface HeaderProps {
 
 export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: HeaderProps) {
   const { user } = useAuth();
-  const { toggle } = useSidebarToggle();
+  const { toggleMobile, toggleCollapse } = useSidebarToggle();
   const { data: settings } = useQuery({
     queryKey: ["/api/settings"],
   });
@@ -83,7 +83,11 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
             size="sm"
             onClick={() => {
                 if (onMobileMenuToggle) onMobileMenuToggle();
-                toggle();
+                if (window.innerWidth < 768) {
+                  toggleMobile();
+                } else {
+                  toggleCollapse();
+                }
             }}
             data-testid="button-mobile-menu"
           >

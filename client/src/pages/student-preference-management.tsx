@@ -94,6 +94,9 @@ export default function StudentPreferenceManagement() {
   const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
 
+  // Finalize dialog state
+  const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
+
   // Bulk scanner state
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
@@ -147,7 +150,7 @@ export default function StudentPreferenceManagement() {
     });
   };
 
-  const { toggle: toggleSidebar } = useSidebarToggle();
+  const { toggleMobile: toggleSidebar } = useSidebarToggle();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -357,6 +360,23 @@ export default function StudentPreferenceManagement() {
     }
   });
 
+  // Bulk lock mutation
+  const bulkLockMutation = useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      await Promise.all(
+        studentIds.map(id => apiRequest('PUT', `/api/students/${id}/lock`, { isLocked: true }).then(r => r.json()))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      setSelectedStudentIds([]);
+      toast({ title: "Success", description: "Selected students locked successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Bulk lock failed", variant: "destructive" });
+    }
+  });
+
   // Confirmation functions for actions
   const confirmLockStudent = () => {
     if (!selectedStudentForLock) return;
@@ -555,9 +575,7 @@ export default function StudentPreferenceManagement() {
                     variant={isAllocationFinalized ? "outline" : "default"}
                     size="sm"
                     onClick={() => {
-                      if (!isAllocationFinalized && window.confirm('Are you sure you want to finalize the allocation process? This action cannot be undone.')) {
-                        finalizeAllocationMutation.mutate();
-                      }
+                      if (!isAllocationFinalized) setIsFinalizeDialogOpen(true);
                     }}
                     disabled={finalizeAllocationMutation.isPending || isAllocationFinalized}
                     data-testid="button-finalize-allocation"
@@ -671,6 +689,21 @@ export default function StudentPreferenceManagement() {
                     <DownloadCloud className="w-4 h-4" />
                     Blank OMRs ({selectedStudentIds.length})
                   </Button>
+                  {user?.role === 'central_admin' && (
+                    <Button 
+                      onClick={() => bulkLockMutation.mutate(selectedStudentIds)} 
+                      size="sm" 
+                      variant="default"
+                      className="flex items-center gap-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={bulkLockMutation.isPending || selectedStudentIds.every(id => {
+                        const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
+                        return s?.lockedBy || !areAllPreferencesFilled(s as Student);
+                      })}
+                    >
+                      <Lock className="w-4 h-4" />
+                      {bulkLockMutation.isPending ? "Locking..." : `Lock Selected (${selectedStudentIds.length})`}
+                    </Button>
+                  )}
                 </div>
               )}
             </CardHeader>
@@ -1620,6 +1653,82 @@ export default function StudentPreferenceManagement() {
           setPerStudentLiveScanStudent(null);
         }}
       />
+
+      {/* Finalize Allocation Dialog */}
+      <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalize Allocation Process</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="space-y-4 mt-4 text-foreground">
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-md text-amber-800">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" /> 
+                    Warning: Irreversible Action
+                  </h4>
+                  <p className="mt-2 text-sm">
+                    Finalizing the allocation will process all locked student preferences and assign stations. This action <strong>cannot be undone</strong>.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-md border text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {(studentsData as any)?.students?.filter((s: Student) => s.choice1 && s.stream).length || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Students w/ Preferences</div>
+                  </div>
+                  <div className="bg-gray-50 p-3 rounded-md border text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {(studentsData as any)?.students?.filter((s: Student) => s.lockedBy).length || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Locked Students</div>
+                  </div>
+                </div>
+
+                {(() => {
+                  const unlockedCount = (studentsData as any)?.students?.filter((s: Student) => s.choice1 && s.stream && !s.lockedBy).length || 0;
+                  if (unlockedCount > 0) {
+                    return (
+                      <div className="bg-red-50 border border-red-200 p-3 rounded-md text-red-800 text-sm flex items-start gap-2">
+                        <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Cannot Finalize:</strong> There are {unlockedCount} unlocked students who have filled their preferences. All students with preferences must be locked before finalizing.
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="bg-green-50 border border-green-200 p-3 rounded-md text-green-800 text-sm flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                      All students with preferences are locked and ready.
+                    </div>
+                  );
+                })()}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
+              disabled={
+                finalizeAllocationMutation.isPending || 
+                ((studentsData as any)?.students || []).filter((s: Student) => s.choice1 && s.stream && !s.lockedBy).length > 0
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                finalizeAllocationMutation.mutate(undefined, {
+                  onSuccess: () => setIsFinalizeDialogOpen(false)
+                });
+              }}
+            >
+              {finalizeAllocationMutation.isPending ? "Finalizing..." : "Confirm Finalization"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div >
   );
 }
