@@ -1552,152 +1552,267 @@ export default function DistrictAdmin() {
                 <DialogTitle>Edit Student Preferences - {selectedStudentForEdit?.name}</DialogTitle>
               </DialogHeader>
 
-              {/* Central Admin Notice */}
-              {user?.role === 'central_admin' && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-4" data-testid="text-central-admin-edit-notice">
-                  <p className="text-sm text-blue-800 dark:text-blue-300">
-                    <strong>Central Admin Mode:</strong> When you save these preferences, the student will be automatically assigned to district <strong>"SAS Nagar (Mohali)"</strong> with district admin <strong>"central_admin"</strong>.
-                  </p>
+              {selectedStudentForEdit && (
+                <div className={selectedStudentForEdit.omrImageUrl ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : ""}>
+                  {/* OMR Image & Visual Matrix Preview Column */}
+                  {selectedStudentForEdit.omrImageUrl && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-sm">OMR Scan Preview</h3>
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            Stream: {selectedStudentForEdit.stream || "N/A"}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Choices: {Array.from({ length: 10 }, (_, i) => selectedStudentForEdit[`choice${i + 1}` as keyof typeof selectedStudentForEdit]).filter(Boolean).length}/10 Detected
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="border border-input rounded-md overflow-hidden bg-muted/30 flex-1 flex items-center justify-center p-2 min-h-[300px]">
+                        <img
+                          src={selectedStudentForEdit.omrImageUrl as string}
+                          alt="OMR Scan Overlay"
+                          className="max-w-full max-h-[50vh] object-contain drop-shadow-md bg-white"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<p class="text-sm text-muted-foreground">Image unavailable — file may have been lost. Re-scan to restore.</p>'; }}
+                        />
+                      </div>
+                      {/* Scan Visual Matrix — Choices Grid */}
+                      <div className="border rounded-lg bg-slate-50 p-3 space-y-2">
+                        <h4 className="font-semibold text-xs text-muted-foreground uppercase">Scanned Choices Matrix</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Stream</p>
+                            <p className="text-sm font-bold text-primary">{selectedStudentForEdit.stream || "Not detected"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Choices Filled</p>
+                            <p className="text-sm font-bold">{Array.from({ length: 10 }, (_, i) => selectedStudentForEdit[`choice${i + 1}` as keyof typeof selectedStudentForEdit]).filter(Boolean).length} / 10</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-1">
+                          {Array.from({ length: 10 }, (_, i) => {
+                            const val = selectedStudentForEdit[`choice${i + 1}` as keyof typeof selectedStudentForEdit] as string;
+                            return (
+                              <div key={i} className="flex items-center py-0.5 border-b border-dashed">
+                                <span className="w-6 text-muted-foreground font-mono">{i + 1}.</span>
+                                <span className={val ? 'font-medium text-green-700' : 'text-rose-400 italic'}>
+                                  {val ? `🟢 ${val}` : '—'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[10px] text-center text-slate-400 mt-1">🟢 = filled from OMR scan</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Form Column */}
+                  <div>
+                    {/* Central Admin Notice */}
+                    {user?.role === 'central_admin' && (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 mb-4" data-testid="text-central-admin-edit-notice">
+                        <p className="text-sm text-blue-800 dark:text-blue-300">
+                          <strong>Central Admin Mode:</strong> When you save these preferences, the student will be automatically assigned to district <strong>"SAS Nagar (Mohali)"</strong> with district admin <strong>"central_admin"</strong>.
+                        </p>
+                      </div>
+                    )}
+
+                    <Form {...form}>
+                      <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="stream"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Stream</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-stream">
+                                      <SelectValue placeholder="Select stream" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {STREAMS.map((stream) => (
+                                      <SelectItem key={stream} value={stream}>
+                                        {stream}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                          <p className="text-sm text-amber-800 dark:text-amber-300">
+                            <strong>District Choices:</strong> Students can select up to 10 districts in order of preference.
+                            Only the 10 school districts where seats are available are shown. Students will be allocated to their highest available choice during the allocation process.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 xl:grid-cols-5 gap-3 mb-4">
+                          {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
+                            <FormField
+                              key={choiceNum}
+                              control={form.control}
+                              name={`choice${choiceNum}` as any}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Choice {choiceNum}</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl>
+                                      <SelectTrigger data-testid={`select-choice${choiceNum}`}>
+                                        <SelectValue placeholder="Select district" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value=" ">None</SelectItem>
+                                      {DISTRICTS.map((district) => (
+                                        <SelectItem key={district} value={district}>
+                                          {district}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          ))}
+                        </div>
+
+                        <DialogFooter>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsEditModalOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={updatePreferencesMutation.isPending}
+                            data-testid="button-save-preferences"
+                          >
+                            {updatePreferencesMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                            ) : (
+                              <><Save className="w-4 h-4 mr-2" /> Save Changes</>
+                            )}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </Form>
+                  </div>
                 </div>
               )}
-
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleModalSave)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="stream"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Stream</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-stream">
-                                <SelectValue placeholder="Select stream" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {STREAMS.map((stream) => (
-                                <SelectItem key={stream} value={stream}>
-                                  {stream}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                    <p className="text-sm text-amber-800 dark:text-amber-300">
-                      <strong>District Choices:</strong> Students can select up to 10 districts in order of preference.
-                      Only the 10 school districts where seats are available are shown. Students will be allocated to their highest available choice during the allocation process.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-5 gap-3 mb-4">
-                    {Array.from({ length: 10 }, (_, i) => i + 1).map((choiceNum) => (
-                      <FormField
-                        key={choiceNum}
-                        control={form.control}
-                        name={`choice${choiceNum}` as any}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Choice {choiceNum}</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <FormControl>
-                                <SelectTrigger data-testid={`select-choice${choiceNum}`}>
-                                  <SelectValue placeholder="Select district" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value=" ">None</SelectItem>
-                                {DISTRICTS.map((district) => (
-                                  <SelectItem key={district} value={district}>
-                                    {district}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    ))}
-                  </div>
-
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsEditModalOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={updatePreferencesMutation.isPending}
-                      data-testid="button-save-preferences"
-                    >
-                      {updatePreferencesMutation.isPending ? (
-                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
-                      ) : (
-                        <><Save className="w-4 h-4 mr-2" /> Save Changes</>
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
             </DialogContent>
           </Dialog>
 
           {/* Choices View Modal */}
           <Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className={selectedStudentForChoices?.omrImageUrl ? "max-w-4xl max-h-[90vh] overflow-y-auto" : "max-w-2xl"}>
               <DialogHeader>
                 <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 gap-2">
-                  {selectedStudentForChoices && [
-                    selectedStudentForChoices.choice1, selectedStudentForChoices.choice2,
-                    selectedStudentForChoices.choice3, selectedStudentForChoices.choice4,
-                    selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
-                    selectedStudentForChoices.choice7, selectedStudentForChoices.choice8,
-                    selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
-                  ].map((choice, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded">
-                      <span className="font-medium">Choice {index + 1}:</span>
-                      <span className={choice ? "text-blue-600" : "text-gray-400"}>
-                        {choice || "Not set"}
-                      </span>
+              {selectedStudentForChoices && (
+                <div className={selectedStudentForChoices.omrImageUrl ? "grid grid-cols-1 lg:grid-cols-2 gap-6" : ""}>
+                  {/* OMR Image & Visual Matrix Preview Column */}
+                  {selectedStudentForChoices.omrImageUrl && (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-sm">OMR Scan Preview</h3>
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            Stream: {selectedStudentForChoices.stream || "N/A"}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Choices: {Array.from({ length: 10 }, (_, i) => selectedStudentForChoices[`choice${i + 1}` as keyof typeof selectedStudentForChoices]).filter(Boolean).length}/10 Detected
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="border border-input rounded-md overflow-hidden bg-muted/30 flex-1 flex items-center justify-center p-2 min-h-[300px]">
+                        <img
+                          src={selectedStudentForChoices.omrImageUrl as string}
+                          alt="OMR Scan Overlay"
+                          className="max-w-full max-h-[50vh] object-contain drop-shadow-md bg-white"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<p class="text-sm text-muted-foreground">Image unavailable — file may have been lost. Re-scan to restore.</p>'; }}
+                        />
+                      </div>
+                      {/* Scan Visual Matrix — Choices Grid */}
+                      <div className="border rounded-lg bg-slate-50 p-3 space-y-2">
+                        <h4 className="font-semibold text-xs text-muted-foreground uppercase">Scanned Choices Matrix</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Stream</p>
+                            <p className="text-sm font-bold text-primary">{selectedStudentForChoices.stream || "Not detected"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Choices Filled</p>
+                            <p className="text-sm font-bold">{Array.from({ length: 10 }, (_, i) => selectedStudentForChoices[`choice${i + 1}` as keyof typeof selectedStudentForChoices]).filter(Boolean).length} / 10</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-1">
+                          {Array.from({ length: 10 }, (_, i) => {
+                            const val = selectedStudentForChoices[`choice${i + 1}` as keyof typeof selectedStudentForChoices] as string;
+                            return (
+                              <div key={i} className="flex items-center py-0.5 border-b border-dashed">
+                                <span className="w-6 text-muted-foreground font-mono">{i + 1}.</span>
+                                <span className={val ? 'font-medium text-green-700' : 'text-rose-400 italic'}>
+                                  {val ? `🟢 ${val}` : '—'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[10px] text-center text-slate-400 mt-1">🟢 = filled from OMR scan</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  )}
 
-                {selectedStudentForChoices && (
-                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div><strong>Stream:</strong> {selectedStudentForChoices.stream || "Not set"}</div>
-                      <div><strong>Status:</strong> {selectedStudentForChoices.isLocked ? "🔒 Locked" : "🔓 Unlocked"}</div>
-                      <div><strong>Merit Number:</strong> {selectedStudentForChoices.meritNumber}</div>
-                      <div><strong>App Number:</strong> {selectedStudentForChoices.appNo}</div>
+                  <div className="flex flex-col h-full space-y-3">
+                    <div className="grid grid-cols-1 gap-2 flex-grow">
+                      {[
+                        selectedStudentForChoices.choice1, selectedStudentForChoices.choice2,
+                        selectedStudentForChoices.choice3, selectedStudentForChoices.choice4,
+                        selectedStudentForChoices.choice5, selectedStudentForChoices.choice6,
+                        selectedStudentForChoices.choice7, selectedStudentForChoices.choice8,
+                        selectedStudentForChoices.choice9, selectedStudentForChoices.choice10
+                      ].map((choice, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 border rounded">
+                          <span className="font-medium">Choice {index + 1}:</span>
+                          <span className={choice ? "text-blue-600" : "text-gray-400"}>
+                            {choice || "Not set"}
+                          </span>
+                        </div>
+                      ))}
                     </div>
+
+                    <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div><strong>Stream:</strong> {selectedStudentForChoices.stream || "Not set"}</div>
+                        <div><strong>Status:</strong> {selectedStudentForChoices.isLocked ? "🔒 Locked" : "🔓 Unlocked"}</div>
+                        <div><strong>Merit Number:</strong> {selectedStudentForChoices.meritNumber}</div>
+                        <div><strong>App Number:</strong> {selectedStudentForChoices.appNo}</div>
+                      </div>
+                    </div>
+                    
+                    <DialogFooter className="mt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsChoicesModalOpen(false)}
+                      >
+                        Close
+                      </Button>
+                    </DialogFooter>
                   </div>
-                )}
-              </div>
-
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsChoicesModalOpen(false)}
-                >
-                  Close
-                </Button>
-              </DialogFooter>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 

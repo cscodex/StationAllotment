@@ -189,6 +189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { students } = await import("@shared/schema");
       const { eq } = await import("drizzle-orm");
       const { compressToA4 } = await import("./imageCompressor");
+      const { uploadToCloudinary } = await import("./cloudinaryService");
 
       const studentId = req.params.id;
 
@@ -198,10 +199,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`OMR image compressed: ${result.sizeKB} KB, ${result.width}×${result.height}, quality ${result.quality}`);
       } catch (compressErr) {
         console.warn("Image compression skipped (non-fatal):", compressErr);
-        // Continue with the original file if compression fails
       }
 
-      const omrImageUrl = `/uploads/${req.file.filename}`;
+      // Upload to Cloudinary (falls back to local if not configured)
+      const uploadResult = await uploadToCloudinary(req.file.path, {
+        folder: 'station-allotment/omr-scans',
+        publicId: `omr_${studentId}`,
+      });
+
+      const omrImageUrl = uploadResult.url;
 
       const [updated] = await db
         .update(students)
@@ -213,7 +219,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Student not found" });
       }
 
-      res.json({ message: "Image uploaded successfully", omrImageUrl });
+      res.json({ message: "Image uploaded successfully", omrImageUrl, isCloudinary: uploadResult.isCloudinary });
     } catch (error) {
       console.error("Error uploading OMR image:", error);
       res.status(500).json({ message: "Failed to upload image" });
