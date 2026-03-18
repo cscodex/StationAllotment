@@ -18,9 +18,10 @@ import {
   LogOut,
   ClipboardCheck,
   Clock,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -64,6 +65,11 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  const { data: dbHealth } = useQuery<{status: string; error?: string}>({
+    queryKey: ["/api/health/database"],
+    refetchInterval: 30000,
+  });
 
   // Update time every second
   useEffect(() => {
@@ -132,7 +138,6 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
             <div>
               <h1 className="text-lg font-semibold">Seat Allotment</h1>
               <p className="text-xs text-muted-foreground">Management System</p>
-              <p className="text-[10px] text-muted-foreground/60 font-mono mt-0.5">Build: c2c799b</p>
             </div>
           )}
         </div>
@@ -156,28 +161,6 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
           </Button>
         )}
       </div>
-        {!isCollapsed && (
-          <div className="pt-3 border-t border-border mt-4">
-            <div className="flex items-start space-x-2 text-xs">
-              <Clock className="w-3.5 h-3.5 text-muted-foreground mt-0.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-muted-foreground font-medium truncate" title={timezone}>
-                  {timezone.split('/').pop() || timezone}
-                </div>
-                <div className="text-muted-foreground/80 mt-0.5">
-                  {formattedDate}
-                </div>
-                <div className="text-foreground font-semibold mt-1">
-                  {formattedTime}
-                </div>
-                <div className="text-muted-foreground/70 text-[10px] mt-0.5">
-                  {timezoneOffsetString}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
       <nav className={cn("flex-1 space-y-2 overflow-y-auto min-h-0 custom-scrollbar", isCollapsed ? "p-2" : "p-4")}>
         {navigation.map((section) => (
           <div key={section.name} className="mb-4">
@@ -248,7 +231,7 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
           <Button
             variant="ghost"
             size="sm"
-            className={cn("w-full transition-colors", isCollapsed ? "justify-center p-2 h-auto" : "justify-start text-sm px-3 py-2")}
+            className={cn("w-full transition-colors mb-2", isCollapsed ? "justify-center p-2 h-auto" : "justify-start text-sm px-3 py-2")}
             onClick={handleLogout}
             disabled={logoutMutation.isPending}
             data-testid="button-logout"
@@ -257,6 +240,31 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
             <LogOut className={cn("flex-shrink-0", isCollapsed ? "w-5 h-5" : "w-4 h-4 mr-2")} />
             {!isCollapsed && <span>{logoutMutation.isPending ? "Signing out..." : "Sign Out"}</span>}
           </Button>
+
+          {/* Moved Info Footer */}
+          {!isCollapsed && (
+            <div className="pt-3 mt-1 border-t border-border/50 text-[10px] text-muted-foreground/80">
+              <div className="flex flex-col gap-1 px-1">
+                <div className="flex items-center justify-between">
+                  <span>{formattedDate} {formattedTime}</span>
+                  <span className="font-mono" title={`${timezone} (${timezoneOffsetString})`}>
+                    {timezoneOffsetString}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono">Build: c2c799b</span>
+                  <div className="flex items-center gap-1">
+                    <Database className="w-3 h-3" />
+                    {dbHealth?.status === 'ok' ? (
+                      <span className="text-green-500 font-medium">Online ✅</span>
+                    ) : (
+                      <span className="text-red-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[60px]" title={dbHealth?.error || 'Offline'}>Offline ❌</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

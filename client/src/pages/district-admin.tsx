@@ -104,8 +104,8 @@ export default function DistrictAdmin() {
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
   const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
   const [perStudentLiveScanStudent, setPerStudentLiveScanStudent] = useState<Student | null>(null);
-  const [isGraphsCollapsed, setIsGraphsCollapsed] = useState(false);
-
+  const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
+  const [isBatchLockConfirmOpen, setIsBatchLockConfirmOpen] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -895,56 +895,46 @@ export default function DistrictAdmin() {
 
       <main className="flex-1 p-6 overflow-auto">
         <div className="space-y-6">
-          {/* Status Banner */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <ShieldQuestion className="w-5 h-5 text-primary" />
-                  <div>
-                    <h3 className="font-semibold">District: {user?.district || 'All Districts'}</h3>
-                    <p className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
-                      {isFinalized ?
-                        "District data has been finalized and submitted for allocation" :
-                        "You can modify student preferences until the deadline"
-                      }
-                      {activeRound != null && (
-                         <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-                            Active Round: {String((activeRound as any).roundName)} (Round {String((activeRound as any).roundNumber)})
-                         </Badge>
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {isFinalized ? (
-                    <>
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">✓ Finalized</Badge>
-                    </>
-                  ) : isDeadlinePassed ? (
-                    <>
-                      <AlertTriangle className="w-5 h-5 text-red-500" />
-                      <Badge variant="destructive">Deadline Passed</Badge>
-                    </>
-                  ) : deadlineDate ? (
-                    <>
-                      <Clock className="w-5 h-5 text-amber-500" />
-                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                        {Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days left
-                      </Badge>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">Active</Badge>
-                    </>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
+          {/* Status Banners - Minimal Layout */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="text-sm border-primary/20 bg-primary/5 py-1">
+                <ShieldQuestion className="w-3.5 h-3.5 mr-1.5 text-primary" />
+                District: {user?.district || 'All Districts'}
+              </Badge>
+              {activeRound != null && (
+                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 py-1">
+                    Round {String((activeRound as any).roundNumber)}: {String((activeRound as any).roundName)}
+                 </Badge>
+              )}
+              {isFinalized ? (
+                <Badge variant="secondary" className="bg-green-100 text-green-800 py-1 flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5"/> Finalized
+                </Badge>
+              ) : isDeadlinePassed ? (
+                <Badge variant="destructive" className="py-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5"/> Deadline Passed
+                </Badge>
+              ) : deadlineDate ? (
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 py-1 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5"/> {Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))} days left
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-green-100 text-green-800 py-1 flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5"/> Active
+                </Badge>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-primary hover:bg-primary/10 ml-auto h-8 px-3 flex items-center gap-2"
+              onClick={() => setIsInfographicsOpen(true)}
+            >
+              <BarChart2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Infographics</span>
+            </Button>
+          </div>
           {/* Request Status Banners */}
           {pendingRequest && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg flex items-start gap-3 shadow-sm">
@@ -1022,41 +1012,31 @@ export default function DistrictAdmin() {
             </div>
           )}
 
-          {/* Student Stats Infographics */}
-          {(studentsData as any)?.students?.length > 0 && (() => {
-            const allStudents: Student[] = (studentsData as any).students;
-            const locked = allStudents.filter((s: Student) => s.isLocked || s.lockedBy).length;
-            const unlocked = allStudents.length - locked;
-            const withPrefs = allStudents.filter((s: Student) => s.choice1 && s.stream).length;
-            const withoutPrefs = allStudents.length - withPrefs;
-            const streamData = allStudents.reduce((acc: Record<string, number>, s: Student) => {
-              if (!s.stream || !s.choice1) return acc;
-              const key = s.stream === 'Non-Medical' ? 'NonMedical' : s.stream;
-              acc[key] = (acc[key] || 0) + 1;
-              return acc;
-            }, {});
-            return (
-              <div className="border rounded-lg overflow-hidden">
-                {/* Collapsible Header */}
-                <button
-                  type="button"
-                  onClick={() => setIsGraphsCollapsed(!isGraphsCollapsed)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-sm font-medium"
-                >
-                  <span className="flex items-center gap-2">
-                    <BarChart2 className="w-4 h-4 text-primary" />
-                    Student Statistics
-                  </span>
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    <span className="text-xs">{locked} locked / {allStudents.length} total</span>
-                    {isGraphsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-                  </span>
-                </button>
-                {/* Charts Grid (collapsible) */}
-                {!isGraphsCollapsed && (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
+          {/* Student Stats Infographics Modal */}
+          <Dialog open={isInfographicsOpen} onOpenChange={setIsInfographicsOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>District Student Statistics</DialogTitle>
+              </DialogHeader>
+              {(studentsData as any)?.students?.length > 0 ? (() => {
+                const allStudents: Student[] = (studentsData as any).students;
+                const locked = allStudents.filter((s: Student) => s.isLocked || s.lockedBy).length;
+                const unlocked = allStudents.length - locked;
+                const withPrefs = allStudents.filter((s: Student) => s.choice1 && s.stream).length;
+                const withoutPrefs = allStudents.length - withPrefs;
+                const streamData = allStudents.reduce((acc: Record<string, number>, s: Student) => {
+                  if (!s.stream || !s.choice1) return acc;
+                  const key = s.stream === 'Non-Medical' ? 'NonMedical' : s.stream;
+                  acc[key] = (acc[key] || 0) + 1;
+                  return acc;
+                }, {});
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-2">
                     <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm">Lock Status</CardTitle></CardHeader>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Lock Status</CardTitle>
+                        <p className="text-xs text-muted-foreground">{locked} locked / {allStudents.length} total</p>
+                      </CardHeader>
                       <CardContent className="h-[200px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
@@ -1096,10 +1076,14 @@ export default function DistrictAdmin() {
                       </CardContent>
                     </Card>
                   </div>
-                )}
-              </div>
-            );
-          })()}
+                );
+              })() : (
+                <div className="p-8 text-center text-muted-foreground">
+                  No student data available to display statistics.
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
 
           {/* Tabs Navigation */}
           <Tabs defaultValue="student-management" className="w-full">
@@ -1175,113 +1159,119 @@ export default function DistrictAdmin() {
                       )}
                     </div>
                     {/* Row 2: Selection Actions + Scanners + Records per page */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={selectAll}
-                        disabled={filteredStudents.length === 0}
-                        data-testid="button-select-all"
-                      >
-                        Select All
-                      </Button>
-                      {selectedStudents.size > 0 && (
-                        <>
+                    {!isFinalized && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={clearSelection}
-                            data-testid="button-clear-selection"
+                            className="h-8"
+                            onClick={selectAll}
+                            disabled={filteredStudents.length === 0}
+                            data-testid="button-select-all"
                           >
-                            Clear
+                            Select All
+                          </Button>
+                          {selectedStudents.size > 0 && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                onClick={clearSelection}
+                                data-testid="button-clear-selection"
+                              >
+                                Clear
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setIsBatchLockConfirmOpen(true)}
+                                disabled={
+                                  batchLockMutation.isPending ||
+                                  isDeadlinePassed ||
+                                  Array.from(selectedStudents).some(id => {
+                                    const student = filteredStudents.find((s: Student) => s.id === id);
+                                    return !student?.stream || !student?.choice1;
+                                  }) ||
+                                  Array.from(selectedStudents).every(id => {
+                                    const student = filteredStudents.find((s: Student) => s.id === id);
+                                    return student?.isLocked === true;
+                                  })
+                                }
+                                title={
+                                  Array.from(selectedStudents).some(id => {
+                                    const student = filteredStudents.find((s: Student) => s.id === id);
+                                    return !student?.stream || !student?.choice1;
+                                  }) 
+                                    ? "Cannot bulk lock: One or more selected students have missing stream or station preferences" 
+                                    : "Lock Selected Students"
+                                }
+                                data-testid="button-batch-lock"
+                              >
+                                {batchLockMutation.isPending ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Lock className="w-4 h-4" />
+                                )}
+                              </Button>
+                              <Button 
+                                onClick={handleTestScenariosDownload} 
+                                variant="secondary" 
+                                size="sm" 
+                                className="h-8 w-8 p-0 border-primary/20 text-primary"
+                                title="Download Mock OMRs (Bulk)"
+                              >
+                                <DownloadCloud className="w-4 h-4" />
+                              </Button>
+                              <Button 
+                                onClick={handleBulkDownloadOMR} 
+                                size="sm" 
+                                className="h-8 w-8 p-0"
+                                title="Download Blank OMRs (Bulk)"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Scanner Buttons */}
+                        <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsLiveScannerOpen(true)}
+                            className="h-8 w-8 p-0 text-orange-500 border-orange-500 hover:bg-orange-50"
+                            disabled={isDeadlinePassed}
+                            title="Live Scan"
+                          >
+                            <Camera className="w-4 h-4" />
                           </Button>
                           <Button
-                            variant="secondary"
+                            variant="outline"
                             size="sm"
-                            onClick={handleBatchLock}
-                            disabled={
-                              batchLockMutation.isPending ||
-                              isDeadlinePassed ||
-                              isFinalized ||
-                              Array.from(selectedStudents).some(id => {
-                                const student = filteredStudents.find((s: Student) => s.id === id);
-                                return !student?.stream || !student?.choice1;
-                              }) ||
-                              Array.from(selectedStudents).every(id => {
-                                const student = filteredStudents.find((s: Student) => s.id === id);
-                                return student?.isLocked === true;
-                              })
-                            }
-                            title={
-                              Array.from(selectedStudents).some(id => {
-                                const student = filteredStudents.find((s: Student) => s.id === id);
-                                return !student?.stream || !student?.choice1;
-                              }) 
-                                ? "Cannot bulk lock: One or more selected students have missing stream or station preferences" 
-                                : undefined
-                            }
-                            data-testid="button-batch-lock"
+                            onClick={() => setIsBulkScannerOpen(true)}
+                            className="h-8 w-8 p-0 text-primary border-primary hover:bg-primary/10"
+                            disabled={isDeadlinePassed}
+                            title="Bulk PDF Scan"
                           >
-                            {batchLockMutation.isPending ? (
-                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Locking...</>
-                            ) : (
-                              <>🔒 Lock Selected</>
-                            )}
+                            <UploadCloud className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            onClick={handleTestScenariosDownload} 
-                            variant="secondary" 
-                            size="sm" 
-                            className="flex items-center gap-2 border-primary/20 text-primary"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setScannerStudent(undefined); setIsGlobalImageScanOpen(true); }}
+                            className="h-8 w-8 p-0 text-violet-600 border-violet-500 hover:bg-violet-50"
+                            disabled={isDeadlinePassed}
+                            title="Upload Image"
                           >
-                            <DownloadCloud className="w-4 h-4" />
-                            Mock OMRs (Bulk)
+                            <FileText className="w-4 h-4" />
                           </Button>
-                          <Button 
-                            onClick={handleBulkDownloadOMR} 
-                            size="sm" 
-                            className="flex items-center gap-2"
-                          >
-                            <DownloadCloud className="w-4 h-4" />
-                            Blank OMRs (Bulk)
-                          </Button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Scanner Buttons */}
-                    <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsLiveScannerOpen(true)}
-                        className="text-orange-500 border-orange-500 hover:bg-orange-50"
-                        disabled={isDeadlinePassed || isFinalized}
-                      >
-                        <Camera className="w-4 h-4 mr-2" />
-                        Live Scan
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsBulkScannerOpen(true)}
-                        className="text-primary border-primary hover:bg-primary/10"
-                        disabled={isDeadlinePassed || isFinalized}
-                      >
-                        <UploadCloud className="w-4 h-4 mr-2" />
-                        Bulk PDF Scan
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setScannerStudent(undefined); setIsGlobalImageScanOpen(true); }}
-                        className="text-violet-600 border-violet-500 hover:bg-violet-50"
-                        disabled={isDeadlinePassed || isFinalized}
-                      >
-                        <FileText className="w-4 h-4 mr-2" />
-                        Upload Image
-                      </Button>
-                    </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -1316,8 +1306,8 @@ export default function DistrictAdmin() {
 
                       <div className="rounded-md border overflow-auto max-h-[600px]">
                         <Table>
-                          <TableHeader>
-                            <TableRow>
+                          <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
+                            <TableRow className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                               <TableHead className="w-12">
                                 <input
                                   type="checkbox"
@@ -1325,17 +1315,18 @@ export default function DistrictAdmin() {
                                   onChange={selectedStudents.size === filteredStudents.length ? clearSelection : selectAll}
                                   className="rounded border-gray-300"
                                   data-testid="checkbox-select-all"
+                                  disabled={isFinalized}
                                 />
                               </TableHead>
-                              <TableHead>App No.</TableHead>
-                              <TableHead>Merit No.</TableHead>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Stream</TableHead>
-                              <TableHead>Counseling District</TableHead>
-                              <TableHead>District Admin</TableHead>
-                              <TableHead>Locked</TableHead>
-                              <TableHead>Choices (1-10)</TableHead>
-                              <TableHead className="sticky right-0 bg-card shadow-l border-l">Actions</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">App No.</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">Merit No.</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">Name</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">Stream</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">Counseling District</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">District Admin</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">Locked</TableHead>
+                              <TableHead className="text-slate-700 dark:text-slate-300 font-semibold">Choices (1-10)</TableHead>
+                              <TableHead className="sticky right-0 bg-slate-50 dark:bg-slate-800 shadow-sm border-l text-slate-700 dark:text-slate-300 font-semibold">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -1381,66 +1372,56 @@ export default function DistrictAdmin() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex gap-1">
-                                    {canEditStudent(student) ? (
-                                      <>
-                                        {/* Per-student scan buttons */}
-                                        {!student.isLocked && !isDeadlinePassed && !isFinalized && (
-                                          <>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-8 px-2 text-emerald-600 border-emerald-300"
-                                              onClick={() => setPerStudentLiveScanStudent(student)}
-                                              title="Live Camera Scan"
-                                            >
-                                              <Camera className="w-3 h-3" />
-                                            </Button>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="h-8 px-2 text-violet-600 border-violet-300"
-                                              onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
-                                              title="Upload OMR Image"
-                                            >
-                                              <UploadCloud className="w-3 h-3" />
-                                            </Button>
-                                          </>
-                                        )}
-                                        <Button
-                                          asChild
-                                          variant="outline"
-                                          size="sm"
-                                          className="h-8 px-2 mr-1"
-                                          title="Download Unfilled OMR"
-                                        >
-                                          <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
-                                            <FileText className="w-3 h-3" />
-                                          </a>
-                                        </Button>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => openEditModal(student)}
-                                          disabled={isDeadlinePassed || student.isLocked === true || isFinalized}
-                                          data-testid={`button-edit-${student.meritNumber}`}
-                                        >
-                                          <Edit className="w-3 h-3 mr-1" />
-                                          Edit
-                                        </Button>
-                                      </>
-                                    ) : (
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        disabled
-                                        data-testid={`button-edit-disabled-${student.meritNumber}`}
-                                        className="text-muted-foreground"
-                                      >
-                                        <Edit className="w-3 h-3 mr-1" />
-                                        Edit
-                                      </Button>
-                                    )}
+                                    <div className="flex gap-1 justify-end">
+                                      {!isFinalized && canEditStudent(student) && (
+                                        <>
+                                          {/* Per-student scan buttons */}
+                                          {!student.isLocked && !isDeadlinePassed && (
+                                            <>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-emerald-600 border-emerald-300"
+                                                onClick={() => setPerStudentLiveScanStudent(student)}
+                                                title="Live Camera Scan"
+                                              >
+                                                <Camera className="w-4 h-4" />
+                                              </Button>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-violet-600 border-violet-300"
+                                                onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                                title="Upload OMR Image"
+                                              >
+                                                <UploadCloud className="w-4 h-4" />
+                                              </Button>
+                                            </>
+                                          )}
+                                          <Button
+                                            asChild
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 w-8 p-0"
+                                            title="Download Unfilled OMR"
+                                          >
+                                            <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
+                                              <FileText className="w-4 h-4" />
+                                            </a>
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-8 w-8 p-0"
+                                            onClick={() => openEditModal(student)}
+                                            disabled={isDeadlinePassed || student.isLocked === true}
+                                            data-testid={`button-edit-${student.meritNumber}`}
+                                            title="Edit Preference"
+                                          >
+                                            <Edit className="w-4 h-4" />
+                                          </Button>
+                                        </>
+                                      )}
                                     {/* Lock/Unlock buttons - only show if user can edit student */}
                                     {canEditStudent(student) && (
                                       student.isLocked === true ? (
@@ -1650,6 +1631,26 @@ export default function DistrictAdmin() {
             </TabsContent>
           </Tabs>
 
+          {/* Batch Lock Confirmation Dialog */}
+          <AlertDialog open={isBatchLockConfirmOpen} onOpenChange={setIsBatchLockConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Bulk Lock</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action will finalise and lock the preferences for {selectedStudents.size} students. This action cannot be undone by you without submitting an unlock request to Central Admin.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => {
+                  setIsBatchLockConfirmOpen(false);
+                  handleBatchLock();
+                }}>
+                  Confirm Lock
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {/* Edit Modal */}
           <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
