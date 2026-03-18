@@ -39,7 +39,14 @@ import {
   Camera,
   UploadCloud,
   FileText,
-  XCircle
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronLeft,
+  ChevronRight,
+  BarChart2
 } from "lucide-react";
 import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
@@ -96,6 +103,7 @@ export default function DistrictAdmin() {
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
   const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
   const [perStudentLiveScanStudent, setPerStudentLiveScanStudent] = useState<Student | null>(null);
+  const [isGraphsCollapsed, setIsGraphsCollapsed] = useState(false);
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -950,47 +958,67 @@ export default function DistrictAdmin() {
               return acc;
             }, {});
             return (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Lock Status</CardTitle></CardHeader>
-                  <CardContent className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={[{name:'Locked',value:locked},{name:'Unlocked',value:unlocked}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
-                          <Cell fill="#6366f1" /><Cell fill="#e2e8f0" />
-                        </Pie>
-                        <Tooltip /><Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Preferences Filled</CardTitle></CardHeader>
-                  <CardContent className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={[{name:'Filled',value:withPrefs},{name:'Pending',value:withoutPrefs}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
-                          <Cell fill="#22c55e" /><Cell fill="#f59e0b" />
-                        </Pie>
-                        <Tooltip /><Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Stream Breakdown</CardTitle></CardHeader>
-                  <CardContent className="h-[200px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={Object.entries(streamData).map(([name, value]) => ({ name, value }))} margin={{top:5,right:10,left:0,bottom:5}}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" tick={{fontSize:11}} />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip />
-                        <Bar dataKey="value" fill="#6366f1" radius={[4,4,0,0]} name="Students" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
+              <div className="border rounded-lg overflow-hidden">
+                {/* Collapsible Header */}
+                <button
+                  type="button"
+                  onClick={() => setIsGraphsCollapsed(!isGraphsCollapsed)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors text-sm font-medium"
+                >
+                  <span className="flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-primary" />
+                    Student Statistics
+                  </span>
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <span className="text-xs">{locked} locked / {allStudents.length} total</span>
+                    {isGraphsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                  </span>
+                </button>
+                {/* Charts Grid (collapsible) */}
+                {!isGraphsCollapsed && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Lock Status</CardTitle></CardHeader>
+                      <CardContent className="h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={[{name:'Locked',value:locked},{name:'Unlocked',value:unlocked}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
+                              <Cell fill="#6366f1" /><Cell fill="#e2e8f0" />
+                            </Pie>
+                            <Tooltip /><Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Preferences Filled</CardTitle></CardHeader>
+                      <CardContent className="h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={[{name:'Filled',value:withPrefs},{name:'Pending',value:withoutPrefs}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
+                              <Cell fill="#22c55e" /><Cell fill="#f59e0b" />
+                            </Pie>
+                            <Tooltip /><Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2"><CardTitle className="text-sm">Stream Breakdown</CardTitle></CardHeader>
+                      <CardContent className="h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={Object.entries(streamData).map(([name, value]) => ({ name, value }))} margin={{top:5,right:10,left:0,bottom:5}}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{fontSize:11}} />
+                            <YAxis allowDecimals={false} />
+                            <Tooltip />
+                            <Bar dataKey="value" fill="#6366f1" radius={[4,4,0,0]} name="Students" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -1018,54 +1046,58 @@ export default function DistrictAdmin() {
                       </Badge>
                     )}
                   </CardTitle>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="relative flex-1 max-w-md">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search by name, merit number, or application number..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                        data-testid="input-search-students"
-                      />
-                    </div>
-                    <div className="flex-1 w-[200px]">
-                      <Select
-                        value={statusFilter}
-                        onValueChange={(val: any) => setStatusFilter(val)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Filter by status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Students</SelectItem>
-                          <SelectItem value="locked">Locked Only</SelectItem>
-                          <SelectItem value="unlocked">Unlocked Only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {user?.role === 'central_admin' && (
-                      <div className="flex-1 w-[220px]">
+                  <div className="flex flex-col gap-3">
+                    {/* Row 1: Search + Status Filter */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Search by name, merit no, app no..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10"
+                          data-testid="input-search-students"
+                        />
+                      </div>
+                      <div className="w-full sm:w-[180px]">
                         <Select
-                          value={districtFilter}
-                          onValueChange={(val: any) => setDistrictFilter(val)}
+                          value={statusFilter}
+                          onValueChange={(val: any) => setStatusFilter(val)}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Filter by district" />
+                            <SelectValue placeholder="Filter by status" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">All Districts</SelectItem>
-                            <SelectItem value="unassigned">Unassigned District</SelectItem>
-                            {COUNSELING_DISTRICTS.map((district) => (
-                              <SelectItem key={district} value={district}>
-                                {district}
-                              </SelectItem>
-                            ))}
+                            <SelectItem value="all">All Students</SelectItem>
+                            <SelectItem value="locked">Locked Only</SelectItem>
+                            <SelectItem value="unlocked">Unlocked Only</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-                    <div className="flex items-center gap-2">
+                      {user?.role === 'central_admin' && (
+                        <div className="w-full sm:w-[200px]">
+                          <Select
+                            value={districtFilter}
+                            onValueChange={(val: any) => setDistrictFilter(val)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Filter by district" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Districts</SelectItem>
+                              <SelectItem value="unassigned">Unassigned District</SelectItem>
+                              {COUNSELING_DISTRICTS.map((district) => (
+                                <SelectItem key={district} value={district}>
+                                  {district}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    {/* Row 2: Selection Actions + Scanners + Records per page */}
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -1164,7 +1196,30 @@ export default function DistrictAdmin() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="rounded-md border">
+                      {/* Records per page + total count */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="text-muted-foreground">
+                          Showing {filteredStudents.length === 0 ? 0 : (currentPage - 1) * recordsPerPage + 1}–{Math.min(currentPage * recordsPerPage, filteredStudents.length)} of {filteredStudents.length} students
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground text-xs">Rows per page:</span>
+                          <Select
+                            value={recordsPerPage.toString()}
+                            onValueChange={(val) => { setRecordsPerPage(Number(val)); setCurrentPage(1); }}
+                          >
+                            <SelectTrigger className="h-8 w-[70px] text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[10, 25, 50, 100].map(n => (
+                                <SelectItem key={n} value={n.toString()}>{n}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border overflow-auto max-h-[600px]">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -1185,11 +1240,11 @@ export default function DistrictAdmin() {
                               <TableHead>District Admin</TableHead>
                               <TableHead>Locked</TableHead>
                               <TableHead>Choices (1-10)</TableHead>
-                              <TableHead>Actions</TableHead>
+                              <TableHead className="sticky right-0 bg-card shadow-l border-l">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredStudents.map((student: Student) => (
+                            {paginatedStudents.map((student: Student) => (
                               <TableRow key={student.id} data-testid={`student-row-${student.meritNumber}`}>
                                 <TableCell>
                                   <input
@@ -1347,6 +1402,30 @@ export default function DistrictAdmin() {
                           </TableBody>
                         </Table>
                       </div>
+
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            Page {currentPage} of {totalPages}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                              <ChevronsLeft className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                              <ChevronLeft className="w-4 h-4" />
+                            </Button>
+                            <span className="text-xs px-2 text-muted-foreground">{currentPage} / {totalPages}</span>
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                              <ChevronRight className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>
+                              <ChevronsRight className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
 
                       {filteredStudents.length === 0 && (
                         <div className="text-center py-8">
