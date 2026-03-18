@@ -38,6 +38,7 @@ import {
   Loader2,
   Camera,
   UploadCloud,
+  DownloadCloud,
   FileText,
   XCircle,
   ChevronDown,
@@ -459,6 +460,83 @@ export default function DistrictAdmin() {
     if (selectedStudents.size === 0) return;
     batchUnlockMutation.mutate(Array.from(selectedStudents));
   };
+
+  const handleBulkDownloadOMR = async () => {
+    const studentIds = Array.from(selectedStudents);
+    if (studentIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/students/bulk-omr-form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ studentIds })
+      });
+      if (!response.ok) throw new Error("Failed to generate bulk OMR forms");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bulk_omr_forms_${new Date().getTime()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: `Successfully generated OMR forms for ${studentIds.length} students`,
+      });
+      clearSelection();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not download bulk OMR forms",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTestScenariosDownload = async () => {
+    const studentIds = Array.from(selectedStudents);
+    if (studentIds.length === 0) return;
+    try {
+      const response = await fetch(`/api/omr/test-scenarios`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ studentIds })
+      });
+      if (!response.ok) throw new Error("Failed to generate test mock forms");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mock_scenarios_${studentIds.length}_students.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: `Successfully generated random populated mock OMR forms for ${studentIds.length} students for optical testing`,
+      });
+      clearSelection();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Could not download mock testing forms",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   // Calculate finalization readiness - only consider students with current district belonging to this admin
   const eligibleStudents = filteredStudents.filter((s: Student) =>
@@ -1150,6 +1228,23 @@ export default function DistrictAdmin() {
                               <>🔒 Lock Selected</>
                             )}
                           </Button>
+                          <Button 
+                            onClick={handleTestScenariosDownload} 
+                            variant="secondary" 
+                            size="sm" 
+                            className="flex items-center gap-2 border-primary/20 text-primary"
+                          >
+                            <DownloadCloud className="w-4 h-4" />
+                            Mock OMRs (Bulk)
+                          </Button>
+                          <Button 
+                            onClick={handleBulkDownloadOMR} 
+                            size="sm" 
+                            className="flex items-center gap-2"
+                          >
+                            <DownloadCloud className="w-4 h-4" />
+                            Blank OMRs (Bulk)
+                          </Button>
                         </>
                       )}
                     </div>
@@ -1312,6 +1407,17 @@ export default function DistrictAdmin() {
                                             </Button>
                                           </>
                                         )}
+                                        <Button
+                                          asChild
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 px-2 mr-1"
+                                          title="Download Unfilled OMR"
+                                        >
+                                          <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
+                                            <FileText className="w-3 h-3" />
+                                          </a>
+                                        </Button>
                                         <Button
                                           variant="outline"
                                           size="sm"
