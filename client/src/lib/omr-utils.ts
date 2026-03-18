@@ -121,6 +121,123 @@ export function drawTarget(ctx: CanvasRenderingContext2D, center: { x: number; y
 }
 
 /**
+ * Draws the visual OMR markers (stream, choices, QR/barcode bounds, fiducials) onto a canvas context.
+ */
+export function drawOMROverlay(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    toPixel: (pdfX: number, pdfY: number) => { x: number, y: number },
+    sampleR: number,
+    markerTL: { x: number, y: number },
+    markerTR: { x: number, y: number },
+    markerBL: { x: number, y: number },
+    markerBR: { x: number, y: number },
+    qrLocation?: { topLeftCorner: { x: number; y: number }; topRightCorner: { x: number; y: number }; bottomRightCorner: { x: number; y: number }; bottomLeftCorner: { x: number; y: number } },
+    barcodeLocation?: { topLeftCorner: { x: number; y: number }; topRightCorner: { x: number; y: number }; bottomRightCorner: { x: number; y: number }; bottomLeftCorner: { x: number; y: number } }
+) {
+    // 1. Draw Stream positions (magenta)
+    ctx.strokeStyle = "magenta";
+    ctx.lineWidth = 3;
+    for (const s of STREAM_POS) {
+        const p = toPixel(s.x, s.y);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
+        ctx.stroke();
+    }
+
+    // 2. Draw Choice grid (red)
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 2;
+    for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+            const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.fillStyle = "red";
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+    }
+
+    // 3. Draw Fiducial anchored Centers (Blue crosshairs)
+    ctx.strokeStyle = "blue";
+    ctx.lineWidth = 3;
+    const drawCrosshair = (point: { x: number, y: number }) => {
+        if (!point) return;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(point.x - 15, point.y);
+        ctx.lineTo(point.x + 15, point.y);
+        ctx.moveTo(point.x, point.y - 15);
+        ctx.lineTo(point.x, point.y + 15);
+        ctx.stroke();
+    };
+
+    drawCrosshair(markerTL);
+    drawCrosshair(markerTR);
+    drawCrosshair(markerBL);
+    drawCrosshair(markerBR);
+
+    // 4. Draw QR Bounds (Green)
+    if (qrLocation) {
+        ctx.strokeStyle = "#22c55e"; // green-500
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(qrLocation.topLeftCorner.x, qrLocation.topLeftCorner.y);
+        ctx.lineTo(qrLocation.topRightCorner.x, qrLocation.topRightCorner.y);
+        ctx.lineTo(qrLocation.bottomRightCorner.x, qrLocation.bottomRightCorner.y);
+        ctx.lineTo(qrLocation.bottomLeftCorner.x, qrLocation.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillStyle = "#22c55e";
+        ctx.font = `bold ${Math.max(14, sampleR * 2)}px sans-serif`;
+        ctx.fillText("✓ QR Detected", qrLocation.topLeftCorner.x, qrLocation.topLeftCorner.y - 10);
+    } else {
+        // Red placeholder for QR
+        const bcX = w * 0.70, bcY = h * 0.03, bcW = Math.min(w, h) * 0.2, bcH = Math.min(w, h) * 0.2;
+        ctx.strokeStyle = "#ef4444"; // red
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(bcX, bcY, bcW, bcH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ef4444";
+        ctx.font = `bold ${Math.max(12, sampleR * 1.5)}px sans-serif`;
+        ctx.fillText("✗ QR Code", bcX, bcY - 6);
+    }
+
+    // 5. Draw Barcode Bounds (Green) or missing (Red)
+    if (barcodeLocation) {
+        ctx.strokeStyle = "#22c55e";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(barcodeLocation.topLeftCorner.x, barcodeLocation.topLeftCorner.y);
+        ctx.lineTo(barcodeLocation.topRightCorner.x, barcodeLocation.topRightCorner.y);
+        ctx.lineTo(barcodeLocation.bottomRightCorner.x, barcodeLocation.bottomRightCorner.y);
+        ctx.lineTo(barcodeLocation.bottomLeftCorner.x, barcodeLocation.bottomLeftCorner.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillStyle = "#22c55e";
+        ctx.font = `bold ${Math.max(14, sampleR * 2)}px sans-serif`;
+        ctx.fillText("✓ Barcode Detected", Math.max(0, barcodeLocation.topLeftCorner.x - 20), barcodeLocation.topLeftCorner.y - 10);
+    } else {
+        const bcX = w * 0.02, bcY = h * 0.35, bcW = Math.min(w, h) * 0.06, bcH = Math.min(w, h) * 0.3;
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(bcX, bcY, bcW, bcH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ef4444";
+        ctx.font = `bold ${Math.max(12, sampleR * 1.5)}px sans-serif`;
+        ctx.fillText("✗ Barcode", bcX, bcY - 6);
+    }
+}
+
+/**
  * Extracts QR code from image element
  */
 export async function extractQRFromImage(img: HTMLImageElement): Promise<{ studentId: string | null; qrBounds: any | null }> {

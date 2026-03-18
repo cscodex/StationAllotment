@@ -10,7 +10,7 @@ import { Loader2, UploadCloud, Save, CheckCircle2, AlertCircle, Camera, ChevronL
 import { type Student } from "@shared/schema";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { parseOMRImageData, extractQRFromImage, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP, decodeQRHybrid } from "@/lib/omr-utils";
+import { parseOMRImageData, extractQRFromImage, STREAM_POS, GRID_ORIGIN, COL_STEP, ROW_STEP, decodeQRHybrid, drawOMROverlay } from "@/lib/omr-utils";
 
 // Initialize PDF.js worker using Vite's URL import
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -102,9 +102,11 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                     // 1. Extract QR safely
                     let studentId = null;
                     let matchedStudent = null;
+                    let qrResult: any = null;
                     try {
                         const code = await decodeQRHybrid(imgData);
                         if (code) {
+                            qrResult = code;
                             try {
                                 if (code.data.startsWith('{')) {
                                     studentId = JSON.parse(code.data).id?.toString();
@@ -147,7 +149,20 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
                         };
                     }
 
-                    // 3. Create blob for uploading safely
+                    // 3. Draw Overlay onto the canvas BEFORE generating Blob
+                    if (parseData && parseData.toPixel) {
+                        const isQRFormat = qrResult?.format?.includes('qr') || qrResult?.data?.startsWith('{');
+                        const qrLocation = isQRFormat ? qrResult?.location : undefined;
+                        const barcodeLocation = !isQRFormat ? qrResult?.location : undefined;
+                        drawOMROverlay(
+                            ctx, canvas.width, canvas.height,
+                            parseData.toPixel, parseData.sampleR || 6,
+                            parseData.markerTL, parseData.markerTR, parseData.markerBL, parseData.markerBR,
+                            qrLocation, barcodeLocation
+                        );
+                    }
+
+                    // 4. Create blob for uploading safely
                     let blob: Blob | null = null;
                     try {
                         blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', 0.8));
@@ -324,54 +339,21 @@ export function BulkScannerModal({ isOpen, onClose, students, onSaveSelected }: 
 
         const sampleR = page.sampleR || 6;
 
-        // Draw stream positions (magenta)
-        ctx.strokeStyle = "magenta";
-        ctx.lineWidth = 3;
-        for (const s of STREAM_POS) {
-            const p = toPixel(s.x, s.y);
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
-            ctx.stroke();
-        }
-
-        // Draw choice grid (red)
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        for (let r = 0; r < 10; r++) {
-            for (let c = 0; c < 10; c++) {
-                const p = toPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
-                ctx.stroke();
-                ctx.fillStyle = "red";
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
-                ctx.fill();
-            }
-        }
+        // Determine if QR was found in this page to simulate bounds (or pass null)
+        const isQR = page.studentId ? true : false;
         
-        // Draw Fiducial Marker Center of Mass Anchors (Blue)
-        if (page.markerTL && page.markerTR && page.markerBL && page.markerBR) {
-            ctx.strokeStyle = "blue";
-            ctx.lineWidth = 3;
-            
-            const drawCrosshair = (point: {x: number, y: number}) => {
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(point.x - 15, point.y);
-                ctx.lineTo(point.x + 15, point.y);
-                ctx.moveTo(point.x, point.y - 15);
-                ctx.lineTo(point.x, point.y + 15);
-                ctx.stroke();
-            };
-
-            drawCrosshair(page.markerTL);
-            drawCrosshair(page.markerTR);
-            drawCrosshair(page.markerBL);
-            drawCrosshair(page.markerBR);
-        }
+        drawOMROverlay(
+            ctx, canvas.width, canvas.height,
+            toPixel, sampleR,
+            page.markerTL || {x: 0, y: 0}, 
+            page.markerTR || {x: 0, y: 0}, 
+            page.markerBL || {x: 0, y: 0}, 
+            page.markerBR || {x: 0, y: 0},
+            // We don't have the exact bounding box cached in page state right now, 
+            // but the overlay draws it anyway for visual feedback, we can omit it in review
+            // or we could add qrLocation to ScannedPageInfo. For now, omit.
+            undefined, undefined
+        );
 
     }, [reviewingIndex, scannedPages, nudgeX, nudgeY]);
 

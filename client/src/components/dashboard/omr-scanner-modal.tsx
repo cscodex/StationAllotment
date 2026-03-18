@@ -22,6 +22,7 @@ import {
   CIRCLE_R_PT,
   DISTRICTS,
   STREAMS,
+  drawOMROverlay
 } from "@/lib/omr-utils";
 
 interface OMRScannerModalProps {
@@ -109,37 +110,23 @@ export default function OMRScannerModal({
     // Redraw original image
     ctx.drawImage(originalImg, 0, 0, w, h);
 
-    const nudgedToPixel = (pdfX: number, pdfY: number) => {
-      const p = toPixel(pdfX, pdfY);
-      return { x: p.x + extraNudgeX, y: p.y + extraNudgeY };
-    };
+    if (scanState) {
+        const nudgedToPixel = (pdfX: number, pdfY: number) => {
+          const p = toPixel(pdfX, pdfY);
+          return { x: p.x + extraNudgeX, y: p.y + extraNudgeY };
+        };
 
-    // Draw stream positions (cyan)
-    ctx.strokeStyle = "cyan";
-    ctx.lineWidth = 3;
-    for (const s of STREAM_POS) {
-      const p = nudgedToPixel(s.x, s.y);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
-      ctx.stroke();
+        drawOMROverlay(
+            ctx, w, h,
+            nudgedToPixel, sampleR,
+            { x: scanState.markerTL.x + extraNudgeX, y: scanState.markerTL.y + extraNudgeY },
+            { x: scanState.markerTR.x + extraNudgeX, y: scanState.markerTR.y + extraNudgeY },
+            { x: scanState.markerBL.x + extraNudgeX, y: scanState.markerBL.y + extraNudgeY },
+            { x: scanState.markerBR.x + extraNudgeX, y: scanState.markerBR.y + extraNudgeY },
+            scanState.qrLocation, scanState.barcodeLocation
+        );
     }
-
-    // Draw choice grid (red)
-    ctx.strokeStyle = "red";
-    ctx.lineWidth = 2;
-    for (let r = 0; r < 10; r++) {
-      for (let c = 0; c < 10; c++) {
-        const p = nudgedToPixel(GRID_ORIGIN.x + c * COL_STEP, GRID_ORIGIN.y + r * ROW_STEP);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, sampleR, 0, 2 * Math.PI);
-        ctx.stroke();
-        ctx.fillStyle = "red";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    }
-  }, []);
+  }, [scanState]);
 
   // Redraw when nudge changes
   useEffect(() => {
@@ -397,66 +384,18 @@ export default function OMRScannerModal({
       }
 
       // ── Draw QR/Barcode visual indicator borders ──
-      // Green border = detected, Red border = not detected
-      const qrDetected = !!scanState.qrLocation;
-      const barcodeDetected = !!scanState.barcodeLocation;
-
-      // Draw QR code indicator
-      if (scanState.qrLocation) {
-        const loc = scanState.qrLocation;
-        ctx.strokeStyle = "#22c55e"; // green
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
-        ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
-        ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
-        ctx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
-        ctx.closePath();
-        ctx.stroke();
-        // Label
-        ctx.fillStyle = "#22c55e";
-        ctx.font = `bold ${Math.max(14, sampleR * 2)}px sans-serif`;
-        ctx.fillText("✓ QR", loc.topLeftCorner.x, loc.topLeftCorner.y - 6);
-      } else {
-        // Draw a red placeholder box in the expected QR area (top-right of form)
-        const qrX = w * 0.75, qrY = h * 0.02, qrS = Math.min(w, h) * 0.12;
-        ctx.strokeStyle = "#ef4444"; // red
-        ctx.lineWidth = 3;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(qrX, qrY, qrS, qrS);
-        ctx.setLineDash([]);
-        ctx.fillStyle = "#ef4444";
-        ctx.font = `bold ${Math.max(12, sampleR * 1.5)}px sans-serif`;
-        ctx.fillText("✗ QR not found", qrX, qrY - 6);
-      }
-
-      // Draw barcode indicator
-      if (scanState.barcodeLocation) {
-        const loc = scanState.barcodeLocation;
-        ctx.strokeStyle = "#22c55e"; // green
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
-        ctx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
-        ctx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
-        ctx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
-        ctx.closePath();
-        ctx.stroke();
-        // Label
-        ctx.fillStyle = "#22c55e";
-        ctx.font = `bold ${Math.max(14, sampleR * 2)}px sans-serif`;
-        ctx.fillText("✓ Barcode", loc.topLeftCorner.x, loc.topLeftCorner.y - 6);
-      } else {
-        // Draw a red placeholder in expected barcode area (left side middle)
-        const bcX = w * 0.02, bcY = h * 0.35, bcW = Math.min(w, h) * 0.06, bcH = Math.min(w, h) * 0.3;
-        ctx.strokeStyle = "#ef4444"; // red
-        ctx.lineWidth = 3;
-        ctx.setLineDash([6, 4]);
-        ctx.strokeRect(bcX, bcY, bcW, bcH);
-        ctx.setLineDash([]);
-        ctx.fillStyle = "#ef4444";
-        ctx.font = `bold ${Math.max(12, sampleR * 1.5)}px sans-serif`;
-        ctx.fillText("✗ Barcode", bcX, bcY - 6);
+      // This is now fully handled by drawOverlay which uses drawOMROverlay!
+      // To ensure the final image before toBlob has the latest overlay:
+      if (scanState.originalImage) {
+          // Setting the state is async, so we invoke drawOverlay manually here with the exact same values
+          drawOverlay(
+            canvas,
+            scanState.originalImage,
+            toPixel,
+            sampleR,
+            nudgeX,
+            nudgeY
+          );
       }
     }
 
