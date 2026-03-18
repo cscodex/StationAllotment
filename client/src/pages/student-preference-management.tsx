@@ -1182,34 +1182,6 @@ export default function StudentPreferenceManagement() {
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<p class="text-sm text-muted-foreground">Image unavailable — file may have been lost. Re-scan to restore.</p>'; }}
                     />
                   </div>
-                  {/* Scan Visual Matrix — Choices Grid */}
-                  <div className="border rounded-lg bg-slate-50 p-3 space-y-2">
-                    <h4 className="font-semibold text-xs text-muted-foreground uppercase">Scanned Choices Matrix</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Stream</p>
-                        <p className="text-sm font-bold text-primary">{selectedStudentForEdit.stream || "Not detected"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Choices Filled</p>
-                        <p className="text-sm font-bold">{Array.from({ length: 10 }, (_, i) => selectedStudentForEdit[`choice${i + 1}` as keyof typeof selectedStudentForEdit]).filter(Boolean).length} / 10</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-1">
-                      {Array.from({ length: 10 }, (_, i) => {
-                        const val = selectedStudentForEdit[`choice${i + 1}` as keyof typeof selectedStudentForEdit] as string;
-                        return (
-                          <div key={i} className="flex items-center py-0.5 border-b border-dashed">
-                            <span className="w-6 text-muted-foreground font-mono">{i + 1}.</span>
-                            <span className={val ? 'font-medium text-green-700' : 'text-rose-400 italic'}>
-                              {val ? `🟢 ${val}` : '—'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-center text-slate-400 mt-1">🟢 = filled from OMR scan</p>
-                  </div>
                 </div>
               )}
 
@@ -1348,34 +1320,6 @@ export default function StudentPreferenceManagement() {
                       className="max-w-full max-h-[50vh] object-contain drop-shadow-md bg-white"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).parentElement!.innerHTML = '<p class="text-sm text-muted-foreground">Image unavailable — file may have been lost. Re-scan to restore.</p>'; }}
                     />
-                  </div>
-                  {/* Scan Visual Matrix — Choices Grid */}
-                  <div className="border rounded-lg bg-slate-50 p-3 space-y-2">
-                    <h4 className="font-semibold text-xs text-muted-foreground uppercase">Scanned Choices Matrix</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Stream</p>
-                        <p className="text-sm font-bold text-primary">{selectedStudentForChoices.stream || "Not detected"}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Choices Filled</p>
-                        <p className="text-sm font-bold">{Array.from({ length: 10 }, (_, i) => selectedStudentForChoices[`choice${i + 1}` as keyof typeof selectedStudentForChoices]).filter(Boolean).length} / 10</p>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mt-1">
-                      {Array.from({ length: 10 }, (_, i) => {
-                        const val = selectedStudentForChoices[`choice${i + 1}` as keyof typeof selectedStudentForChoices] as string;
-                        return (
-                          <div key={i} className="flex items-center py-0.5 border-b border-dashed">
-                            <span className="w-6 text-muted-foreground font-mono">{i + 1}.</span>
-                            <span className={val ? 'font-medium text-green-700' : 'text-rose-400 italic'}>
-                              {val ? `🟢 ${val}` : '—'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-center text-slate-400 mt-1">🟢 = filled from OMR scan</p>
                   </div>
                 </div>
               )}
