@@ -2,6 +2,8 @@ import { Link, useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+
+declare const __COMMIT_HASH__: string;
 import {
   BarChart3,
   Upload,
@@ -252,7 +254,7 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono">Build: c2c799b</span>
+                  <span className="font-mono">Build: {typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'Dev'}</span>
                   <div className="flex items-center gap-1">
                     <Database className="w-3 h-3" />
                     {dbHealth?.status === 'ok' ? (
