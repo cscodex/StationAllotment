@@ -98,7 +98,7 @@ export interface IStorage {
   // Counseling round operations
   getCounselingRounds(academicYear?: string): Promise<CounselingRound[]>;
   getCounselingRound(id: string): Promise<CounselingRound | undefined>;
-  getActiveCounselingRound(academicYear: string): Promise<CounselingRound | undefined>;
+  getActiveCounselingRound(academicYear?: string): Promise<CounselingRound | undefined>;
   createCounselingRound(round: InsertCounselingRound): Promise<CounselingRound>;
   bulkCreateCounselingRounds(rounds: InsertCounselingRound[]): Promise<CounselingRound[]>;
   updateCounselingRound(id: string, updates: Partial<CounselingRound>): Promise<CounselingRound>;
@@ -652,13 +652,28 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async getActiveCounselingRound(academicYear: string): Promise<CounselingRound | undefined> {
-    const [round] = await db.select().from(counselingRounds)
-      .where(and(
-        eq(counselingRounds.academicYear, academicYear),
-        eq(counselingRounds.isActive, true)
-      ))
+  async getActiveCounselingRound(academicYear?: string): Promise<CounselingRound | undefined> {
+    const conditions = [eq(counselingRounds.isActive, true)];
+    if (academicYear) {
+      conditions.push(eq(counselingRounds.academicYear, academicYear));
+    }
+    
+    let [round] = await db.select().from(counselingRounds)
+      .where(and(...conditions))
+      .orderBy(desc(counselingRounds.createdAt))
       .limit(1);
+
+    // Safe fallback: If academic year was specified but no round found, 
+    // try to find ANY active round across the system before giving up.
+    if (!round && academicYear) {
+       console.warn(`[CounselingRound] No active round found for ${academicYear}, falling back to any active round.`);
+       const [anyRound] = await db.select().from(counselingRounds)
+        .where(eq(counselingRounds.isActive, true))
+        .orderBy(desc(counselingRounds.createdAt))
+        .limit(1);
+       round = anyRound;
+    }
+
     return round;
   }
 
