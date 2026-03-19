@@ -11,9 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DataPagination } from "@/components/ui/data-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud } from "lucide-react";
+import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud, BarChart3, ShieldQuestion } from "lucide-react";
+import InfographicsModal from "@/components/dashboard/infographics-modal";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -31,6 +33,7 @@ export default function Students() {
   const [editingEntranceResult, setEditingEntranceResult] = useState<string | null>(null);
   const [editingStream, setEditingStream] = useState<string>("");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -49,6 +52,10 @@ export default function Students() {
   const { data: studentsData, isLoading: isLoadingStudents } = useQuery<{ students: Student[], total: number }>({
     queryKey: ["/api/students", { limit, offset: page * limit, academicYear, roundNumber }],
     enabled: isCentralAdmin,
+  });
+
+  const { data: stats } = useQuery<any>({
+    queryKey: ["/api/dashboard/stats"],
   });
 
   const filteredEntranceResults = entranceResultsData?.students?.filter((entranceResult: StudentsEntranceResult) => {
@@ -385,26 +392,64 @@ export default function Students() {
     return (
       <div className="space-y-4">
         <div className="flex items-center space-x-2 justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, merit number, or application number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-              data-testid="input-search-students"
-            />
+          <div className="relative flex-1 max-w-md flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, merit number, or application number..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+                data-testid="input-search-students"
+              />
+            </div>
+            {isCentralAdmin && (
+              <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="text-primary hover:bg-primary/10 flex-shrink-0"
+                      onClick={() => setIsInfographicsOpen(true)}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>View Infographics</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
           {selectedStudentIds.length > 0 && (
-            <div className="flex gap-2">
-              <Button onClick={handleTestScenariosDownload} variant="secondary" className="flex items-center gap-2 border-primary/20 text-primary">
-                <DownloadCloud className="w-4 h-4" />
-                Generate Testing Subset ({selectedStudentIds.length})
-              </Button>
-              <Button onClick={handleBulkDownloadOMR} className="flex items-center gap-2">
-                <DownloadCloud className="w-4 h-4" />
-                Download Blank OMRs ({selectedStudentIds.length})
-              </Button>
+            <div className="flex gap-2 bg-muted/50 p-1 rounded-md border">
+              <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" onClick={handleTestScenariosDownload}>
+                      <ShieldQuestion className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Generate Testing Subset ({selectedStudentIds.length})</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" onClick={handleBulkDownloadOMR}>
+                      <DownloadCloud className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Download Blank OMRs ({selectedStudentIds.length})</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           )}
         </div>
@@ -631,6 +676,13 @@ export default function Students() {
             </CardContent>
           </Card>
         )}
+
+        <InfographicsModal 
+          isOpen={isInfographicsOpen}
+          onClose={setIsInfographicsOpen}
+          stats={stats}
+          title="Central Student Statistics"
+        />
 
         <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
           <DialogContent className="max-w-2xl">
