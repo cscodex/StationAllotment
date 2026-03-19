@@ -19,6 +19,10 @@ const c = {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function runDistrictBot(admin: any, baseUrl: string, studentLimit: number) {
   const logPrefix = `${c.cyan}[${admin.district}]${c.reset}`;
   console.log(`${logPrefix} ${c.gray}Starting bot for ${admin.username}...${c.reset}`);
@@ -179,8 +183,8 @@ async function runInteractiveCLI() {
     const centralAdmin = creds.central_admin;
 
     // 1. Ask for Base URL
-    const urlAnswer = await rl.question(`${c.green}?${c.reset} Target Server URL [def: http://localhost:5000]: `);
-    const baseUrl = urlAnswer.trim() || 'http://localhost:5000';
+    const urlAnswer = await rl.question(`${c.green}?${c.reset} Target Server URL [def: http://localhost:4000]: `);
+    const baseUrl = urlAnswer.trim() || 'http://localhost:4000';
 
     // 2. Ask for Concurrency (Number of Districts)
     const maxDistricts = districtAdmins.length;

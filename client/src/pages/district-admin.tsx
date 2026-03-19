@@ -53,7 +53,7 @@ import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
 import { BulkScannerModal, type ScannedPageInfo } from "@/components/dashboard/bulk-scanner-modal";
 import { LiveOMRScannerModal } from "@/components/dashboard/live-omr-scanner";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import InfographicsModal from "@/components/dashboard/infographics-modal";
 
 // Use school districts for choice selection (where schools are located)
 const DISTRICTS = SCHOOL_DISTRICTS;
@@ -109,6 +109,10 @@ export default function DistrictAdmin() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: stats } = useQuery<any>({
+    queryKey: ["/api/dashboard/stats"],
+  });
 
   // Form setup for edit modal
   const form = useForm({
@@ -1013,77 +1017,12 @@ export default function DistrictAdmin() {
           )}
 
           {/* Student Stats Infographics Modal */}
-          <Dialog open={isInfographicsOpen} onOpenChange={setIsInfographicsOpen}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>District Student Statistics</DialogTitle>
-              </DialogHeader>
-              {(studentsData as any)?.students?.length > 0 ? (() => {
-                const allStudents: Student[] = (studentsData as any).students;
-                const locked = allStudents.filter((s: Student) => s.isLocked || s.lockedBy).length;
-                const unlocked = allStudents.length - locked;
-                const withPrefs = allStudents.filter((s: Student) => s.choice1 && s.stream).length;
-                const withoutPrefs = allStudents.length - withPrefs;
-                const streamData = allStudents.reduce((acc: Record<string, number>, s: Student) => {
-                  if (!s.stream || !s.choice1) return acc;
-                  const key = s.stream === 'Non-Medical' ? 'NonMedical' : s.stream;
-                  acc[key] = (acc[key] || 0) + 1;
-                  return acc;
-                }, {});
-                return (
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-2">
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Lock Status</CardTitle>
-                        <p className="text-xs text-muted-foreground">{locked} locked / {allStudents.length} total</p>
-                      </CardHeader>
-                      <CardContent className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={[{name:'Locked',value:locked},{name:'Unlocked',value:unlocked}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
-                              <Cell fill="#6366f1" /><Cell fill="#e2e8f0" />
-                            </Pie>
-                            <Tooltip /><Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm">Preferences Filled</CardTitle></CardHeader>
-                      <CardContent className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={[{name:'Filled',value:withPrefs},{name:'Pending',value:withoutPrefs}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name,value})=>`${name}: ${value}`} labelLine={false}>
-                              <Cell fill="#22c55e" /><Cell fill="#f59e0b" />
-                            </Pie>
-                            <Tooltip /><Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-2"><CardTitle className="text-sm">Stream Breakdown</CardTitle></CardHeader>
-                      <CardContent className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={Object.entries(streamData).map(([name, value]) => ({ name, value }))} margin={{top:5,right:10,left:0,bottom:5}}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" tick={{fontSize:11}} />
-                            <YAxis allowDecimals={false} />
-                            <Tooltip />
-                            <Bar dataKey="value" fill="#6366f1" radius={[4,4,0,0]} name="Students" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              })() : (
-                <div className="p-8 text-center text-muted-foreground">
-                  No student data available to display statistics.
-                </div>
-              )}
-            </DialogContent>
-          </Dialog>
+          <InfographicsModal 
+            isOpen={isInfographicsOpen} 
+            onClose={setIsInfographicsOpen} 
+            stats={stats} 
+            title="District Student Statistics" 
+          />
 
           {/* Tabs Navigation */}
           <Tabs defaultValue="student-management" className="w-full">

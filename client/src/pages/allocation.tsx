@@ -41,7 +41,7 @@ export default function Allocation() {
   });
 
   const { data: studentsResponse } = useQuery<any>({
-    queryKey: ["/api/students"],
+    queryKey: ["/api/students?limit=100000"],
   });
 
   const { data: vacancies } = useQuery<any[]>({
@@ -49,7 +49,7 @@ export default function Allocation() {
   });
 
   const { data: entranceResultsResponse } = useQuery<any>({
-    queryKey: ["/api/students-entrance-results"],
+    queryKey: ["/api/students-entrance-results?limit=100000"],
   });
 
   // Fetch district statuses for finalization check

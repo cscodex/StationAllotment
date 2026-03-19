@@ -10,6 +10,7 @@ import { Link } from "wouter";
 import { Upload, Users, Play, FileText, BarChart3, Settings, Maximize2, UploadCloud, ShieldQuestion } from "lucide-react";
 import FlowDiagramModal from "@/components/dashboard/flow-diagram-modal";
 import CounselingProgress from "@/components/dashboard/counseling-progress";
+import InfographicsModal from "@/components/dashboard/infographics-modal";
 
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +21,8 @@ export default function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingDiagram, setIsUploadingDiagram] = useState(false);
   const [isFlowModalOpen, setIsFlowModalOpen] = useState(false);
+  const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
+  
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
     queryKey: ["/api/dashboard/stats"],
   });
@@ -53,6 +56,25 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold tracking-tight">System Overview</h2>
+          <Button
+            variant="outline"
+            className="text-primary hover:bg-primary/10 flex items-center gap-2"
+            onClick={() => setIsInfographicsOpen(true)}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span className="hidden sm:inline">Full Infographics</span>
+          </Button>
+        </div>
+
+        <InfographicsModal 
+          isOpen={isInfographicsOpen} 
+          onClose={setIsInfographicsOpen} 
+          stats={stats} 
+          title="System-Wide Student Statistics" 
+        />
 
         <StatsCards stats={stats} isLoading={statsLoading} />
 
