@@ -720,36 +720,31 @@ export default function StudentPreferenceManagement() {
               {/* 7 Gender Category Tabs — color-coded pill buttons */}
               <div className="w-full mt-2 flex flex-wrap gap-2 pb-1">
                 {([
-                  { value: 'All',              label: 'All',             color: 'bg-slate-100 text-slate-700 border-slate-300 data-active:bg-slate-600 data-active:text-white' },
-                  { value: 'Female - WHH',     label: '♀ WHH',           color: 'bg-purple-50 text-purple-700 border-purple-300 data-active:bg-purple-600 data-active:text-white' },
-                  { value: 'Female - Disabled',label: '♀ Disabled',      color: 'bg-amber-50 text-amber-700 border-amber-300 data-active:bg-amber-600 data-active:text-white' },
-                  { value: 'Female - Private', label: '♀ Private',       color: 'bg-pink-50 text-pink-700 border-pink-300 data-active:bg-pink-600 data-active:text-white' },
-                  { value: 'Female - Open',    label: '♀ Open',          color: 'bg-rose-50 text-rose-700 border-rose-300 data-active:bg-rose-600 data-active:text-white' },
-                  { value: 'Male - Disabled',  label: '♂ Disabled',      color: 'bg-sky-50 text-sky-700 border-sky-300 data-active:bg-sky-600 data-active:text-white' },
-                  { value: 'Male - Private',   label: '♂ Private',       color: 'bg-teal-50 text-teal-700 border-teal-300 data-active:bg-teal-600 data-active:text-white' },
-                  { value: 'Male - Open',      label: '♂ Open',          color: 'bg-blue-50 text-blue-700 border-blue-300 data-active:bg-blue-600 data-active:text-white' },
-                ] as const).map(tab => (
-                  <button
-                    key={tab.value}
-                    onClick={() => setActiveTab(tab.value)}
-                    className={[
-                      'px-3 py-1.5 rounded-full border text-xs font-semibold transition-all',
-                      activeTab === tab.value
-                        ? 'ring-2 ring-offset-1 ring-current shadow-sm scale-105'
-                        : 'opacity-70 hover:opacity-100 hover:shadow-sm',
-                      tab.color.replace('data-active:', activeTab === tab.value ? '' : '!opacity-0 ').split(' ').filter(c => !c.startsWith('data-active:')).join(' '),
-                      activeTab === tab.value
-                        ? tab.color.split(' ').filter(c => c.startsWith('data-active:')).map(c => c.replace('data-active:', '')).join(' ')
-                        : ''
-                    ].join(' ')}
-                    type="button"
-                  >
-                    {tab.label}
-                    {activeTab === tab.value && (
-                      <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/30 text-current text-xs"></span>
-                    )}
-                  </button>
-                ))}
+                  { value: 'All',              label: 'All',        bg: 'bg-slate-200', activeBg: 'bg-slate-700',   text: 'text-slate-700', activeText: 'text-white', border: 'border-slate-300' },
+                  { value: 'Female - WHH',     label: '♀ WHH',      bg: 'bg-purple-100', activeBg: 'bg-purple-600', text: 'text-purple-700', activeText: 'text-white', border: 'border-purple-300' },
+                  { value: 'Female - Disabled', label: '♀ Disabled', bg: 'bg-amber-100',  activeBg: 'bg-amber-600',  text: 'text-amber-700',  activeText: 'text-white', border: 'border-amber-300' },
+                  { value: 'Female - Private', label: '♀ Private',  bg: 'bg-pink-100',   activeBg: 'bg-pink-600',   text: 'text-pink-700',   activeText: 'text-white', border: 'border-pink-300' },
+                  { value: 'Female - Open',    label: '♀ Open',     bg: 'bg-rose-100',   activeBg: 'bg-rose-600',   text: 'text-rose-700',   activeText: 'text-white', border: 'border-rose-300' },
+                  { value: 'Male - Disabled',  label: '♂ Disabled', bg: 'bg-sky-100',    activeBg: 'bg-sky-600',    text: 'text-sky-700',    activeText: 'text-white', border: 'border-sky-300' },
+                  { value: 'Male - Private',   label: '♂ Private',  bg: 'bg-teal-100',   activeBg: 'bg-teal-600',   text: 'text-teal-700',   activeText: 'text-white', border: 'border-teal-300' },
+                  { value: 'Male - Open',      label: '♂ Open',     bg: 'bg-blue-100',   activeBg: 'bg-blue-600',   text: 'text-blue-700',   activeText: 'text-white', border: 'border-blue-300' },
+                ] as const).map(tab => {
+                  const isActive = activeTab === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      onClick={() => setActiveTab(tab.value)}
+                      className={`px-3 py-1.5 rounded-full border text-xs font-semibold transition-all cursor-pointer ${tab.border} ${
+                        isActive
+                          ? `${tab.activeBg} ${tab.activeText} shadow-md ring-2 ring-offset-1 ring-current scale-105`
+                          : `${tab.bg} ${tab.text} hover:shadow-sm hover:scale-105`
+                      }`}
+                      type="button"
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
             </CardHeader>
 

@@ -934,10 +934,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       total = await storage.getStudentsCount(undefined, districtAdminUsername, isFinalized);
 
       // Map database fields to frontend expected fields
-      const mappedStudents = students.map(student => ({
-        ...student,
-        applicationNumber: student.appNo, // Map appNo to applicationNumber
-      }));
+      // Also join gender/category from entrance results for tab filtering
+      const entranceResults = await storage.getStudentsEntranceResults(100000, 0);
+      const erMap = new Map<string, any>();
+      entranceResults.forEach((er: any) => { if (er.applicationNo) erMap.set(er.applicationNo, er); });
+
+      const mappedStudents = students.map(student => {
+        const er = erMap.get(student.appNo || '');
+        return {
+          ...student,
+          applicationNumber: student.appNo,
+          gender: er?.gender || null,
+          category: er?.category || null,
+        };
+      });
       res.json({ students: mappedStudents, total });
     } catch (error) {
       console.error("Get students error:", error);
