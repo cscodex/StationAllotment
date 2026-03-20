@@ -589,7 +589,7 @@ export default function StudentPreferenceManagement() {
                     data-testid="button-finalize-allocation"
                     className={isAllocationFinalized
                       ? "bg-gray-100 text-gray-600 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700 text-white"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
                     }
                   >
                     {finalizeAllocationMutation.isPending ? (
@@ -597,7 +597,7 @@ export default function StudentPreferenceManagement() {
                     ) : (
                       <>
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        {isAllocationFinalized ? "Allocation Finalized" : "Finalize Allocation"}
+                        {isAllocationFinalized ? "Phase 1 Finalized ✓" : "Finalize Central (Phase 1)"}
                       </>
                     )}
                   </Button>
@@ -717,19 +717,40 @@ export default function StudentPreferenceManagement() {
                 )}
               </div>
 
-              {/* 7 Gender Category Tabs */}
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-2 overflow-x-auto pb-2">
-                <TabsList className="min-w-max">
-                  <TabsTrigger value="All">All Categories</TabsTrigger>
-                  <TabsTrigger value="Female - WHH">Female WHH</TabsTrigger>
-                  <TabsTrigger value="Female - Disabled">Female Disabled</TabsTrigger>
-                  <TabsTrigger value="Female - Private">Female Private</TabsTrigger>
-                  <TabsTrigger value="Female - Open">Female Open</TabsTrigger>
-                  <TabsTrigger value="Male - Disabled">Male Disabled</TabsTrigger>
-                  <TabsTrigger value="Male - Private">Male Private</TabsTrigger>
-                  <TabsTrigger value="Male - Open">Male Open</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {/* 7 Gender Category Tabs — color-coded pill buttons */}
+              <div className="w-full mt-2 flex flex-wrap gap-2 pb-1">
+                {([
+                  { value: 'All',              label: 'All',             color: 'bg-slate-100 text-slate-700 border-slate-300 data-active:bg-slate-600 data-active:text-white' },
+                  { value: 'Female - WHH',     label: '♀ WHH',           color: 'bg-purple-50 text-purple-700 border-purple-300 data-active:bg-purple-600 data-active:text-white' },
+                  { value: 'Female - Disabled',label: '♀ Disabled',      color: 'bg-amber-50 text-amber-700 border-amber-300 data-active:bg-amber-600 data-active:text-white' },
+                  { value: 'Female - Private', label: '♀ Private',       color: 'bg-pink-50 text-pink-700 border-pink-300 data-active:bg-pink-600 data-active:text-white' },
+                  { value: 'Female - Open',    label: '♀ Open',          color: 'bg-rose-50 text-rose-700 border-rose-300 data-active:bg-rose-600 data-active:text-white' },
+                  { value: 'Male - Disabled',  label: '♂ Disabled',      color: 'bg-sky-50 text-sky-700 border-sky-300 data-active:bg-sky-600 data-active:text-white' },
+                  { value: 'Male - Private',   label: '♂ Private',       color: 'bg-teal-50 text-teal-700 border-teal-300 data-active:bg-teal-600 data-active:text-white' },
+                  { value: 'Male - Open',      label: '♂ Open',          color: 'bg-blue-50 text-blue-700 border-blue-300 data-active:bg-blue-600 data-active:text-white' },
+                ] as const).map(tab => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setActiveTab(tab.value)}
+                    className={[
+                      'px-3 py-1.5 rounded-full border text-xs font-semibold transition-all',
+                      activeTab === tab.value
+                        ? 'ring-2 ring-offset-1 ring-current shadow-sm scale-105'
+                        : 'opacity-70 hover:opacity-100 hover:shadow-sm',
+                      tab.color.replace('data-active:', activeTab === tab.value ? '' : '!opacity-0 ').split(' ').filter(c => !c.startsWith('data-active:')).join(' '),
+                      activeTab === tab.value
+                        ? tab.color.split(' ').filter(c => c.startsWith('data-active:')).map(c => c.replace('data-active:', '')).join(' ')
+                        : ''
+                    ].join(' ')}
+                    type="button"
+                  >
+                    {tab.label}
+                    {activeTab === tab.value && (
+                      <span className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/30 text-current text-xs"></span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </CardHeader>
 
             <div className="max-h-[65vh] overflow-y-auto border-t border-b custom-scrollbar">

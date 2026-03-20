@@ -28,7 +28,10 @@ import {
   Trash2,
   Rocket,
   Pause,
-  PlayCircle
+  PlayCircle,
+  Lock,
+  RefreshCw,
+  ShieldCheck
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -48,6 +51,8 @@ interface CounselingRound {
   isActive: boolean;
   isCompleted: boolean;
   isSuspended?: boolean;
+  isAllocationCompleted?: boolean;
+  isAllocationFinalized?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -280,6 +285,29 @@ export default function CounselingRounds() {
       toast({
         title: "Error",
         description: error.message || "Failed to delete counseling round",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Finalize round mutation — marks round as completed, blocks further allocations
+  const finalizeRoundMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("PUT", `/api/counseling-rounds/${id}`, { isCompleted: true, isActive: false });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
+      refetch();
+      toast({
+        title: "Round Finalized",
+        description: "Counseling round has been finalized. No further allocations can be run for this round.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to finalize round",
         variant: "destructive",
       });
     },
@@ -695,6 +723,37 @@ export default function CounselingRounds() {
                                         isPending={false}
                                       />
                                     </>
+                                  )}
+                                  {/* Re-run button: visible when allocation is done but round not yet closed */}
+                                  {round.isAllocationCompleted && !round.isAllocationFinalized && !round.isCompleted && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleRunAllocation(round)}
+                                      className="text-blue-600 border-blue-400 hover:bg-blue-50"
+                                      title="Reset and re-run the allocation with updated data"
+                                    >
+                                      <RefreshCw className="w-3 h-3 mr-1" />
+                                      Re-run
+                                    </Button>
+                                  )}
+                                  {/* Finalize Round: locks the round permanently after allocation is accepted */}
+                                  {round.isAllocationCompleted && !round.isCompleted && (
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      onClick={() => {
+                                        if (confirm(`Finalize Counseling Round ${round.roundNumber} ("${round.roundName}")?\n\nThis will permanently close this round — no further allocations can be run. This cannot be undone.`)) {
+                                          finalizeRoundMutation.mutate(round.id);
+                                        }
+                                      }}
+                                      disabled={finalizeRoundMutation.isPending}
+                                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                                      title="Permanently close this counseling round"
+                                    >
+                                      <ShieldCheck className="w-3 h-3 mr-1" />
+                                      Finalize Round {round.roundNumber}
+                                    </Button>
                                   )}
                                   {canDelete(round) && (
                                     <Button
