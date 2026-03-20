@@ -9,13 +9,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Check, Clock, Settings, AlertTriangle } from "lucide-react";
-import { Label } from "@/components/ui/label";
+import { Check, Clock, Settings, AlertTriangle, Trophy, BarChart3, Users } from "lucide-react";
 
 interface AllocationModalProps {
   open: boolean;
@@ -30,10 +30,20 @@ interface CounselingRound {
   roundName: string | null;
   isActive: boolean;
   isCompleted: boolean;
+  isAllocationCompleted: boolean;
+}
+
+interface AllocationResult {
+  round: { id: string; roundName: string | null; roundNumber: number; academicYear: string };
+  summary: { totalAllotted: number; districtSummary: Record<string, number> };
+  cutoffs: Array<{ district: string; stream: string; gender: string; category: string; cutoffMerit: number; studentsAllotted: number }>;
+  students: Array<{ id: string; name: string; meritNumber: number; appNo: string | null; allottedDistrict: string | null; allottedStream: string | null; allottedSchoolUdise: string | null; gender: string; category: string }>;
 }
 
 export default function AllocationModal({ open, onOpenChange, roundId }: AllocationModalProps) {
   const [progress, setProgress] = useState(0);
+  const [allocationCompleted, setAllocationCompleted] = useState(false);
+  const [runRoundId, setRunRoundId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -49,42 +59,48 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
     },
   });
 
+  // Fetch allocation results once run is done
+  const { data: results, isLoading: isLoadingResults } = useQuery<AllocationResult>({
+    queryKey: ["/api/allocation/results", runRoundId],
+    enabled: !!runRoundId && allocationCompleted,
+    queryFn: async () => {
+      const res = await fetch(`/api/allocation/results/${runRoundId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch results");
+      return res.json();
+    },
+  });
+
   const allocationMutation = useMutation({
     mutationFn: async () => {
-      if (!roundId || !round) {
-        throw new Error("Round not selected");
-      }
+      if (!roundId || !round) throw new Error("Round not selected");
 
-      // Simulate progress updates
       const progressInterval = setInterval(() => {
         setProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
+          if (prev >= 88) { clearInterval(progressInterval); return 88; }
+          return prev + 8;
         });
-      }, 300);
+      }, 400);
 
-      const result = await apiRequest("POST", `/api/counseling-rounds/${roundId}/run-allocation`);
+      const res = await apiRequest("POST", `/api/counseling-rounds/${roundId}/run-allocation`);
       clearInterval(progressInterval);
       setProgress(100);
-      return result;
+      const data = await res.json();
+      return data;
     },
-    onSuccess: async (response) => {
-      const data = await response.json();
+    onSuccess: (data) => {
+      setRunRoundId(roundId!);
+      setAllocationCompleted(true);
       queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds"] });
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/allocation/stats"] });
       toast({
-        title: "Allocation Completed",
-        description: `Seat allocation completed for ${round?.roundName || `Round ${round?.roundNumber}`}. ${data.allottedStudents ? `Allotted ${data.allottedStudents} out of ${data.totalStudents} students.` : 'Allocation completed successfully.'}`,
+        title: "✅ Allocation Completed",
+        description: `Allotted ${data.allottedStudents} out of ${data.totalStudents} eligible students. View Results tab for details.`,
+        duration: 8000,
       });
-      setTimeout(() => {
-        onOpenChange(false);
-        setProgress(0);
-      }, 2000);
     },
     onError: (error) => {
       toast({
@@ -96,42 +112,60 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
     },
   });
 
+  const handleClose = () => {
+    onOpenChange(false);
+    // Reset state after dialog closes
+    setTimeout(() => {
+      setProgress(0);
+      setAllocationCompleted(false);
+      setRunRoundId(null);
+    }, 300);
+  };
+
   const steps = [
-    {
-      title: "Data validation completed",
-      completed: true,
-      icon: Check,
-    },
+    { title: "Data validation completed", completed: true, icon: Check },
     {
       title: "Processing allocations...",
-      completed: allocationMutation.isPending || progress < 100,
+      completed: progress >= 100,
       icon: allocationMutation.isPending ? Settings : Check,
       loading: allocationMutation.isPending,
     },
-    {
-      title: "Generating reports",
-      completed: progress === 100,
-      icon: progress === 100 ? Check : Clock,
-    },
+    { title: "Generating results", completed: progress === 100, icon: progress === 100 ? Check : Clock },
   ];
 
-  const canStart = roundId && round && round.isActive && !round.isCompleted;
+  const canStart = roundId && round && round.isActive && !round.isCompleted && !round.isAllocationCompleted;
+
+  const getCategoryColor = (cat: string) => {
+    switch (cat) {
+      case "Open": return "bg-blue-100 text-blue-800";
+      case "Disabled": return "bg-amber-100 text-amber-800";
+      case "WHH": return "bg-purple-100 text-purple-800";
+      case "Private": return "bg-green-100 text-green-800";
+      default: return "bg-gray-100 text-gray-800";
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className={allocationCompleted ? "max-w-5xl" : "max-w-md"}>
         <DialogHeader>
-          <DialogTitle>Running Seat Allocation</DialogTitle>
+          <DialogTitle>
+            {allocationCompleted ? "📊 Allocation Results" : "Running Seat Allocation"}
+          </DialogTitle>
           <DialogDescription>
             {round ? (
-              <>Running allocation for <strong>{round.roundName || `Round ${round.roundNumber}`}</strong> ({round.academicYear})</>
+              <>
+                {allocationCompleted ? "Results for" : "Running allocation for"}{" "}
+                <strong>{round.roundName || `Round ${round.roundNumber}`}</strong> ({round.academicYear})
+              </>
             ) : (
               "Processing student choices and vacancy data"
             )}
           </DialogDescription>
         </DialogHeader>
-        
-        {progress === 0 && round && (
+
+        {/* Pre-run state */}
+        {progress === 0 && !allocationCompleted && round && (
           <div className="space-y-4">
             <div className="p-4 bg-muted rounded-lg">
               <div className="space-y-2">
@@ -153,6 +187,12 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
                     {round.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </div>
+                {round.isAllocationCompleted && (
+                  <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Allocation has already been run for this round.
+                  </div>
+                )}
               </div>
             </div>
             {!round.isActive && (
@@ -164,43 +204,180 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
           </div>
         )}
 
-        {progress > 0 && (
+        {/* Progress state */}
+        {progress > 0 && !allocationCompleted && (
           <div className="space-y-4">
             {steps.map((step, index) => (
               <div key={index} className="flex items-center space-x-3">
                 <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                  step.completed 
-                    ? "bg-green-500 text-white" 
-                    : step.loading 
-                      ? "bg-primary animate-pulse" 
-                      : "bg-muted"
+                  step.completed ? "bg-green-500 text-white" : step.loading ? "bg-primary animate-pulse" : "bg-muted"
                 }`}>
                   {step.completed && <step.icon className="w-3 h-3" />}
                   {step.loading && <step.icon className="w-3 h-3 text-primary-foreground animate-spin" />}
                 </div>
-                <span className={`text-sm ${
-                  step.completed ? "text-foreground" : "text-muted-foreground"
-                }`}>
+                <span className={`text-sm ${step.completed ? "text-foreground" : "text-muted-foreground"}`}>
                   {step.title}
                 </span>
               </div>
             ))}
-          </div>
-        )}
-        
-        {progress > 0 && (
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Progress</span>
-              <span data-testid="allocation-progress">{progress}%</span>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Progress</span>
+                <span data-testid="allocation-progress">{progress}%</span>
+              </div>
+              <Progress value={progress} className="w-full" />
             </div>
-            <Progress value={progress} className="w-full" />
           </div>
         )}
 
-        {!allocationMutation.isPending && progress === 0 && (
+        {/* Results state */}
+        {allocationCompleted && (
+          <div className="space-y-4">
+            {isLoadingResults ? (
+              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+                Loading results...
+              </div>
+            ) : results ? (
+              <div className="space-y-4">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-center">
+                    <Trophy className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                    <div className="text-2xl font-bold text-green-700">{results.summary.totalAllotted}</div>
+                    <div className="text-xs text-green-600">Total Allotted</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-center">
+                    <BarChart3 className="w-5 h-5 text-blue-600 mx-auto mb-1" />
+                    <div className="text-2xl font-bold text-blue-700">{Object.keys(results.summary.districtSummary).length}</div>
+                    <div className="text-xs text-blue-600">Districts Filled</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-purple-50 border border-purple-200 text-center">
+                    <Users className="w-5 h-5 text-purple-600 mx-auto mb-1" />
+                    <div className="text-2xl font-bold text-purple-700">{results.cutoffs.length}</div>
+                    <div className="text-xs text-purple-600">Category Buckets</div>
+                  </div>
+                </div>
+
+                <Tabs defaultValue="cutoffs">
+                  <TabsList className="w-full">
+                    <TabsTrigger value="cutoffs" className="flex-1">
+                      <Trophy className="w-3 h-3 mr-1" />
+                      Cutoffs
+                    </TabsTrigger>
+                    <TabsTrigger value="students" className="flex-1">
+                      <Users className="w-3 h-3 mr-1" />
+                      Allotted Students
+                    </TabsTrigger>
+                    <TabsTrigger value="districts" className="flex-1">
+                      <BarChart3 className="w-3 h-3 mr-1" />
+                      By District
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Cutoffs tab */}
+                  <TabsContent value="cutoffs">
+                    <ScrollArea className="h-72">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>District</TableHead>
+                            <TableHead>Stream</TableHead>
+                            <TableHead>Gender</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead className="text-right">Cutoff Merit</TableHead>
+                            <TableHead className="text-right">Allotted</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {results.cutoffs.map((row, i) => (
+                            <TableRow key={i}>
+                              <TableCell className="font-medium text-xs">{row.district}</TableCell>
+                              <TableCell className="text-xs">{row.stream}</TableCell>
+                              <TableCell className="text-xs">{row.gender}</TableCell>
+                              <TableCell>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getCategoryColor(row.category)}`}>
+                                  {row.category}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-bold text-sm">{row.cutoffMerit}</TableCell>
+                              <TableCell className="text-right text-sm">{row.studentsAllotted}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  {/* Allotted Students tab */}
+                  <TabsContent value="students">
+                    <ScrollArea className="h-72">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Merit</TableHead>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Gender</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Allotted District</TableHead>
+                            <TableHead>Stream</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {results.students.map((s) => (
+                            <TableRow key={s.id}>
+                              <TableCell className="font-mono font-bold text-sm">{s.meritNumber}</TableCell>
+                              <TableCell className="text-xs font-medium">{s.name}</TableCell>
+                              <TableCell className="text-xs">{s.gender}</TableCell>
+                              <TableCell>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getCategoryColor(s.category)}`}>
+                                  {s.category}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs">{s.allottedDistrict || "—"}</TableCell>
+                              <TableCell className="text-xs">{s.allottedStream || "—"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  {/* District summary tab */}
+                  <TabsContent value="districts">
+                    <ScrollArea className="h-72">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>District</TableHead>
+                            <TableHead className="text-right">Students Allotted</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {Object.entries(results.summary.districtSummary)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([district, count]) => (
+                              <TableRow key={district}>
+                                <TableCell className="font-medium text-sm">{district}</TableCell>
+                                <TableCell className="text-right font-bold text-primary">{count}</TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-4">No results data available.</p>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {!allocationMutation.isPending && progress === 0 && !allocationCompleted && (
           <div className="flex space-x-2">
-            <Button 
+            <Button
               onClick={() => allocationMutation.mutate()}
               className="flex-1"
               data-testid="button-start-allocation"
@@ -208,18 +385,21 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
             >
               Start Allocation
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                onOpenChange(false);
-                setProgress(0);
-              }}
+            <Button
+              variant="outline"
+              onClick={handleClose}
               className="flex-1"
               data-testid="button-cancel-allocation"
             >
               Cancel
             </Button>
           </div>
+        )}
+
+        {allocationCompleted && (
+          <Button onClick={handleClose} className="w-full">
+            Close
+          </Button>
         )}
       </DialogContent>
     </Dialog>

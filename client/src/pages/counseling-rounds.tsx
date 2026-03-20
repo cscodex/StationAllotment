@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
+import AllocationModal from "@/components/modals/allocation-modal";
 import {
   Calendar,
   Plus,
@@ -147,6 +148,8 @@ export default function CounselingRounds() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingRound, setEditingRound] = useState<CounselingRound | null>(null);
   const [editStartDate, setEditStartDate] = useState<string>("");
+  const [allocationModalOpen, setAllocationModalOpen] = useState(false);
+  const [allocationRoundId, setAllocationRoundId] = useState<string | null>(null);
   // Fetch current session
   const { data: currentSessionData } = useQuery<{ currentSession: string }>({
     queryKey: ["/api/session/current"],
@@ -282,32 +285,12 @@ export default function CounselingRounds() {
     },
   });
 
-  // Run allocation mutation
-  const runAllocationMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("POST", `/api/counseling-rounds/${id}/run-allocation`);
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      refetch();
-      toast({
-        title: "Allocation Completed",
-        description: `Allocated ${data.allottedStudents} out of ${data.totalStudents} students`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to run allocation",
-        variant: "destructive",
-      });
-    },
-  });
+  // Run allocation: open modal instead of native confirm
+  const handleRunAllocation = (round: CounselingRound) => {
+    setAllocationRoundId(round.id);
+    setAllocationModalOpen(true);
+  };
 
-
-  // Update round start date mutation
   const updateRoundMutation = useMutation({
     mutationFn: async ({ id, startDate }: { id: string; startDate: string }) => {
       const res = await apiRequest("PUT", `/api/counseling-rounds/${id}`, { startDate });
@@ -354,9 +337,9 @@ export default function CounselingRounds() {
     }
   };
 
-  const handleRunAllocation = (round: CounselingRound) => {
+  const handleRunAllocation_OLD = (round: CounselingRound) => {
     if (confirm(`Run allocation for ${round.roundName} - Round ${round.roundNumber}? This will assign vacant seats to eligible students.`)) {
-      runAllocationMutation.mutate(round.id);
+      // Run via the mutation (legacy path)
     }
   };
 
@@ -709,7 +692,7 @@ export default function CounselingRounds() {
                                       <PrerequisitesButton
                                         round={round}
                                         onRunAllocation={handleRunAllocation}
-                                        isPending={runAllocationMutation.isPending}
+                                        isPending={false}
                                       />
                                     </>
                                   )}
@@ -880,7 +863,21 @@ export default function CounselingRounds() {
           </DialogContent>
         </Dialog>
       </main>
+
+      {/* Allocation Modal */}
+      <AllocationModal
+        open={allocationModalOpen}
+        onOpenChange={(open) => {
+          setAllocationModalOpen(open);
+          if (!open) {
+            setAllocationRoundId(null);
+            // Refresh rounds after modal closes
+            queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
+            refetch();
+          }
+        }}
+        roundId={allocationRoundId}
+      />
     </div>
   );
 }
-

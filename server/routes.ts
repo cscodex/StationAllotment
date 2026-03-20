@@ -1992,6 +1992,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET a single counseling round by ID
+  app.get('/api/counseling-rounds/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      if (!round) return res.status(404).json({ message: "Round not found" });
+      res.json(round);
+    } catch (error) {
+      console.error("Fetch counseling round error:", error);
+      res.status(500).json({ message: "Failed to fetch round" });
+    }
+  });
+
+  // GET allocation results for a round (cutoffs + allotted students)
+  app.get('/api/allocation/results/:roundId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { roundId } = req.params;
+      const round = await storage.getCounselingRound(roundId);
+      if (!round) return res.status(404).json({ message: "Round not found" });
+
+      // Fetch all students allocated in this round
+      const allStudents = await storage.getStudents(10000, 0);
+      const allottedStudents = allStudents.filter(s =>
+        s.allocationStatus === 'allotted' && s.counselingRoundId === roundId
+      );
+
+      // Build cutoff table: track per district|stream|gender|category the max merit number (worst rank admitted = cutoff)
+      const cutoffMap: Record<string, { district: string; stream: string; gender: string; category: string; cutoffMerit: number; studentsAllotted: number }> = {};
+
+      // Fetch entrance results to get per-student gender and category
+      const entranceResults = await storage.getStudentsEntranceResults(10000, 0);
+      const entranceResultMap = new Map<string, any>();
+      entranceResults.forEach(er => {
+        if (er.applicationNo) entranceResultMap.set(er.applicationNo, er);
+      });
+
+      allottedStudents.forEach(student => {
+        const er = entranceResultMap.get(student.appNo || '');
+        if (!er) return;
+        const key = `${student.allottedDistrict}|${student.stream}|${er.gender}|${er.category}`;
+        if (!cutoffMap[key]) {
+          cutoffMap[key] = {
+            district: student.allottedDistrict || '',
+            stream: student.stream || '',
+            gender: er.gender || '',
+            category: er.category || '',
+            cutoffMerit: student.meritNumber,
+            studentsAllotted: 0,
+          };
+        }
+        // Cut-off = worst (highest) merit number admitted
+        if (student.meritNumber > cutoffMap[key].cutoffMerit) {
+          cutoffMap[key].cutoffMerit = student.meritNumber;
+        }
+        cutoffMap[key].studentsAllotted++;
+      });
+
+      const cutoffs = Object.values(cutoffMap).sort((a, b) =>
+        a.district.localeCompare(b.district) || a.stream.localeCompare(b.stream)
+      );
+
+      // Simplified allotted student list for display
+      const studentList = allottedStudents.map(student => {
+        const er = entranceResultMap.get(student.appNo || '');
+        return {
+          id: student.id,
+          name: student.name,
+          meritNumber: student.meritNumber,
+          appNo: student.appNo,
+          allottedDistrict: student.allottedDistrict,
+          allottedStream: student.allottedStream,
+          allottedSchoolUdise: student.allottedSchoolUdise,
+          counselingDistrict: student.counselingDistrict,
+          gender: er?.gender,
+          category: er?.category,
+        };
+      }).sort((a, b) => a.meritNumber - b.meritNumber);
+
+      const districtSummary: Record<string, number> = {};
+      allottedStudents.forEach(s => {
+        if (s.allottedDistrict) districtSummary[s.allottedDistrict] = (districtSummary[s.allottedDistrict] || 0) + 1;
+      });
+
+      res.json({
+        round: { id: round.id, roundName: round.roundName, roundNumber: round.roundNumber, academicYear: round.academicYear },
+        summary: {
+          totalAllotted: allottedStudents.length,
+          districtSummary,
+        },
+        cutoffs,
+        students: studentList,
+      });
+    } catch (error) {
+      console.error("Get allocation results error:", error);
+      res.status(500).json({ message: "Failed to fetch allocation results" });
+    }
+  });
+
   app.get('/api/counseling-rounds/:id/prerequisites', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
