@@ -134,7 +134,7 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
     { title: "Generating results", completed: progress === 100, icon: progress === 100 ? Check : Clock },
   ];
 
-  const canStart = roundId && round && round.isActive && !round.isCompleted && !round.isAllocationFinalized;
+  const canStart = roundId && round && round.isActive && !round.isCompleted;
 
   const getCategoryColor = (cat: string) => {
     switch (cat) {
@@ -188,17 +188,12 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
                     {round.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </div>
-                {round.isAllocationFinalized ? (
-                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    Allocation is finalized and cannot be re-run.
-                  </div>
-                ) : round.isAllocationCompleted ? (
+                {(round.isAllocationCompleted || round.isAllocationFinalized) && (
                   <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700 flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" />
-                    Allocation has been run. You can re-run it again to reset and recalculate.
+                    Allocation was previously run. Click Start to reset and re-run with fresh data.
                   </div>
-                ) : null}
+                )}
               </div>
             </div>
             {!round.isActive && (

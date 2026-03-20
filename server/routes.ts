@@ -2333,10 +2333,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const academicYear = activeRound.academicYear;
 
-      // Check if allocation has already been finalized for this round
-      if (activeRound.isAllocationFinalized) {
-        return res.status(400).json({ message: "Allocation has been finalized and cannot be re-run. Please unfinalize first if changes are needed." });
-      }
+      // Note: isAllocationFinalized and isAllocationCompleted are cleared automatically
+      // by resetAllocation() at the start of each allocation run, so no blocking check needed here.
 
       // Check if all districts with eligible students are finalized
       const allDistrictStatuses = await storage.getAllDistrictStatuses();

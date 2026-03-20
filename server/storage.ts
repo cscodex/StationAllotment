@@ -1025,6 +1025,19 @@ export class DatabaseStorage implements IStorage {
         counselingRoundNumber: null
       })
       .where(eq(students.academicYear, academicYear));
+
+    // 3. Reset the round-level allocation flags so re-runs work
+    await db.update(counselingRounds)
+      .set({
+        isAllocationCompleted: false,
+        isAllocationFinalized: false,
+        allocationFinalizedAt: null,
+        allocationFinalizedBy: null
+      })
+      .where(and(
+        eq(counselingRounds.academicYear, academicYear),
+        eq(counselingRounds.roundName, roundName)
+      ));
   }
 
   async updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy> {
