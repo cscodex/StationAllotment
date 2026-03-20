@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -93,6 +94,7 @@ export default function StudentPreferenceManagement() {
   const [recordsPerPage, setRecordsPerPage] = useState(50);
   const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<string>("All");
 
   // Finalize dialog state
   const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
@@ -255,7 +257,13 @@ export default function StudentPreferenceManagement() {
       });
     }
 
-    // 2. Search Filter
+    // 3. Category/Gender Tab Filter
+    if (activeTab !== "All") {
+      const [tabGender, tabCategory] = activeTab.split(" - ");
+      filtered = filtered.filter((s: any) => s.gender === tabGender && s.category === tabCategory);
+    }
+
+    // 4. Search Filter
     if (!searchTerm) return filtered;
     
     const lowerSearch = searchTerm.toLowerCase();
@@ -677,35 +685,51 @@ export default function StudentPreferenceManagement() {
 
           {/* Students Table */}
           <Card>
-            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-2 gap-2 p-4 md:p-6">
-              <CardTitle className="text-base sm:text-lg">Students ({filteredStudents.length})</CardTitle>
-              {selectedStudentIds.length > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  <Button onClick={handleTestScenariosDownload} variant="secondary" size="sm" className="flex items-center gap-2 border-primary/20 text-primary text-xs sm:text-sm">
-                    <DownloadCloud className="w-4 h-4" />
-                    Mock OMRs ({selectedStudentIds.length})
-                  </Button>
-                  <Button onClick={handleBulkDownloadOMR} size="sm" className="flex items-center gap-2 text-xs sm:text-sm">
-                    <DownloadCloud className="w-4 h-4" />
-                    Blank OMRs ({selectedStudentIds.length})
-                  </Button>
-                  {user?.role === 'central_admin' && (
-                    <Button 
-                      onClick={() => bulkLockMutation.mutate(selectedStudentIds)} 
-                      size="sm" 
-                      variant="default"
-                      className="flex items-center gap-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={bulkLockMutation.isPending || selectedStudentIds.every(id => {
-                        const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
-                        return s?.lockedBy || !areAllPreferencesFilled(s as Student);
-                      })}
-                    >
-                      <Lock className="w-4 h-4" />
-                      {bulkLockMutation.isPending ? "Locking..." : `Lock Selected (${selectedStudentIds.length})`}
+            <CardHeader className="flex flex-col items-start gap-4 pb-2 p-4 md:p-6 text-base sm:text-lg font-semibold">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full gap-4">
+                <span>Students ({filteredStudents.length})</span>
+                {selectedStudentIds.length > 0 && (
+                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <Button onClick={handleTestScenariosDownload} variant="secondary" size="sm" className="flex items-center gap-2 border-primary/20 text-primary text-xs sm:text-sm">
+                      <DownloadCloud className="w-4 h-4" />
+                      Mock OMRs ({selectedStudentIds.length})
                     </Button>
-                  )}
-                </div>
-              )}
+                    <Button onClick={handleBulkDownloadOMR} size="sm" className="flex items-center gap-2 text-xs sm:text-sm">
+                      <DownloadCloud className="w-4 h-4" />
+                      Blank OMRs ({selectedStudentIds.length})
+                    </Button>
+                    {user?.role === 'central_admin' && (
+                      <Button 
+                        onClick={() => bulkLockMutation.mutate(selectedStudentIds)} 
+                        size="sm" 
+                        variant="default"
+                        className="flex items-center gap-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        disabled={bulkLockMutation.isPending || selectedStudentIds.every(id => {
+                          const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
+                          return s?.lockedBy || !areAllPreferencesFilled(s as Student);
+                        })}
+                      >
+                        <Lock className="w-4 h-4" />
+                        {bulkLockMutation.isPending ? "Locking..." : `Lock Selected (${selectedStudentIds.length})`}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 7 Gender Category Tabs */}
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mt-2 overflow-x-auto pb-2">
+                <TabsList className="min-w-max">
+                  <TabsTrigger value="All">All Categories</TabsTrigger>
+                  <TabsTrigger value="Female - WHH">Female WHH</TabsTrigger>
+                  <TabsTrigger value="Female - Disabled">Female Disabled</TabsTrigger>
+                  <TabsTrigger value="Female - Private">Female Private</TabsTrigger>
+                  <TabsTrigger value="Female - Open">Female Open</TabsTrigger>
+                  <TabsTrigger value="Male - Disabled">Male Disabled</TabsTrigger>
+                  <TabsTrigger value="Male - Private">Male Private</TabsTrigger>
+                  <TabsTrigger value="Male - Open">Male Open</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </CardHeader>
 
             <div className="max-h-[65vh] overflow-y-auto border-t border-b custom-scrollbar">

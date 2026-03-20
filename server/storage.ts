@@ -129,6 +129,7 @@ export interface IStorage {
     studentsWithChoicesCount: number;
     allPrerequisitesMet: boolean;
   }>;
+  resetAllocation(academicYear: string, roundName: string): Promise<void>;
   updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy>;
   bulkUpsertVacancies(vacancies: InsertVacancy[], onProgress?: (processed: number, total: number) => void): Promise<Vacancy[]>;
   deleteAllVacancies(): Promise<void>;
@@ -1002,6 +1003,28 @@ export class DatabaseStorage implements IStorage {
       .values({ ...vacancy, updatedAt: new Date() })
       .returning();
     return created;
+  }
+
+  async resetAllocation(academicYear: string, roundName: string): Promise<void> {
+    // 1. Restore all vacancy availableSeats to totalSeats
+    await db.update(vacancies)
+      .set({ availableSeats: sql`${vacancies.totalSeats}` })
+      .where(and(
+        eq(vacancies.academicYear, academicYear),
+        eq(vacancies.roundName, roundName)
+      ));
+
+    // 2. Reset student allocation status for this year
+    await db.update(students)
+      .set({
+        allocationStatus: 'pending',
+        allottedDistrict: null,
+        allottedStream: null,
+        allottedSchoolUdise: null,
+        counselingRoundId: null,
+        counselingRoundNumber: null
+      })
+      .where(eq(students.academicYear, academicYear));
   }
 
   async updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy> {
