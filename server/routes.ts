@@ -2090,6 +2090,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Counseling display live endpoint — used by the projector display page
+  app.get('/api/counseling-display/live', isAuthenticated, async (req: any, res) => {
+    try {
+      const gender = (req.query.gender as string) || 'Female';
+      const roundId = req.query.roundId as string | undefined;
+
+      // Find the relevant counseling round
+      let round: any = null;
+      if (roundId) {
+        round = await storage.getCounselingRound(roundId);
+      } else {
+        const currentSessionSetting = await storage.getSetting('current_session');
+        const academicYear = currentSessionSetting?.value || '2024-2025';
+        round = await storage.getActiveCounselingRound(academicYear);
+      }
+      if (!round) return res.status(404).json({ message: 'No active counseling round found' });
+
+      // Fetch students + entrance results for this gender
+      const allStudents = await storage.getStudents(100000, 0, round.academicYear);
+      const entranceResults = await storage.getStudentsEntranceResults(100000, 0);
+      const erMap = new Map<string, any>();
+      entranceResults.forEach((er: any) => { if (er.applicationNo) erMap.set(er.applicationNo, er); });
+
+      // Filter eligible students for this gender who have at least one preference
+      const eligibleStudents = allStudents
+        .filter((s: any) => {
+          const er = erMap.get(s.appNo || '');
+          return er && er.gender === gender && s.choice1;
+        })
+        .sort((a: any, b: any) => a.meritNumber - b.meritNumber);
+
+      // Category progress bars — priority order
+      const categoryOrder = gender === 'Female'
+        ? ['WHH', 'Disabled', 'Private', 'Open']
+        : ['Disabled', 'Private', 'Open'];
+
+      const categoryProgress = categoryOrder.map(cat => {
+        const inCat = eligibleStudents.filter((s: any) => erMap.get(s.appNo || '')?.category === cat);
+        const filled = inCat.filter((s: any) => s.allocationStatus === 'allotted').length;
+        return { category: cat, filled, total: inCat.length };
+      });
+
+      // Ordered playback list (all students in merit order for 1-per-second stepping on the frontend)
+      const playbackStudents = eligibleStudents.map((s: any) => {
+        const er = erMap.get(s.appNo || '');
+        return {
+          id: s.id,
+          meritNumber: s.meritNumber,
+          name: s.name,
+          gender: er?.gender || gender,
+          category: er?.category || '',
+          counselingDistrict: s.counselingDistrict || '',
+          choice1: s.choice1, choice2: s.choice2, choice3: s.choice3,
+          choice4: s.choice4, choice5: s.choice5,
+          allottedStream: s.allottedStream || null,
+          allottedDistrict: s.allottedDistrict || null,
+          allottedSchoolUdise: s.allottedSchoolUdise || null,
+          allocationStatus: s.allocationStatus || 'pending',
+        };
+      });
+
+      // District remaining seats for this gender
+      const vacancies = await storage.getVacancies(round.academicYear, round.roundName);
+      const districtSeatsMap: Record<string, Record<string, number>> = {};
+      vacancies.forEach((v: any) => {
+        if (!v.district || v.gender !== gender) return;
+        if (!districtSeatsMap[v.district]) districtSeatsMap[v.district] = {};
+        const cat = v.category || 'Open';
+        districtSeatsMap[v.district][cat] = (districtSeatsMap[v.district][cat] || 0) + (Number(v.availableSeats) || 0);
+      });
+      const districtSeats = Object.entries(districtSeatsMap).map(([district, cats]) => ({
+        district,
+        ...cats,
+        total: Object.values(cats).reduce((a: number, b: number) => a + b, 0),
+      })).sort((a, b) => a.district.localeCompare(b.district));
+
+      res.json({
+        round: {
+          id: round.id,
+          roundName: round.roundName,
+          roundNumber: round.roundNumber,
+          academicYear: round.academicYear,
+          startedAt: round.updatedAt || round.createdAt,
+        },
+        gender,
+        categoryProgress,
+        students: playbackStudents,
+        districtSeats,
+        totalStudents: playbackStudents.length,
+      });
+    } catch (error) {
+      console.error('Counseling display live error:', error);
+      res.status(500).json({ message: 'Failed to fetch counseling display data' });
+    }
+  });
+
   app.get('/api/counseling-rounds/:id/prerequisites', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;

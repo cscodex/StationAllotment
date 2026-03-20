@@ -25,6 +25,7 @@ import Profile from "@/pages/profile";
 import Notifications from "@/pages/notifications";
 import DistrictAnalysis from "@/pages/district-analysis";
 import YearSessions from "@/pages/year-sessions";
+import CounselingDisplay from "@/pages/counseling-display";
 import MainLayout from "@/components/layout/main-layout";
 
 function Router() {
@@ -36,6 +37,12 @@ function Router() {
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
       </div>
     );
+  }
+
+  // Fullscreen counseling display — no auth needed when accessed directly
+  // Render before the main layout so it gets its own full-page treatment
+  if (typeof window !== 'undefined' && window.location.pathname === '/counseling-display') {
+    return <CounselingDisplay />;
   }
 
   if (!isAuthenticated) {
