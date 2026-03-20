@@ -934,20 +934,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       total = await storage.getStudentsCount(undefined, districtAdminUsername, isFinalized);
 
       // Map database fields to frontend expected fields
-      // Also join gender/category from entrance results for tab filtering
-      const entranceResults = await storage.getStudentsEntranceResults(100000, 0);
-      const erMap = new Map<string, any>();
-      entranceResults.forEach((er: any) => { if (er.applicationNo) erMap.set(er.applicationNo, er); });
-
-      const mappedStudents = students.map(student => {
-        const er = erMap.get(student.appNo || '');
-        return {
-          ...student,
-          applicationNumber: student.appNo,
-          gender: er?.gender || null,
-          category: er?.category || null,
-        };
-      });
+      // gender and category are already native columns on the students table
+      const mappedStudents = students.map(student => ({
+        ...student,
+        applicationNumber: student.appNo,
+      }));
       res.json({ students: mappedStudents, total });
     } catch (error) {
       console.error("Get students error:", error);
