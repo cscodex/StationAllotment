@@ -114,7 +114,7 @@ function PrerequisitesButton({
       missingPrerequisites.push(`District finalizations (${prerequisites.finalizedDistrictsCount}/${prerequisites.totalDistrictsCount})`);
     }
     if (!prerequisites.isAllocationFinalized) {
-      missingPrerequisites.push(`Central phase 1 finalization`);
+      missingPrerequisites.push(`Central Data Lock`);
     }
   }
 
@@ -638,7 +638,7 @@ export default function CounselingRounds() {
                               </div>
                               <div className={`flex items-center gap-1 ${prerequisites.isAllocationFinalized ? 'text-green-600' : 'text-red-600'}`}>
                                 {prerequisites.isAllocationFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Phase 1 Finalized</span>
+                                <span>Data Locked & Ready</span>
                               </div>
                             </div>
                           );
