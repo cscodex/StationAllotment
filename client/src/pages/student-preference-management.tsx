@@ -273,7 +273,7 @@ export default function StudentPreferenceManagement() {
       s.appNo?.toLowerCase().includes(lowerSearch) ||
       s.stream?.toLowerCase().includes(lowerSearch)
     );
-  }, [(studentsData as any)?.students, searchTerm, statusFilter]);
+  }, [(studentsData as any)?.students, searchTerm, statusFilter, activeTab, districtFilter]);
 
   // Derived state: Paginated students
   const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
