@@ -39,6 +39,7 @@ export default function ResetModal({ open, onOpenChange, roundId, roundName, rou
       gender: string;
       category: string;
       result: string;
+      allottedDistrict?: string;
     } | null;
   } | null>(null);
 
@@ -150,8 +151,30 @@ export default function ResetModal({ open, onOpenChange, roundId, roundName, rou
               <Progress value={progress} className="w-full h-3" />
             </div>
             {liveProgress?.currentStudent && (
-              <div className="text-sm text-center text-muted-foreground pt-2">
-                Clearing records... ({liveProgress.processed} / {liveProgress.total})
+              <div className="p-3 mt-4 rounded-lg bg-red-50 border-2 border-red-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] text-red-800 font-bold mb-0.5 tracking-wide">CLEARING RECORD</div>
+                    <div className="font-semibold text-sm text-gray-900">{liveProgress.currentStudent.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Merit #{liveProgress.currentStudent.meritNumber} • {liveProgress.currentStudent.appNo}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs px-2 py-0.5 rounded border font-semibold ${
+                        liveProgress.currentStudent.category === 'WHH' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                        liveProgress.currentStudent.category === 'Disabled' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                        liveProgress.currentStudent.category === 'Private' ? 'bg-teal-100 text-teal-800 border-teal-300' :
+                        'bg-blue-100 text-blue-800 border-blue-300'
+                      }`}
+                    >
+                      {liveProgress.currentStudent.gender === 'Female' ? '♀' : '♂'} {liveProgress.currentStudent.category}
+                    </span>
+                    <div className="mt-2 text-xs font-semibold text-red-600">
+                      ✗ Releasing: {liveProgress.currentStudent.allottedDistrict || 'Seat'}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

@@ -2433,15 +2433,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         startedAt: Date.now(),
       });
 
-      // Get ALL students for this academic year — clear everything
+      // Get ALL students for this academic year, but ONLY reset those allotted in this specific counseling round
       const allStudents = await storage.getStudents(10000, 0, round.academicYear);
       const studentsToReset = allStudents.filter(s =>
-        s.allocationStatus === 'allotted' ||
-        s.allocationStatus === 'not_allotted' ||
-        s.allottedDistrict ||
-        s.allottedStream ||
-        s.counselingRoundId ||
-        s.counselingRoundNumber
+        s.counselingRoundId === id || s.counselingRoundNumber === round.roundNumber
       );
 
       const totalToProcess = studentsToReset.length;
@@ -2461,54 +2456,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         clearedCount++;
 
-        // Update progress every 10 students to avoid too many updates
-        if (clearedCount % 10 === 0 || clearedCount === totalToProcess) {
-          setProgress(id, {
-            processed: clearedCount,
-            total: totalToProcess,
-            currentStudent: {
-              name: student.name,
-              meritNumber: student.meritNumber,
-              appNo: student.appNo,
-              gender: student.gender,
-              category: student.category,
-              result: 'not_allotted',
-            },
-            bucket: `Clearing students... ${clearedCount}/${totalToProcess}`,
-          });
-        }
+        // Update progress in memory for every student, the frontend polls every 500ms
+        setProgress(id, {
+          processed: clearedCount,
+          total: totalToProcess,
+          currentStudent: {
+            name: student.name,
+            meritNumber: student.meritNumber,
+            appNo: student.appNo,
+            gender: student.gender,
+            category: student.category,
+            result: 'not_allotted',
+            allottedDistrict: student.allottedDistrict || undefined,
+            choiceNumber: undefined,
+          },
+          bucket: `Clearing students... ${clearedCount}/${totalToProcess}`,
+        });
       }
 
-      // Restore ALL vacancies for this academic year (not just round-specific)
+      // Restore specific vacancies for seats given up by these students
       setProgress(id, { bucket: 'Restoring vacancy seats...' });
       let restoredVacancies = 0;
-
-      // Try round-specific vacancies first
-      if (round.roundName) {
-        const vacancies = await storage.getVacancies(round.academicYear, round.roundName);
-        for (const vacancy of vacancies) {
-          if (vacancy.totalSeats !== vacancy.availableSeats) {
-            await storage.updateVacancy(vacancy.id, { availableSeats: vacancy.totalSeats || 0 });
+      const allVacancies = await storage.getVacancies(round.academicYear);
+      
+      for (const student of studentsToReset) {
+        if (student.allottedSchoolUdise && student.allottedStream && student.gender && student.category) {
+          // Find the exact vacancy that was used
+          const vac = allVacancies.find(v => 
+            v.udiseCode === student.allottedSchoolUdise && 
+            v.stream === student.allottedStream &&
+            v.gender === student.gender &&
+            v.category === student.category
+          );
+          
+          if (vac && typeof vac.availableSeats === 'number') {
+            await storage.updateVacancy(vac.id, { availableSeats: vac.availableSeats + 1 });
+            vac.availableSeats += 1; // Update local copy for subsequent checks
             restoredVacancies++;
           }
-        }
-      }
-
-      // Also restore any vacancies for the academic year without round filter
-      const allVacancies = await storage.getVacancies(round.academicYear);
-      for (const vacancy of allVacancies) {
-        if (vacancy.totalSeats !== vacancy.availableSeats) {
-          await storage.updateVacancy(vacancy.id, { availableSeats: vacancy.totalSeats || 0 });
-          restoredVacancies++;
         }
       }
 
       // Reset round flags — bring back to pre-allocation state
       await storage.updateCounselingRound(id, {
         isAllocationCompleted: false,
-        isAllocationFinalized: false,
-        allocationFinalizedAt: null,
-        allocationFinalizedBy: null,
       });
 
       // Mark progress as completed

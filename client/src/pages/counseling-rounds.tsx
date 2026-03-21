@@ -562,7 +562,7 @@ export default function CounselingRounds() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Counseling Rounds - {selectedAcademicYear}</CardTitle>
-                {user?.role === 'central_admin' && (
+                {user?.role === 'central_admin' && (!rounds || rounds.every(r => r.isCompleted)) && (
                   <Button onClick={() => setShowCreateDialog(true)}>
                     <Plus className="w-4 h-4 mr-2" />
                     New Counseling Title
