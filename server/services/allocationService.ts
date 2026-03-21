@@ -1,40 +1,15 @@
 import { IStorage } from '../storage';
 import { Student, Vacancy, StudentsEntranceResult } from '@shared/schema';
 import { AuditService } from './auditService';
+import { getProgress, QueueProgress } from './allocationProgress';
 
 export interface ProgressEvent {
+  status?: 'running' | 'paused' | 'cancelled' | 'error';
   processed: number;
   total: number;
   allottedCount: number;
   notAllottedCount: number;
-  currentStudent: {
-    name: string;
-    meritNumber: number;
-    appNo: string;
-    gender: string;
-    category: string;
-    result: 'allotted' | 'not_allotted' | 'processing';
-    allottedDistrict?: string;
-    choiceNumber?: number;
-  } | null;
-  previousStudent: {
-    name: string;
-    meritNumber: number;
-    appNo: string;
-    gender: string;
-    category: string;
-    result: 'allotted' | 'not_allotted';
-    allottedDistrict?: string;
-    choiceNumber?: number;
-  } | null;
-  nextStudent: {
-    name: string;
-    meritNumber: number;
-    appNo: string;
-    gender: string;
-    category: string;
-  } | null;
-  bucket: string;
+  queues: Record<string, QueueProgress>;
 }
 
 export class AllocationService {
@@ -175,165 +150,165 @@ export class AllocationService {
     const allocationsByDistrict: Record<string, number> = {};
     let allottedCount = 0;
     let notAllottedCount = 0;
+    let processedCount = 0;
     const totalEligible = eligibleStudents.length;
 
-    log('🎯 Processing students sequentially in merit order...');
-
-    let previousStudentState: any = null;
-
-    // Process ALL students sequentially in merit order for real-time display
-    for (let idx = 0; idx < eligibleStudents.length; idx++) {
-      const student = eligibleStudents[idx];
+    log('🎯 Grouping students into independent parallel demographic queues...');
+    // Create partitioned queues
+    const studentQueues: Record<string, Student[]> = {};
+    eligibleStudents.forEach(student => {
       const entranceResult = entranceResultMap.get(student.appNo)!;
-      if (!entranceResult) continue;
+      // Replace spaces with underscores for object keys
+      const bucket = `${entranceResult.gender}_${entranceResult.category}`.replace(/\s+/g, '');
+      if (!studentQueues[bucket]) studentQueues[bucket] = [];
+      studentQueues[bucket].push(student);
+    });
 
-      const bucket = `${entranceResult.gender} - ${entranceResult.category}`;
+    log(`   Created ${Object.keys(studentQueues).length} independent queues tracking ${totalEligible} distinct eligible students.`);
+    
+    // Create the live queues dictionary to emit
+    const liveQueues: Record<string, QueueProgress> = {};
+    Object.keys(studentQueues).forEach(key => liveQueues[key] = { currentStudent: null, previousStudent: null });
 
-      let nextStudentState: any = null;
-      if (idx + 1 < eligibleStudents.length) {
-        const nextS = eligibleStudents[idx + 1];
-        const nextEr = entranceResultMap.get(nextS.appNo);
-        if (nextEr) {
-          nextStudentState = {
-            name: nextS.name,
-            meritNumber: nextS.meritNumber,
-            appNo: nextS.appNo,
-            gender: nextEr.gender,
-            category: nextEr.category,
-          };
-        }
-      }
-
-      // Emit "processing" progress
+    const emitProgress = () => {
       if (onProgress) {
         onProgress({
-          processed: idx,
+          processed: processedCount,
           total: totalEligible,
           allottedCount,
           notAllottedCount,
-          currentStudent: {
-            name: student.name,
-            meritNumber: student.meritNumber,
-            appNo: student.appNo,
-            gender: entranceResult.gender,
-            category: entranceResult.category,
-            result: 'processing',
-          },
-          previousStudent: previousStudentState,
-          nextStudent: nextStudentState,
-          bucket,
+          queues: liveQueues,
         });
       }
+    };
 
-      let allocated = false;
+    log('🚀 Launching parallel process engine across all active queues...');
 
-      // Check each choice from 1 to 10
-      for (let i = 1; i <= 10; i++) {
-        const choice = (student as any)[`choice${i}`];
-        if (!choice) continue;
+    // Process all queues in parallel
+    await Promise.all(Object.entries(studentQueues).map(async ([bucket, queueStudents]) => {
+      let previousStudentState: any = null;
 
-        const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${entranceResult.category}`;
-        const availableVacancies = vacancyMap.get(vacancyKey);
-        
-        if (availableVacancies && availableVacancies.length > 0) {
-          const selectedVacancy = availableVacancies.find(v => v.availableSeats && v.availableSeats > 0);
-          
-          if (selectedVacancy) {
-            await this.storage.updateStudent(student.id, {
-              allottedDistrict: choice,
-              allottedStream: student.stream,
-              allottedSchoolUdise: selectedVacancy.udiseCode || null,
-              counselingRoundId: counselingRoundId,
-              counselingRoundNumber: roundNumber,
-              allocationStatus: 'allotted',
-            });
+      for (let idx = 0; idx < queueStudents.length; idx++) {
+        const student = queueStudents[idx];
+        const entranceResult = entranceResultMap.get(student.appNo)!;
 
-            await this.storage.updateVacancy(selectedVacancy.id, {
-              availableSeats: (selectedVacancy.availableSeats || 0) - 1,
-            });
-            
-            selectedVacancy.availableSeats = (selectedVacancy.availableSeats || 0) - 1;
-            if (selectedVacancy.availableSeats === 0) {
-              vacancyMap.set(vacancyKey, availableVacancies.filter(v => v.id !== selectedVacancy.id));
-            }
-            
-            allottedCount++;
-            allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
-            allocated = true;
-
-            // Emit "allotted" progress
-            if (onProgress) {
-              onProgress({
-                processed: idx + 1,
-                total: totalEligible,
-                allottedCount,
-                notAllottedCount,
-                currentStudent: {
-                  name: student.name,
-                  meritNumber: student.meritNumber,
-                  appNo: student.appNo,
-                  gender: entranceResult.gender,
-                  category: entranceResult.category,
-                  result: 'allotted',
-                  allottedDistrict: choice,
-                  choiceNumber: i,
-                },
-                previousStudent: previousStudentState,
-                nextStudent: nextStudentState,
-                bucket,
-              });
-            }
-
-            previousStudentState = {
-              name: student.name,
-              meritNumber: student.meritNumber,
-              appNo: student.appNo,
-              gender: entranceResult.gender,
-              category: entranceResult.category,
-              result: 'allotted',
-              allottedDistrict: choice,
-              choiceNumber: i,
-            };
-
-            break;
-          }
-        }
-      }
-
-      if (!allocated) {
-        await this.storage.updateStudent(student.id, { allocationStatus: 'not_allotted' });
-        notAllottedCount++;
-
-        // Emit "not_allotted" progress
-        if (onProgress) {
-          onProgress({
-            processed: idx + 1,
-            total: totalEligible,
-            allottedCount,
-            notAllottedCount,
-            currentStudent: {
-              name: student.name,
-              meritNumber: student.meritNumber,
-              appNo: student.appNo,
-              gender: entranceResult.gender,
-              category: entranceResult.category,
-              result: 'not_allotted',
-            },
-            previousStudent: previousStudentState,
-            nextStudent: nextStudentState,
-            bucket,
-          });
+        // --- PAUSE / DELAY / CANCEL INTERCEPTOR ---
+        let progressState = getProgress(counselingRoundId);
+        if (progressState?.isCancelled) {
+          log(`⏹ [${bucket}] Cancel signal received. Halting queue.`);
+          break; // break the loop for this bucket
         }
 
-        previousStudentState = {
+        while (progressState?.isPaused) {
+          await new Promise(r => setTimeout(r, 500));
+          progressState = getProgress(counselingRoundId);
+          if (progressState?.isCancelled) break;
+        }
+        if (progressState?.isCancelled) break;
+
+        // Pre-tick delay (Slow Motion)
+        if (progressState?.delayMs && progressState.delayMs > 0) {
+          await new Promise(r => setTimeout(r, progressState.delayMs));
+        }
+        // --- END INTERCEPTOR ---
+
+        // Setup live processing state
+        liveQueues[bucket].currentStudent = {
           name: student.name,
           meritNumber: student.meritNumber,
           appNo: student.appNo,
           gender: entranceResult.gender,
           category: entranceResult.category,
-          result: 'not_allotted',
+          result: 'processing',
         };
+        liveQueues[bucket].previousStudent = previousStudentState;
+        emitProgress();
+
+        let allocated = false;
+        let lastFailureReason = "No choices matched cutoffs";
+
+        // Check each choice from 1 to 10
+        for (let i = 1; i <= 10; i++) {
+          const choice = (student as any)[`choice${i}`];
+          if (!choice) continue;
+
+          const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${entranceResult.category}`;
+          const availableVacancies = vacancyMap.get(vacancyKey);
+          
+          if (availableVacancies && availableVacancies.length > 0) {
+            const selectedVacancy = availableVacancies.find(v => v.availableSeats && v.availableSeats > 0);
+            
+            if (selectedVacancy) {
+              await this.storage.updateStudent(student.id, {
+                allottedDistrict: choice,
+                allottedStream: student.stream,
+                allottedSchoolUdise: selectedVacancy.udiseCode || null,
+                counselingRoundId: counselingRoundId,
+                counselingRoundNumber: roundNumber,
+                allocationStatus: 'allotted',
+              });
+
+              await this.storage.updateVacancy(selectedVacancy.id, {
+                availableSeats: (selectedVacancy.availableSeats || 0) - 1,
+              });
+              
+              selectedVacancy.availableSeats = (selectedVacancy.availableSeats || 0) - 1;
+              if (selectedVacancy.availableSeats === 0) {
+                vacancyMap.set(vacancyKey, availableVacancies.filter(v => v.id !== selectedVacancy.id));
+              }
+              
+              allottedCount++;
+              allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
+              allocated = true;
+
+              previousStudentState = {
+                name: student.name,
+                meritNumber: student.meritNumber,
+                appNo: student.appNo,
+                gender: entranceResult.gender,
+                category: entranceResult.category,
+                result: 'allotted',
+                allottedDistrict: choice,
+                choiceNumber: i,
+              };
+
+              break;
+            } else {
+              lastFailureReason = `${choice} full.`;
+            }
+          } else {
+            lastFailureReason = `${choice} cutoffs exceeded.`;
+          }
+        }
+
+        if (!allocated) {
+          await this.storage.updateStudent(student.id, { allocationStatus: 'not_allotted' });
+          notAllottedCount++;
+
+          previousStudentState = {
+            name: student.name,
+            meritNumber: student.meritNumber,
+            appNo: student.appNo,
+            gender: entranceResult.gender,
+            category: entranceResult.category,
+            result: 'not_allotted',
+            reason: `Denied: ${lastFailureReason}`,
+          };
+        }
+
+        processedCount++;
+        
+        liveQueues[bucket].currentStudent = null;
+        liveQueues[bucket].previousStudent = previousStudentState;
+        emitProgress();
       }
+    }));
+
+    // Check if it was cancelled globally
+    const finalState = getProgress(counselingRoundId);
+    if (finalState?.isCancelled) {
+       log(`⏹ Allocation run was interrupted by CANCEL flag. Exiting gracefully.`);
+       throw new Error('Allocation Cancelled');
     }
 
     const endTime = Date.now();

@@ -2359,19 +2359,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Wire real-time progress: allocation service calls onProgress, we write to in-memory store
-      setProgress(id, { status: 'resetting', processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, currentStudent: null, bucket: '', logs: [], startedAt: Date.now() });
+      setProgress(id, { status: 'resetting', queues: {}, processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, logs: [], startedAt: Date.now() });
 
       const result = await allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id, (event) => {
         setProgress(id, {
-          status: 'running',
+          status: event.status || 'running',
           processed: event.processed,
           total: event.total,
           allottedCount: event.allottedCount,
           notAllottedCount: event.notAllottedCount,
-          currentStudent: event.currentStudent,
-          previousStudent: event.previousStudent,
-          nextStudent: event.nextStudent,
-          bucket: event.bucket,
+          queues: event.queues,
         });
       });
 
@@ -2403,12 +2400,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { roundId } = req.params;
       const progress = getProgress(roundId);
       if (!progress) {
-        return res.json({ status: 'idle', processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, currentStudent: null, bucket: '' });
+        return res.json({ status: 'idle', isPaused: false, isCancelled: false, delayMs: 100, queues: {}, processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0 });
       }
       res.json(progress);
     } catch (error) {
       res.status(500).json({ message: "Failed to get progress" });
     }
+  });
+
+  // Allocation Control Endpoints
+  app.post('/api/allocation/:roundId/pause', isCentralAdmin, async (req, res) => {
+    const { roundId } = req.params;
+    setProgress(roundId, { isPaused: true, status: 'paused' });
+    res.json({ message: 'Paused' });
+  });
+
+  app.post('/api/allocation/:roundId/resume', isCentralAdmin, async (req, res) => {
+    const { roundId } = req.params;
+    setProgress(roundId, { isPaused: false, status: 'running' });
+    res.json({ message: 'Resumed' });
+  });
+
+  app.post('/api/allocation/:roundId/cancel', isCentralAdmin, async (req, res) => {
+    const { roundId } = req.params;
+    setProgress(roundId, { isCancelled: true, status: 'cancelled' });
+    res.json({ message: 'Cancelled' });
+  });
+
+  app.post('/api/allocation/:roundId/speed', isCentralAdmin, async (req, res) => {
+    const { roundId } = req.params;
+    const { delayMs } = req.body;
+    setProgress(roundId, { delayMs: Number(delayMs) || 0 });
+    res.json({ message: 'Speed updated' });
   });
 
   // Reset allocation for a specific round
@@ -2427,8 +2450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         total: 0,
         allottedCount: 0,
         notAllottedCount: 0,
-        currentStudent: null,
-        bucket: 'Resetting allocations...',
+        queues: {},
         logs: [],
         startedAt: Date.now(),
       });
@@ -2442,7 +2464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalToProcess = studentsToReset.length;
       let clearedCount = 0;
 
-      setProgress(id, { total: totalToProcess, bucket: `Clearing ${totalToProcess} student allocations...` });
+      setProgress(id, { total: totalToProcess, queues: { 'Resetting': { currentStudent: null, previousStudent: null, message: `Clearing ${totalToProcess} student allocations...` } } });
 
       // Clear ALL students with any allocation data
       for (const student of studentsToReset) {
@@ -2457,25 +2479,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         clearedCount++;
 
         // Update progress in memory for every student, the frontend polls every 500ms
-        setProgress(id, {
-          processed: clearedCount,
-          total: totalToProcess,
-          currentStudent: {
-            name: student.name,
-            meritNumber: student.meritNumber,
-            appNo: student.appNo,
-            gender: student.gender,
-            category: student.category,
-            result: 'not_allotted',
-            allottedDistrict: student.allottedDistrict || undefined,
-            choiceNumber: undefined,
-          },
-          bucket: `Clearing students... ${clearedCount}/${totalToProcess}`,
-        });
+        // Emit progress
+        if (clearedCount % 10 === 0) {
+          setProgress(id, {
+            processed: clearedCount,
+            total: studentsToReset.length,
+            queues: {
+              'Resetting': {
+                currentStudent: {
+                  name: student.name,
+                  meritNumber: student.meritNumber,
+                  appNo: student.appNo,
+                  gender: student.gender,
+                  category: student.category,
+                  result: 'processing',
+                  allottedDistrict: student.allottedDistrict || undefined,
+                },
+                previousStudent: null,
+                message: `Clearing students... ${clearedCount}/${totalToProcess}`,
+              }
+            }
+          });
+        }
       }
 
       // Restore specific vacancies for seats given up by these students
-      setProgress(id, { bucket: 'Restoring vacancy seats...' });
+      setProgress(id, { queues: { 'Restoring': { currentStudent: null, previousStudent: null, message: 'Restoring vacancy seats...' } } });
       let restoredVacancies = 0;
       const allVacancies = await storage.getVacancies(round.academicYear);
       
@@ -2507,7 +2536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'completed',
         processed: totalToProcess,
         total: totalToProcess,
-        bucket: 'Reset complete!',
+        queues: { 'Completed': { currentStudent: null, previousStudent: null, message: 'Reset complete!' } },
       });
 
       // Clear progress after 10 seconds

@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Check, AlertTriangle, Trophy, BarChart3, Users } from "lucide-react";
+import { Check, AlertTriangle, Trophy, BarChart3, Users, Pause, Play, SquareTerminal, XSquare } from "lucide-react";
 
 interface AllocationModalProps {
   open: boolean;
@@ -109,41 +109,8 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
 
   // Poll progress from backend while allocation is running
   const [isPolling, setIsPolling] = useState(false);
-  const [liveProgress, setLiveProgress] = useState<{
-    status: string;
-    processed: number;
-    total: number;
-    allottedCount: number;
-    notAllottedCount: number;
-    currentStudent: {
-      name: string;
-      meritNumber: number;
-      appNo: string;
-      gender: string;
-      category: string;
-      result: 'allotted' | 'not_allotted' | 'processing';
-      allottedDistrict?: string;
-      choiceNumber?: number;
-    } | null;
-    previousStudent: {
-      name: string;
-      meritNumber: number;
-      appNo: string;
-      gender: string;
-      category: string;
-      result: 'allotted' | 'not_allotted';
-      allottedDistrict?: string;
-      choiceNumber?: number;
-    } | null;
-    nextStudent: {
-      name: string;
-      meritNumber: number;
-      appNo: string;
-      gender: string;
-      category: string;
-    } | null;
-    bucket: string;
-  } | null>(null);
+  const [liveProgress, setLiveProgress] = useState<any>(null);
+  const [speedDelay, setSpeedDelay] = useState(100);
 
   useEffect(() => {
     if (!isPolling || !roundId) return;
@@ -153,14 +120,32 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
         if (res.ok) {
           const data = await res.json();
           setLiveProgress(data);
+          if (data.delayMs !== undefined) setSpeedDelay(data.delayMs);
           if (data.total > 0) {
             setProgress(Math.round((data.processed / data.total) * 100));
+          }
+          if (data.status === 'completed' || data.status === 'cancelled' || data.status === 'error') {
+            setIsPolling(false);
+            if (data.status === 'cancelled') {
+              toast({ title: "Allocation Cancelled", description: "The allocation process was physically halted.", variant: "destructive" });
+            }
           }
         }
       } catch (e) { /* ignore polling errors */ }
     }, 500);
     return () => clearInterval(interval);
   }, [isPolling, roundId]);
+
+  const controlAllocation = async (action: 'pause' | 'resume' | 'cancel') => {
+    if (!roundId) return;
+    await apiRequest("POST", `/api/allocation/${roundId}/${action}`);
+  };
+
+  const updateSpeed = async (delayMs: number) => {
+    if (!roundId) return;
+    setSpeedDelay(delayMs);
+    await apiRequest("POST", `/api/allocation/${roundId}/speed`, { delayMs });
+  };
 
   const handleClose = () => {
     onOpenChange(false);
@@ -256,96 +241,105 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
               <Progress value={progress} className="w-full h-3" />
             </div>
 
-            {/* Live student queue */}
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Processing Queue</h4>
-              
-              {/* Previous Student */}
-              {liveProgress?.previousStudent && (
-                <div className="p-2 rounded border bg-slate-50 opacity-70">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground font-semibold mb-0.5">PREVIOUSLY PROCESSED</div>
-                      <div className="font-semibold text-xs text-muted-foreground">{liveProgress.previousStudent.name}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        Merit #{liveProgress.previousStudent.meritNumber}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-[11px] font-semibold mt-1">
-                        {liveProgress.previousStudent.result === 'allotted' ? (
-                          <span className="text-green-700">✓ Allotted → {liveProgress.previousStudent.allottedDistrict}</span>
-                        ) : (
-                          <span className="text-red-600">✗ Not Allotted</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Live student card */}
-              {liveProgress?.currentStudent && (
-                <div className={`p-3 rounded-lg border-2 shadow-sm transition-all ${
-                  liveProgress.currentStudent.result === 'allotted'
-                    ? 'bg-green-50 border-green-300'
-                    : liveProgress.currentStudent.result === 'not_allotted'
-                      ? 'bg-red-50 border-red-300'
-                      : 'bg-blue-50 border-blue-400 animate-pulse'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-blue-800 font-bold mb-0.5 tracking-wide">PROCESSING CURRENT</div>
-                      <div className="font-semibold text-sm">{liveProgress.currentStudent.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Merit #{liveProgress.currentStudent.meritNumber} • {liveProgress.currentStudent.appNo}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge className={getCategoryColor(liveProgress.currentStudent.category)}>
-                        {liveProgress.currentStudent.gender === 'Female' ? '♀' : '♂'} {liveProgress.currentStudent.category}
-                      </Badge>
-                      <div className="mt-2 text-xs font-semibold">
-                        {liveProgress.currentStudent.result === 'allotted' && (
-                          <span className="text-green-700">
-                            ✓ Allotted → {liveProgress.currentStudent.allottedDistrict} (Choice {liveProgress.currentStudent.choiceNumber})
-                          </span>
-                        )}
-                        {liveProgress.currentStudent.result === 'not_allotted' && (
-                          <span className="text-red-600">✗ No seat available</span>
-                        )}
-                        {liveProgress.currentStudent.result === 'processing' && (
-                          <span className="text-blue-600 flex items-center gap-1 justify-end">
-                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
-                            Finding seat...
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Next Student */}
-              {liveProgress?.nextStudent && (
-                <div className="p-2 rounded border border-dashed bg-slate-50 opacity-60">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground font-semibold mb-0.5">UP NEXT</div>
-                      <div className="font-semibold text-xs text-muted-foreground">{liveProgress.nextStudent.name}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        Merit #{liveProgress.nextStudent.meritNumber}
-                      </div>
-                    </div>
-                    <div className="text-right text-[11px] font-medium text-muted-foreground">
-                      Waiting...
-                    </div>
-                  </div>
-                </div>
-              )}
+            {/* Control Panel */}
+            <div className="flex items-center gap-3 p-3 bg-slate-50 border rounded-lg">
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant={liveProgress?.isPaused ? "default" : "secondary"}
+                  onClick={() => controlAllocation(liveProgress?.isPaused ? 'resume' : 'pause')}
+                >
+                  {liveProgress?.isPaused ? <Play className="w-4 h-4 mr-1" /> : <Pause className="w-4 h-4 mr-1" />}
+                  {liveProgress?.isPaused ? 'Resume' : 'Pause'}
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => controlAllocation('cancel')}>
+                  <XSquare className="w-4 h-4 mr-1" />
+                  Cancel Run
+                </Button>
+              </div>
+              <div className="flex-1 flex items-center justify-end gap-3 px-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Speed: {speedDelay}ms</span>
+                <input 
+                  type="range" 
+                  min="0" max="5000" step="100" 
+                  value={speedDelay} 
+                  onChange={(e) => updateSpeed(Number(e.target.value))}
+                  className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
             </div>
+
+            {/* Live student queue - Parallel Multi Tabs */}
+            <Tabs defaultValue="Male" className="w-full mt-2">
+              <TabsList className="w-full grid grid-cols-2 mb-2">
+                <TabsTrigger value="Male">👦 Boys Queues</TabsTrigger>
+                <TabsTrigger value="Female">👧 Girls Queues</TabsTrigger>
+              </TabsList>
+              
+              {["Male", "Female"].map(gender => (
+                <TabsContent key={gender} value={gender} className="space-y-3">
+                  {(gender === 'Male' ? ['Disabled', 'Private', 'Open'] : ['WHH', 'Disabled', 'Private', 'Open']).map(category => {
+                    const queueKey = `${gender}_${category}`;
+                    const queueData = liveProgress?.queues?.[queueKey];
+                    // Skip rendering the queue block altogether if it's completely empty
+                    if (!queueData?.currentStudent && !queueData?.previousStudent && !queueData?.message) return null;
+
+                    return (
+                      <div key={queueKey} className="border rounded-md bg-white overflow-hidden shadow-sm">
+                        <div className={`px-2 py-1.5 text-xs font-bold uppercase tracking-wider text-white ${getCategoryColor(category).replace('text-', 'bg-').replace('bg-', 'bg-')}`}>
+                          {category} Queue
+                        </div>
+                        <div className="p-2 space-y-2">
+                          {queueData.message && (
+                            <div className="text-xs text-muted-foreground animate-pulse text-center p-2 bg-slate-50 border border-slate-100 rounded">
+                              {queueData.message}
+                            </div>
+                          )}
+
+                          {queueData.previousStudent && (
+                            <div className="p-2 mb-2 rounded border bg-slate-50 opacity-70">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-[10px] text-muted-foreground font-semibold mb-0.5">PREVIOUS</div>
+                                  <div className="font-semibold text-xs text-muted-foreground">{queueData.previousStudent.name} (Merit #{queueData.previousStudent.meritNumber})</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-[11px] font-semibold">
+                                    {queueData.previousStudent.result === 'allotted' ? (
+                                      <span className="text-green-700">✓ Choice {queueData.previousStudent.choiceNumber}: {queueData.previousStudent.allottedDistrict}</span>
+                                    ) : (
+                                      <span className="text-red-600">✗ {queueData.previousStudent.reason}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {queueData.currentStudent && (
+                            <div className="p-2 rounded-md border-2 bg-blue-50 border-blue-400">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="text-[10px] text-blue-800 font-bold mb-0.5 tracking-wide">PROCESSING STUDENT</div>
+                                  <div className="font-semibold text-sm">{queueData.currentStudent.name}</div>
+                                  <div className="text-xs text-muted-foreground">Merit #{queueData.currentStudent.meritNumber}</div>
+                                </div>
+                                <div className="text-right text-xs">
+                                  <span className="text-blue-700 font-bold flex items-center justify-end gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                                    Scanning Choices...
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </TabsContent>
+              ))}
+            </Tabs>
 
             {/* Live stats row */}
             <div className="grid grid-cols-3 gap-2 text-center">
