@@ -45,6 +45,7 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
     status: 'online' | 'offline';
     responseTime?: number;
     error?: string;
+    instanceId?: string;
     timestamp: string;
   }>({
     queryKey: ["/api/health/database"],
@@ -134,7 +135,10 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
                     <span className="text-muted-foreground">Checking...</span>
                   ) : (
                     <>
-                      <span className={dbHealth?.status === 'online' ? 'text-green-600' : dbHealth?.status === 'offline' ? 'text-red-600' : 'text-muted-foreground'}>
+                      <span className="font-mono font-bold text-xs uppercase text-slate-500">
+                        [{dbHealth?.instanceId || 'unknown'}]
+                      </span>
+                      <span className={dbHealth?.status === 'online' ? 'text-green-600 font-bold' : dbHealth?.status === 'offline' ? 'text-red-600 font-bold' : 'text-muted-foreground'}>
                         {dbHealth?.status === 'online' ? 'Online' : dbHealth?.status === 'offline' ? 'Offline' : 'Unknown'}
                       </span>
                       {dbHealth?.status === 'online' && dbHealth.responseTime && (

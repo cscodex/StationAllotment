@@ -149,13 +149,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // DB Health endpoint for the frontend header
   app.get("/api/health/database", async (req, res) => {
     try {
-      const startTime = Date.now();
-      await storage.pingDatabase(); // Assuming storage has a ping method, or we can just run a query
-      const responseTime = Date.now() - startTime;
-      res.json({ status: 'online', responseTime, timestamp: new Date().toISOString() });
-    } catch (error) {
-      console.error("Database health check failed:", error);
-      res.status(503).json({ status: 'offline', error: "Database connection failed", timestamp: new Date().toISOString() });
+      const start = Date.now();
+      await storage.pingDatabase();
+      const responseTime = Date.now() - start;
+      const hostMatch = process.env.DATABASE_URL?.match(/@([^\/:]+)/);
+      const instanceId = hostMatch ? hostMatch[1].split('.')[0] : 'local';
+
+      res.json({
+        status: 'online',
+        responseTime,
+        instanceId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      res.json({
+        status: 'offline',
+        error: error.message || 'Database connection failed',
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
