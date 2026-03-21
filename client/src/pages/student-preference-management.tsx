@@ -273,7 +273,7 @@ export default function StudentPreferenceManagement() {
       s.appNo?.toLowerCase().includes(lowerSearch) ||
       s.stream?.toLowerCase().includes(lowerSearch)
     );
-  }, [(studentsData as any)?.students, searchTerm, statusFilter, activeTab, districtFilter]);
+  }, [(studentsData as any)?.students, searchTerm, statusFilter, districtFilter, activeTab]);
 
   // Derived state: Paginated students
   const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
@@ -285,7 +285,7 @@ export default function StudentPreferenceManagement() {
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, recordsPerPage]);
+  }, [searchTerm, statusFilter, districtFilter, activeTab, recordsPerPage]);
 
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
