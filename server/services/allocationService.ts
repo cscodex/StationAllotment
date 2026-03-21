@@ -83,15 +83,20 @@ export class AllocationService {
     }
     const roundName = round.roundName;
 
-    log(`🔄 Resetting previous allocations for ${academicYear} - "${roundName}"...`);
-    await this.storage.resetAllocation(academicYear, roundName);
-    log(`   ✅ Database reset successfully. Commencing clean allocation run.`);
+    log(`🔄 Checking if allocations for ${academicYear} - "${roundName}" are clean...`);
+    const existingStudentsWithAllocations = await this.storage.getStudents(10000, 0, academicYear);
+    const roundAllocations = existingStudentsWithAllocations.filter(s => s.counselingRoundId === counselingRoundId);
+    
+    if (roundAllocations.length > 0) {
+      throw new Error(`Data is not reset. Please reset counseling round "${roundName}" first.`);
+    }
+    
+    log(`   ✅ Database is clean. Commencing allocation run.`);
     
     // Get students for this academic year
     log('📊 Fetching students data...');
-    const allStudents = await this.storage.getStudents(10000, 0, academicYear);
-    // Since we just reset, all students should be 'pending'. 
-    // We filter just in case, but essentially all return eligible.
+    const allStudents = existingStudentsWithAllocations;
+    // Since we just checked, all students should be eligible ('pending' or 'not_allotted' from previous rounds). 
     const students = allStudents.filter(s => s.allocationStatus !== 'allotted');
     log(`   Found ${allStudents.length} total students for ${academicYear}`);
     log(`   Processing ${students.length} eligible students`);

@@ -124,14 +124,16 @@ function PrerequisitesButton({
         size="sm"
         variant="default"
         onClick={() => onRunAllocation(round)}
-        disabled={isPending || isLoading || !canRunAllocation}
+        disabled={isPending || isLoading || !canRunAllocation || round.isAllocationCompleted}
         className="bg-green-600 hover:bg-green-700"
         title={
-          isLoading
-            ? "Checking prerequisites..."
-            : !canRunAllocation
-              ? `Prerequisites not met: ${missingPrerequisites.join(", ")}`
-              : "Run allocation"
+          round.isAllocationCompleted
+            ? "Allocation is already completed for this round. Please reset it first."
+            : isLoading
+              ? "Checking prerequisites..."
+              : !canRunAllocation
+                ? `Prerequisites not met: ${missingPrerequisites.join(", ")}`
+                : "Run allocation"
         }
       >
         <Rocket className="w-3 h-3 mr-1" />
