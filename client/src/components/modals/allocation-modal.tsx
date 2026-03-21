@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Check, Clock, Settings, AlertTriangle, Trophy, BarChart3, Users } from "lucide-react";
+import { Check, AlertTriangle, Trophy, BarChart3, Users } from "lucide-react";
 
 interface AllocationModalProps {
   open: boolean;
@@ -74,23 +74,16 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
   const allocationMutation = useMutation({
     mutationFn: async () => {
       if (!roundId || !round) throw new Error("Round not selected");
-
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 88) { clearInterval(progressInterval); return 88; }
-          return prev + 8;
-        });
-      }, 400);
-
+      setIsPolling(true);
       const res = await apiRequest("POST", `/api/counseling-rounds/${roundId}/run-allocation`);
-      clearInterval(progressInterval);
-      setProgress(100);
       const data = await res.json();
       return data;
     },
     onSuccess: (data) => {
       setRunRoundId(roundId!);
       setAllocationCompleted(true);
+      setIsPolling(false);
+      setProgress(100);
       queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds"] });
@@ -99,7 +92,7 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
       queryClient.invalidateQueries({ queryKey: ["/api/allocation/stats"] });
       toast({
         title: "✅ Allocation Completed",
-        description: `Allotted ${data.allottedStudents} out of ${data.totalStudents} eligible students. View Results tab for details.`,
+        description: `Allotted ${data.allottedStudents} out of ${data.totalStudents} eligible students.`,
         duration: 8000,
       });
     },
@@ -109,9 +102,48 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
         description: error.message,
         variant: "destructive",
       });
+      setIsPolling(false);
       setProgress(0);
     },
   });
+
+  // Poll progress from backend while allocation is running
+  const [isPolling, setIsPolling] = useState(false);
+  const [liveProgress, setLiveProgress] = useState<{
+    status: string;
+    processed: number;
+    total: number;
+    allottedCount: number;
+    notAllottedCount: number;
+    currentStudent: {
+      name: string;
+      meritNumber: number;
+      appNo: string;
+      gender: string;
+      category: string;
+      result: 'allotted' | 'not_allotted' | 'processing';
+      allottedDistrict?: string;
+      choiceNumber?: number;
+    } | null;
+    bucket: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isPolling || !roundId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/allocation/progress/${roundId}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveProgress(data);
+          if (data.total > 0) {
+            setProgress(Math.round((data.processed / data.total) * 100));
+          }
+        }
+      } catch (e) { /* ignore polling errors */ }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isPolling, roundId]);
 
   const handleClose = () => {
     onOpenChange(false);
@@ -122,17 +154,6 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
       setRunRoundId(null);
     }, 300);
   };
-
-  const steps = [
-    { title: "Data validation completed", completed: true, icon: Check },
-    {
-      title: "Processing allocations...",
-      completed: progress >= 100,
-      icon: allocationMutation.isPending ? Settings : Check,
-      loading: allocationMutation.isPending,
-    },
-    { title: "Generating results", completed: progress === 100, icon: progress === 100 ? Check : Clock },
-  ];
 
   const canStart = roundId && round && round.isActive && !round.isCompleted;
 
@@ -205,28 +226,71 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
           </div>
         )}
 
-        {/* Progress state */}
+        {/* Progress state — real-time live display */}
         {progress > 0 && !allocationCompleted && (
           <div className="space-y-4">
-            {steps.map((step, index) => (
-              <div key={index} className="flex items-center space-x-3">
-                <div className={`w-4 h-4 rounded-full flex items-center justify-center ${
-                  step.completed ? "bg-green-500 text-white" : step.loading ? "bg-primary animate-pulse" : "bg-muted"
-                }`}>
-                  {step.completed && <step.icon className="w-3 h-3" />}
-                  {step.loading && <step.icon className="w-3 h-3 text-primary-foreground animate-spin" />}
-                </div>
-                <span className={`text-sm ${step.completed ? "text-foreground" : "text-muted-foreground"}`}>
-                  {step.title}
-                </span>
-              </div>
-            ))}
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Progress</span>
-                <span data-testid="allocation-progress">{progress}%</span>
+                <span>{liveProgress?.status === 'resetting' ? 'Resetting previous data...' : 'Processing students...'}</span>
+                <span data-testid="allocation-progress" className="font-mono font-bold">
+                  {liveProgress?.processed || 0} / {liveProgress?.total || '...'} ({progress}%)
+                </span>
               </div>
-              <Progress value={progress} className="w-full" />
+              <Progress value={progress} className="w-full h-3" />
+            </div>
+
+            {/* Live student card */}
+            {liveProgress?.currentStudent && (
+              <div className={`p-3 rounded-lg border-2 transition-all ${
+                liveProgress.currentStudent.result === 'allotted'
+                  ? 'bg-green-50 border-green-300'
+                  : liveProgress.currentStudent.result === 'not_allotted'
+                    ? 'bg-red-50 border-red-300'
+                    : 'bg-blue-50 border-blue-300 animate-pulse'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-sm">{liveProgress.currentStudent.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Merit #{liveProgress.currentStudent.meritNumber} • {liveProgress.currentStudent.appNo}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Badge className={getCategoryColor(liveProgress.currentStudent.category)}>
+                      {liveProgress.currentStudent.gender === 'Female' ? '♀' : '♂'} {liveProgress.currentStudent.category}
+                    </Badge>
+                    <div className="mt-1 text-xs font-semibold">
+                      {liveProgress.currentStudent.result === 'allotted' && (
+                        <span className="text-green-700">
+                          ✓ Allotted → {liveProgress.currentStudent.allottedDistrict} (Choice {liveProgress.currentStudent.choiceNumber})
+                        </span>
+                      )}
+                      {liveProgress.currentStudent.result === 'not_allotted' && (
+                        <span className="text-red-600">✗ No seat available</span>
+                      )}
+                      {liveProgress.currentStudent.result === 'processing' && (
+                        <span className="text-blue-600">⏳ Finding seat...</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Live stats row */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2 rounded bg-green-50 border border-green-200">
+                <div className="text-lg font-bold text-green-700">{liveProgress?.allottedCount || 0}</div>
+                <div className="text-xs text-green-600">Allotted</div>
+              </div>
+              <div className="p-2 rounded bg-red-50 border border-red-200">
+                <div className="text-lg font-bold text-red-700">{liveProgress?.notAllottedCount || 0}</div>
+                <div className="text-xs text-red-600">Not Allotted</div>
+              </div>
+              <div className="p-2 rounded bg-blue-50 border border-blue-200">
+                <div className="text-lg font-bold text-blue-700">{(liveProgress?.total || 0) - (liveProgress?.processed || 0)}</div>
+                <div className="text-xs text-blue-600">Remaining</div>
+              </div>
             </div>
           </div>
         )}

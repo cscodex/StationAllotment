@@ -313,6 +313,32 @@ export default function CounselingRounds() {
     },
   });
 
+  // Reset round allocation — clears allotted data for this round's students
+  const resetRoundMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/counseling-rounds/${id}/reset-allocation`);
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/allocation/stats"] });
+      refetch();
+      toast({
+        title: "Round Reset",
+        description: `Cleared ${data.clearedStudents} student allocations. Vacancies restored.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset round",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Run allocation: open modal instead of native confirm
   const handleRunAllocation = (round: CounselingRound) => {
     setAllocationRoundId(round.id);
@@ -736,7 +762,25 @@ export default function CounselingRounds() {
                                       <RefreshCw className="w-3 h-3 mr-1" />
                                       Re-run
                                     </Button>
-                                  )}
+                                   )}
+                                   {/* Reset Round: clears allotted data for this round */}
+                                   {round.isAllocationCompleted && !round.isCompleted && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        if (confirm(`Reset Round ${round.roundNumber} ("${round.roundName}")?\n\nThis will clear allotted district/stream for all students allocated in this round and restore vacancy seats.`)) {
+                                          resetRoundMutation.mutate(round.id);
+                                        }
+                                      }}
+                                      disabled={resetRoundMutation.isPending}
+                                      className="text-red-600 border-red-400 hover:bg-red-50"
+                                      title="Clear all allocations for this round"
+                                    >
+                                      <Trash2 className="w-3 h-3 mr-1" />
+                                      {resetRoundMutation.isPending ? "Resetting..." : "Reset Round"}
+                                    </Button>
+                                   )}
                                   {/* Finalize Round: locks the round permanently after allocation is accepted */}
                                   {round.isAllocationCompleted && !round.isCompleted && (
                                     <Button

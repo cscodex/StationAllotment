@@ -2,6 +2,24 @@ import { IStorage } from '../storage';
 import { Student, Vacancy, StudentsEntranceResult } from '@shared/schema';
 import { AuditService } from './auditService';
 
+export interface ProgressEvent {
+  processed: number;
+  total: number;
+  allottedCount: number;
+  notAllottedCount: number;
+  currentStudent: {
+    name: string;
+    meritNumber: number;
+    appNo: string;
+    gender: string;
+    category: string;
+    result: 'allotted' | 'not_allotted' | 'processing';
+    allottedDistrict?: string;
+    choiceNumber?: number;
+  } | null;
+  bucket: string;
+}
+
 export class AllocationService {
   constructor(
     private storage: IStorage,
@@ -9,7 +27,7 @@ export class AllocationService {
     private userId?: string
   ) {}
 
-  async runAllocation(academicYear: string, roundNumber: number, counselingRoundId: string): Promise<{
+  async runAllocation(academicYear: string, roundNumber: number, counselingRoundId: string, onProgress?: (event: ProgressEvent) => void): Promise<{
     totalStudents: number;
     allottedStudents: number;
     notAllottedStudents: number;
@@ -135,38 +153,36 @@ export class AllocationService {
     const allocationsByDistrict: Record<string, number> = {};
     let allottedCount = 0;
     let notAllottedCount = 0;
+    const totalEligible = eligibleStudents.length;
 
-    log('🎯 Starting allocation process (processing 7 parallel gender-category buckets)...');
-    
-    const BUCKETS = [
-      { gender: 'Female', category: 'WHH' },
-      { gender: 'Female', category: 'Disabled' },
-      { gender: 'Female', category: 'Private' },
-      { gender: 'Female', category: 'Open' },
-      { gender: 'Male', category: 'Disabled' },
-      { gender: 'Male', category: 'Private' },
-      { gender: 'Male', category: 'Open' }
-    ];
+    log('🎯 Processing students sequentially in merit order...');
 
-    // Process all 7 buckets in parallel
-    // (Race conditions for seats are impossible because each bucket requests a completely disjoint set of seats)
-    await Promise.all(BUCKETS.map(async ({ gender, category }) => {
-      // Find students strictly for this bucket
-      const bucketStudents = eligibleStudents.filter(s => {
-        const er = entranceResultMap.get(s.appNo);
-        return er && er.gender === gender && er.category === category;
-      });
-      
-      if (bucketStudents.length === 0) return;
-      log(`   ⏳ Bucket [${gender} - ${category}]: Processing ${bucketStudents.length} students...`);
-      
-      let bucketAllottedCount = 0;
-      let bucketNotAllottedCount = 0;
-
-      // Process this bucket in sorted merit order (best to worst)
-      for (const student of bucketStudents) {
-        const entranceResult = entranceResultMap.get(student.appNo)!;
+    // Process ALL students sequentially in merit order for real-time display
+    for (let idx = 0; idx < eligibleStudents.length; idx++) {
+      const student = eligibleStudents[idx];
+      const entranceResult = entranceResultMap.get(student.appNo)!;
       if (!entranceResult) continue;
+
+      const bucket = `${entranceResult.gender} - ${entranceResult.category}`;
+
+      // Emit "processing" progress
+      if (onProgress) {
+        onProgress({
+          processed: idx,
+          total: totalEligible,
+          allottedCount,
+          notAllottedCount,
+          currentStudent: {
+            name: student.name,
+            meritNumber: student.meritNumber,
+            appNo: student.appNo,
+            gender: entranceResult.gender,
+            category: entranceResult.category,
+            result: 'processing',
+          },
+          bucket,
+        });
+      }
 
       let allocated = false;
 
@@ -175,20 +191,13 @@ export class AllocationService {
         const choice = (student as any)[`choice${i}`];
         if (!choice) continue;
 
-        // STRICT MATCHING: Create vacancy key using exact gender and category combination
-        // Student can ONLY be allocated if there's a seat available for their exact:
-        // - District (choice), Stream (preference), Gender, and Category combination
         const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${entranceResult.category}`;
         const availableVacancies = vacancyMap.get(vacancyKey);
         
-        // STRICT CONSTRAINT: Only allocate if exact gender/category/stream/district combination has seats
-        // Find first available school vacancy in this district/stream/gender/category combination
         if (availableVacancies && availableVacancies.length > 0) {
-          // Find first vacancy with available seats
           const selectedVacancy = availableVacancies.find(v => v.availableSeats && v.availableSeats > 0);
           
           if (selectedVacancy) {
-            // Allocate the seat to this specific school
             await this.storage.updateStudent(student.id, {
               allottedDistrict: choice,
               allottedStream: student.stream,
@@ -198,45 +207,77 @@ export class AllocationService {
               allocationStatus: 'allotted',
             });
 
-            // Update vacancy: decrement available seats in database
             await this.storage.updateVacancy(selectedVacancy.id, {
               availableSeats: (selectedVacancy.availableSeats || 0) - 1,
             });
             
-            // Remove from map if no seats left, or update the array
             selectedVacancy.availableSeats = (selectedVacancy.availableSeats || 0) - 1;
             if (selectedVacancy.availableSeats === 0) {
               vacancyMap.set(vacancyKey, availableVacancies.filter(v => v.id !== selectedVacancy.id));
             }
             
-            // Update statistics safely (Node is single-threaded, so ++ is safe)
-            bucketAllottedCount++;
             allottedCount++;
             allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
             allocated = true;
+
+            // Emit "allotted" progress
+            if (onProgress) {
+              onProgress({
+                processed: idx + 1,
+                total: totalEligible,
+                allottedCount,
+                notAllottedCount,
+                currentStudent: {
+                  name: student.name,
+                  meritNumber: student.meritNumber,
+                  appNo: student.appNo,
+                  gender: entranceResult.gender,
+                  category: entranceResult.category,
+                  result: 'allotted',
+                  allottedDistrict: choice,
+                  choiceNumber: i,
+                },
+                bucket,
+              });
+            }
+
             break;
           }
         }
       }
 
       if (!allocated) {
-        // Mark as not allotted
         await this.storage.updateStudent(student.id, { allocationStatus: 'not_allotted' });
-        bucketNotAllottedCount++;
         notAllottedCount++;
+
+        // Emit "not_allotted" progress
+        if (onProgress) {
+          onProgress({
+            processed: idx + 1,
+            total: totalEligible,
+            allottedCount,
+            notAllottedCount,
+            currentStudent: {
+              name: student.name,
+              meritNumber: student.meritNumber,
+              appNo: student.appNo,
+              gender: entranceResult.gender,
+              category: entranceResult.category,
+              result: 'not_allotted',
+            },
+            bucket,
+          });
+        }
       }
     }
-    
-    log(`   ✅ Bucket [${gender} - ${category}] finished: ${bucketAllottedCount} allotted, ${bucketNotAllottedCount} not.`);
-  }));
 
     const endTime = Date.now();
     const duration = ((endTime - startTime) / 1000).toFixed(2);
     
     log('📊 Allocation Summary:');
     log(`   Total Eligible Students: ${eligibleStudents.length}`);
-    log(`   Successfully Allotted: ${allottedCount} (${((allottedCount / eligibleStudents.length) * 100).toFixed(2)}%)`);
-    log(`   Not Allotted: ${notAllottedCount} (${((notAllottedCount / eligibleStudents.length) * 100).toFixed(2)}%)`);
+    log(`   Successfully Allotted: ${allottedCount} (${((allottedCount / (eligibleStudents.length || 1)) * 100).toFixed(2)}%)`);
+    log(`   Not Allotted: ${notAllottedCount} (${((notAllottedCount / (eligibleStudents.length || 1)) * 100).toFixed(2)}%)`);
     log(`   Allocations by District: ${Object.keys(allocationsByDistrict).length} districts`);
     Object.entries(allocationsByDistrict).forEach(([district, count]) => {
       log(`     - ${district}: ${count} students`);

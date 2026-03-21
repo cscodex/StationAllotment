@@ -10,6 +10,7 @@ import { z } from "zod";
 import { insertUserSchema, insertStudentSchema, insertVacancySchema, insertStudentsEntranceResultSchema, USER_ROLES, UnfinalizeRequest } from "@shared/schema";
 import { FileService } from "./services/fileService";
 import { AllocationService } from "./services/allocationService";
+import { setProgress, getProgress, clearProgress } from "./services/allocationProgress";
 import { ExportService } from "./services/exportService";
 import { AuditService } from "./services/auditService";
 import { omrService } from "./omrService";
@@ -2315,8 +2316,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Allocation routes
   app.post('/api/counseling-rounds/:id/run-allocation', isCentralAdmin, async (req: any, res) => {
+    const { id } = req.params;
     try {
-      const { id } = req.params;
       const activeRound = await storage.getCounselingRound(id);
 
       if (!activeRound || !activeRound.isActive) {
@@ -2357,7 +2358,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const result = await allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id);
+      // Wire real-time progress: allocation service calls onProgress, we write to in-memory store
+      setProgress(id, { status: 'resetting', processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, currentStudent: null, bucket: '', logs: [], startedAt: Date.now() });
+
+      const result = await allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id, (event) => {
+        setProgress(id, {
+          status: 'running',
+          processed: event.processed,
+          total: event.total,
+          allottedCount: event.allottedCount,
+          notAllottedCount: event.notAllottedCount,
+          currentStudent: event.currentStudent,
+          bucket: event.bucket,
+        });
+      });
+
+      setProgress(id, { status: 'completed', processed: result.totalStudents, total: result.totalStudents });
 
       await storage.updateCounselingRound(activeRound.id, {
         isAllocationCompleted: true
@@ -2369,9 +2385,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }, req.ip, req.get('User-Agent'));
 
       res.json(result);
-    } catch (error) {
+
+      // Clear progress store after 30 seconds
+      setTimeout(() => clearProgress(id), 30000);
+    } catch (error: any) {
+      setProgress(id, { status: 'error' });
       console.error("Run allocation error:", error);
-      res.status(500).json({ message: "Failed to run allocation" });
+      res.status(500).json({ message: error.message || "Failed to run allocation" });
+    }
+  });
+
+  // Real-time allocation progress polling endpoint
+  app.get('/api/allocation/progress/:roundId', isAuthenticated, async (req, res) => {
+    try {
+      const { roundId } = req.params;
+      const progress = getProgress(roundId);
+      if (!progress) {
+        return res.json({ status: 'idle', processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, currentStudent: null, bucket: '' });
+      }
+      res.json(progress);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get progress" });
+    }
+  });
+
+  // Reset allocation for a specific round
+  app.post('/api/counseling-rounds/:id/reset-allocation', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const round = await storage.getCounselingRound(id);
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+
+      // Clear allotted district/stream/school for students in this round
+      const allStudents = await storage.getStudents(10000, 0, round.academicYear);
+      const roundStudents = allStudents.filter(s => s.counselingRoundId === id);
+      let clearedCount = 0;
+
+      for (const student of roundStudents) {
+        await storage.updateStudent(student.id, {
+          allottedDistrict: null,
+          allottedStream: null,
+          allottedSchoolUdise: null,
+          counselingRoundId: null,
+          counselingRoundNumber: null,
+          allocationStatus: 'pending',
+        });
+        clearedCount++;
+      }
+
+      // Also reset not_allotted students back to pending
+      const notAllottedStudents = allStudents.filter(s => s.allocationStatus === 'not_allotted');
+      for (const student of notAllottedStudents) {
+        await storage.updateStudent(student.id, { allocationStatus: 'pending' });
+      }
+
+      // Restore vacancies
+      if (round.roundName) {
+        const vacancies = await storage.getVacancies(round.academicYear, round.roundName);
+        for (const vacancy of vacancies) {
+          if (vacancy.totalSeats !== vacancy.availableSeats) {
+            await storage.updateVacancy(vacancy.id, { availableSeats: vacancy.totalSeats || 0 });
+          }
+        }
+      }
+
+      // Reset round flags
+      await storage.updateCounselingRound(id, {
+        isAllocationCompleted: false,
+        isAllocationFinalized: false,
+        allocationFinalizedAt: null,
+        allocationFinalizedBy: null,
+      });
+
+      await auditService.log(req.user.id, 'allocation_reset', 'allocation', 'system', {
+        counselingRoundId: id,
+        clearedStudents: clearedCount,
+        resetNotAllotted: notAllottedStudents.length,
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: `Reset complete. Cleared ${clearedCount} allocations.`, clearedStudents: clearedCount });
+    } catch (error: any) {
+      console.error("Reset allocation error:", error);
+      res.status(500).json({ message: error.message || "Failed to reset allocation" });
     }
   });
 

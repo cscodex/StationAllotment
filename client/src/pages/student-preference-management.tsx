@@ -879,6 +879,7 @@ export default function StudentPreferenceManagement() {
                       <TableHead>Current District</TableHead>
                       <TableHead className="hidden lg:table-cell">District Admin</TableHead>
                       <TableHead className="hidden lg:table-cell">Status</TableHead>
+                      <TableHead className="hidden lg:table-cell">Round #</TableHead>
                       <TableHead className="hidden lg:table-cell">Lock Status</TableHead>
                       <TableHead>Choices</TableHead>
                       <TableHead>Actions</TableHead>
@@ -935,6 +936,15 @@ export default function StudentPreferenceManagement() {
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             {getStatusBadge(student.allocationStatus || 'pending')}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            {student.counselingRoundNumber ? (
+                              <Badge variant="outline" className="font-mono">
+                                R{student.counselingRoundNumber}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             {student.lockedBy ? (
