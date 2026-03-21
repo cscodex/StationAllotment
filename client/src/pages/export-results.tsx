@@ -15,6 +15,7 @@ import {
   Users,
   BarChart3
 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function ExportResults() {
   const [isExportingCSV, setIsExportingCSV] = useState(false);
@@ -25,8 +26,20 @@ export default function ExportResults() {
     queryKey: ["/api/allocation/status"],
   });
 
+  // Fetch current session (academic year) to pass to stats
+  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
+    queryKey: ["/api/session/current"],
+  });
+  const selectedAcademicYear = currentSessionData?.currentSession || "";
+
   const { data: stats } = useQuery<{ totalStudents: number; pendingAllocations: number; completedAllocations: number; totalVacancies: number; completionRate: number }>({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryFn: async () => {
+      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
+      return res.json();
+    },
+    enabled: !!selectedAcademicYear,
   });
 
   const handleExportCSV = async () => {

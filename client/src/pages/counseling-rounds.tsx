@@ -17,6 +17,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import AllocationModal from "@/components/modals/allocation-modal";
+import ResetModal from "@/components/modals/reset-modal";
 import {
   Calendar,
   Plus,
@@ -155,6 +156,7 @@ export default function CounselingRounds() {
   const [editStartDate, setEditStartDate] = useState<string>("");
   const [allocationModalOpen, setAllocationModalOpen] = useState(false);
   const [allocationRoundId, setAllocationRoundId] = useState<string | null>(null);
+  const [resetRoundId, setResetRoundId] = useState<string | null>(null);
   // Fetch current session
   const { data: currentSessionData } = useQuery<{ currentSession: string }>({
     queryKey: ["/api/session/current"],
@@ -313,31 +315,6 @@ export default function CounselingRounds() {
     },
   });
 
-  // Reset round allocation — clears allotted data for this round's students
-  const resetRoundMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest("POST", `/api/counseling-rounds/${id}/reset-allocation`);
-      return await res.json();
-    },
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/allocation/stats"] });
-      refetch();
-      toast({
-        title: "Round Reset",
-        description: `Cleared ${data.clearedStudents} student allocations. Vacancies restored.`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to reset round",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Run allocation: open modal instead of native confirm
   const handleRunAllocation = (round: CounselingRound) => {
@@ -768,17 +745,12 @@ export default function CounselingRounds() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => {
-                                        if (confirm(`Reset Round ${round.roundNumber} ("${round.roundName}")?\n\nThis will clear allotted district/stream for all students allocated in this round and restore vacancy seats.`)) {
-                                          resetRoundMutation.mutate(round.id);
-                                        }
-                                      }}
-                                      disabled={resetRoundMutation.isPending}
+                                      onClick={() => setResetRoundId(round.id)}
                                       className="text-red-600 border-red-400 hover:bg-red-50"
                                       title="Clear all allocations for this round"
                                     >
                                       <Trash2 className="w-3 h-3 mr-1" />
-                                      {resetRoundMutation.isPending ? "Resetting..." : "Reset Round"}
+                                      Reset Round
                                     </Button>
                                    )}
                                   {/* Finalize Round: locks the round permanently after allocation is accepted */}
@@ -980,6 +952,13 @@ export default function CounselingRounds() {
           }
         }}
         roundId={allocationRoundId}
+      />
+      <ResetModal
+        open={!!resetRoundId}
+        onOpenChange={(open) => !open && setResetRoundId(null)}
+        roundId={resetRoundId}
+        roundName={rounds?.find(r => r.id === resetRoundId)?.roundName || null}
+        roundNumber={rounds?.find(r => r.id === resetRoundId)?.roundNumber || 0}
       />
     </div>
   );

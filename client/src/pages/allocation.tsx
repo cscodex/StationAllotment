@@ -32,8 +32,20 @@ export default function Allocation() {
     queryKey: ["/api/allocation/status"],
   });
 
+  // Fetch current session (academic year) to pass to stats
+  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
+    queryKey: ["/api/session/current"],
+  });
+  const selectedAcademicYear = currentSessionData?.currentSession || "";
+
   const { data: stats } = useQuery<any>({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryFn: async () => {
+      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
+      return res.json();
+    },
+    enabled: !!selectedAcademicYear,
   });
 
   const { data: files } = useQuery<any[]>({

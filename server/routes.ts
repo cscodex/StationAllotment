@@ -2411,19 +2411,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Reset allocation for a specific round
   app.post('/api/counseling-rounds/:id/reset-allocation', isCentralAdmin, async (req: any, res) => {
+    const { id } = req.params;
     try {
-      const { id } = req.params;
       const round = await storage.getCounselingRound(id);
       if (!round) {
         return res.status(404).json({ message: "Counseling round not found" });
       }
 
-      // Clear allotted district/stream/school for students in this round
+      // Initialize progress tracking
+      setProgress(id, {
+        status: 'resetting',
+        processed: 0,
+        total: 0,
+        allottedCount: 0,
+        notAllottedCount: 0,
+        currentStudent: null,
+        bucket: 'Resetting allocations...',
+        logs: [],
+        startedAt: Date.now(),
+      });
+
+      // Get ALL students for this academic year — clear everything
       const allStudents = await storage.getStudents(10000, 0, round.academicYear);
-      const roundStudents = allStudents.filter(s => s.counselingRoundId === id);
+      const studentsToReset = allStudents.filter(s =>
+        s.allocationStatus === 'allotted' ||
+        s.allocationStatus === 'not_allotted' ||
+        s.allottedDistrict ||
+        s.allottedStream ||
+        s.counselingRoundId ||
+        s.counselingRoundNumber
+      );
+
+      const totalToProcess = studentsToReset.length;
       let clearedCount = 0;
 
-      for (const student of roundStudents) {
+      setProgress(id, { total: totalToProcess, bucket: `Clearing ${totalToProcess} student allocations...` });
+
+      // Clear ALL students with any allocation data
+      for (const student of studentsToReset) {
         await storage.updateStudent(student.id, {
           allottedDistrict: null,
           allottedStream: null,
@@ -2433,25 +2458,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allocationStatus: 'pending',
         });
         clearedCount++;
+
+        // Update progress every 10 students to avoid too many updates
+        if (clearedCount % 10 === 0 || clearedCount === totalToProcess) {
+          setProgress(id, {
+            processed: clearedCount,
+            total: totalToProcess,
+            currentStudent: {
+              name: student.name,
+              meritNumber: student.meritNumber,
+              appNo: student.appNo,
+              gender: student.gender,
+              category: student.category,
+              result: 'not_allotted',
+            },
+            bucket: `Clearing students... ${clearedCount}/${totalToProcess}`,
+          });
+        }
       }
 
-      // Also reset not_allotted students back to pending
-      const notAllottedStudents = allStudents.filter(s => s.allocationStatus === 'not_allotted');
-      for (const student of notAllottedStudents) {
-        await storage.updateStudent(student.id, { allocationStatus: 'pending' });
-      }
+      // Restore ALL vacancies for this academic year (not just round-specific)
+      setProgress(id, { bucket: 'Restoring vacancy seats...' });
+      let restoredVacancies = 0;
 
-      // Restore vacancies
+      // Try round-specific vacancies first
       if (round.roundName) {
         const vacancies = await storage.getVacancies(round.academicYear, round.roundName);
         for (const vacancy of vacancies) {
           if (vacancy.totalSeats !== vacancy.availableSeats) {
             await storage.updateVacancy(vacancy.id, { availableSeats: vacancy.totalSeats || 0 });
+            restoredVacancies++;
           }
         }
       }
 
-      // Reset round flags
+      // Also restore any vacancies for the academic year without round filter
+      const allVacancies = await storage.getVacancies(round.academicYear);
+      for (const vacancy of allVacancies) {
+        if (vacancy.totalSeats !== vacancy.availableSeats) {
+          await storage.updateVacancy(vacancy.id, { availableSeats: vacancy.totalSeats || 0 });
+          restoredVacancies++;
+        }
+      }
+
+      // Reset round flags — bring back to pre-allocation state
       await storage.updateCounselingRound(id, {
         isAllocationCompleted: false,
         isAllocationFinalized: false,
@@ -2459,14 +2509,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         allocationFinalizedBy: null,
       });
 
+      // Mark progress as completed
+      setProgress(id, {
+        status: 'completed',
+        processed: totalToProcess,
+        total: totalToProcess,
+        bucket: 'Reset complete!',
+      });
+
+      // Clear progress after 10 seconds
+      setTimeout(() => clearProgress(id), 10000);
+
       await auditService.log(req.user.id, 'allocation_reset', 'allocation', 'system', {
         counselingRoundId: id,
         clearedStudents: clearedCount,
-        resetNotAllotted: notAllottedStudents.length,
+        restoredVacancies,
+        totalStudentsInYear: allStudents.length,
       }, req.ip, req.get('User-Agent'));
 
-      res.json({ message: `Reset complete. Cleared ${clearedCount} allocations.`, clearedStudents: clearedCount });
+      res.json({
+        message: `Reset complete. Cleared ${clearedCount} student allocations. Restored ${restoredVacancies} vacancies.`,
+        clearedStudents: clearedCount,
+        restoredVacancies,
+      });
     } catch (error: any) {
+      setProgress(id, { status: 'error' });
       console.error("Reset allocation error:", error);
       res.status(500).json({ message: error.message || "Failed to reset allocation" });
     }
@@ -3231,7 +3298,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/dashboard/stats', isAuthenticated, async (req: any, res: any) => {
     try {
       const user = await storage.getUser(req.session.userId);
-      const stats = await storage.getDashboardStats(user);
+      const { academicYear } = req.query;
+      const stats = await storage.getDashboardStats(user, academicYear as string);
       res.json(stats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);

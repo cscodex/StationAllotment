@@ -11,6 +11,7 @@ import { Upload, Users, Play, FileText, BarChart3, Settings, Maximize2, UploadCl
 import FlowDiagramModal from "@/components/dashboard/flow-diagram-modal";
 import CounselingProgress from "@/components/dashboard/counseling-progress";
 import InfographicsModal from "@/components/dashboard/infographics-modal";
+import { apiRequest } from "@/lib/queryClient";
 
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -23,8 +24,20 @@ export default function Dashboard() {
   const [isFlowModalOpen, setIsFlowModalOpen] = useState(false);
   const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
   
+  // Fetch current session (academic year) to pass to stats
+  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
+    queryKey: ["/api/session/current"],
+  });
+  const selectedAcademicYear = currentSessionData?.currentSession || "";
+
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryFn: async () => {
+      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
+      return res.json();
+    },
+    enabled: !!selectedAcademicYear,
   });
 
   const { data: activeRound } = useQuery({
