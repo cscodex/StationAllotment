@@ -125,6 +125,23 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
       allottedDistrict?: string;
       choiceNumber?: number;
     } | null;
+    previousStudent: {
+      name: string;
+      meritNumber: number;
+      appNo: string;
+      gender: string;
+      category: string;
+      result: 'allotted' | 'not_allotted';
+      allottedDistrict?: string;
+      choiceNumber?: number;
+    } | null;
+    nextStudent: {
+      name: string;
+      meritNumber: number;
+      appNo: string;
+      gender: string;
+      category: string;
+    } | null;
     bucket: string;
   } | null>(null);
 
@@ -239,43 +256,96 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
               <Progress value={progress} className="w-full h-3" />
             </div>
 
-            {/* Live student card */}
-            {liveProgress?.currentStudent && (
-              <div className={`p-3 rounded-lg border-2 transition-all ${
-                liveProgress.currentStudent.result === 'allotted'
-                  ? 'bg-green-50 border-green-300'
-                  : liveProgress.currentStudent.result === 'not_allotted'
-                    ? 'bg-red-50 border-red-300'
-                    : 'bg-blue-50 border-blue-300 animate-pulse'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-semibold text-sm">{liveProgress.currentStudent.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Merit #{liveProgress.currentStudent.meritNumber} • {liveProgress.currentStudent.appNo}
+            {/* Live student queue */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Processing Queue</h4>
+              
+              {/* Previous Student */}
+              {liveProgress?.previousStudent && (
+                <div className="p-2 rounded border bg-slate-50 opacity-70">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground font-semibold mb-0.5">PREVIOUSLY PROCESSED</div>
+                      <div className="font-semibold text-xs text-muted-foreground">{liveProgress.previousStudent.name}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Merit #{liveProgress.previousStudent.meritNumber}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <Badge className={getCategoryColor(liveProgress.currentStudent.category)}>
-                      {liveProgress.currentStudent.gender === 'Female' ? '♀' : '♂'} {liveProgress.currentStudent.category}
-                    </Badge>
-                    <div className="mt-1 text-xs font-semibold">
-                      {liveProgress.currentStudent.result === 'allotted' && (
-                        <span className="text-green-700">
-                          ✓ Allotted → {liveProgress.currentStudent.allottedDistrict} (Choice {liveProgress.currentStudent.choiceNumber})
-                        </span>
-                      )}
-                      {liveProgress.currentStudent.result === 'not_allotted' && (
-                        <span className="text-red-600">✗ No seat available</span>
-                      )}
-                      {liveProgress.currentStudent.result === 'processing' && (
-                        <span className="text-blue-600">⏳ Finding seat...</span>
-                      )}
+                    <div className="text-right">
+                      <div className="text-[11px] font-semibold mt-1">
+                        {liveProgress.previousStudent.result === 'allotted' ? (
+                          <span className="text-green-700">✓ Allotted → {liveProgress.previousStudent.allottedDistrict}</span>
+                        ) : (
+                          <span className="text-red-600">✗ Not Allotted</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Live student card */}
+              {liveProgress?.currentStudent && (
+                <div className={`p-3 rounded-lg border-2 shadow-sm transition-all ${
+                  liveProgress.currentStudent.result === 'allotted'
+                    ? 'bg-green-50 border-green-300'
+                    : liveProgress.currentStudent.result === 'not_allotted'
+                      ? 'bg-red-50 border-red-300'
+                      : 'bg-blue-50 border-blue-400 animate-pulse'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-blue-800 font-bold mb-0.5 tracking-wide">PROCESSING CURRENT</div>
+                      <div className="font-semibold text-sm">{liveProgress.currentStudent.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Merit #{liveProgress.currentStudent.meritNumber} • {liveProgress.currentStudent.appNo}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge className={getCategoryColor(liveProgress.currentStudent.category)}>
+                        {liveProgress.currentStudent.gender === 'Female' ? '♀' : '♂'} {liveProgress.currentStudent.category}
+                      </Badge>
+                      <div className="mt-2 text-xs font-semibold">
+                        {liveProgress.currentStudent.result === 'allotted' && (
+                          <span className="text-green-700">
+                            ✓ Allotted → {liveProgress.currentStudent.allottedDistrict} (Choice {liveProgress.currentStudent.choiceNumber})
+                          </span>
+                        )}
+                        {liveProgress.currentStudent.result === 'not_allotted' && (
+                          <span className="text-red-600">✗ No seat available</span>
+                        )}
+                        {liveProgress.currentStudent.result === 'processing' && (
+                          <span className="text-blue-600 flex items-center gap-1 justify-end">
+                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '300ms' }} />
+                            Finding seat...
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Next Student */}
+              {liveProgress?.nextStudent && (
+                <div className="p-2 rounded border border-dashed bg-slate-50 opacity-60">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground font-semibold mb-0.5">UP NEXT</div>
+                      <div className="font-semibold text-xs text-muted-foreground">{liveProgress.nextStudent.name}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Merit #{liveProgress.nextStudent.meritNumber}
+                      </div>
+                    </div>
+                    <div className="text-right text-[11px] font-medium text-muted-foreground">
+                      Waiting...
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Live stats row */}
             <div className="grid grid-cols-3 gap-2 text-center">

@@ -2369,6 +2369,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           allottedCount: event.allottedCount,
           notAllottedCount: event.notAllottedCount,
           currentStudent: event.currentStudent,
+          previousStudent: event.previousStudent,
+          nextStudent: event.nextStudent,
           bucket: event.bucket,
         });
       });

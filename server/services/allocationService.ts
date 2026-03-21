@@ -17,6 +17,23 @@ export interface ProgressEvent {
     allottedDistrict?: string;
     choiceNumber?: number;
   } | null;
+  previousStudent: {
+    name: string;
+    meritNumber: number;
+    appNo: string;
+    gender: string;
+    category: string;
+    result: 'allotted' | 'not_allotted';
+    allottedDistrict?: string;
+    choiceNumber?: number;
+  } | null;
+  nextStudent: {
+    name: string;
+    meritNumber: number;
+    appNo: string;
+    gender: string;
+    category: string;
+  } | null;
   bucket: string;
 }
 
@@ -157,6 +174,8 @@ export class AllocationService {
 
     log('🎯 Processing students sequentially in merit order...');
 
+    let previousStudentState: any = null;
+
     // Process ALL students sequentially in merit order for real-time display
     for (let idx = 0; idx < eligibleStudents.length; idx++) {
       const student = eligibleStudents[idx];
@@ -164,6 +183,21 @@ export class AllocationService {
       if (!entranceResult) continue;
 
       const bucket = `${entranceResult.gender} - ${entranceResult.category}`;
+
+      let nextStudentState: any = null;
+      if (idx + 1 < eligibleStudents.length) {
+        const nextS = eligibleStudents[idx + 1];
+        const nextEr = entranceResultMap.get(nextS.appNo);
+        if (nextEr) {
+          nextStudentState = {
+            name: nextS.name,
+            meritNumber: nextS.meritNumber,
+            appNo: nextS.appNo,
+            gender: nextEr.gender,
+            category: nextEr.category,
+          };
+        }
+      }
 
       // Emit "processing" progress
       if (onProgress) {
@@ -180,6 +214,8 @@ export class AllocationService {
             category: entranceResult.category,
             result: 'processing',
           },
+          previousStudent: previousStudentState,
+          nextStudent: nextStudentState,
           bucket,
         });
       }
@@ -237,9 +273,22 @@ export class AllocationService {
                   allottedDistrict: choice,
                   choiceNumber: i,
                 },
+                previousStudent: previousStudentState,
+                nextStudent: nextStudentState,
                 bucket,
               });
             }
+
+            previousStudentState = {
+              name: student.name,
+              meritNumber: student.meritNumber,
+              appNo: student.appNo,
+              gender: entranceResult.gender,
+              category: entranceResult.category,
+              result: 'allotted',
+              allottedDistrict: choice,
+              choiceNumber: i,
+            };
 
             break;
           }
@@ -265,9 +314,20 @@ export class AllocationService {
               category: entranceResult.category,
               result: 'not_allotted',
             },
+            previousStudent: previousStudentState,
+            nextStudent: nextStudentState,
             bucket,
           });
         }
+
+        previousStudentState = {
+          name: student.name,
+          meritNumber: student.meritNumber,
+          appNo: student.appNo,
+          gender: entranceResult.gender,
+          category: entranceResult.category,
+          result: 'not_allotted',
+        };
       }
     }
 

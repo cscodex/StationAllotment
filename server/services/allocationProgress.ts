@@ -17,6 +17,23 @@ export interface AllocationProgressData {
     allottedDistrict?: string;
     choiceNumber?: number;
   } | null;
+  previousStudent: {
+    name: string;
+    meritNumber: number;
+    appNo: string;
+    gender: string;
+    category: string;
+    result: 'allotted' | 'not_allotted';
+    allottedDistrict?: string;
+    choiceNumber?: number;
+  } | null;
+  nextStudent: {
+    name: string;
+    meritNumber: number;
+    appNo: string;
+    gender: string;
+    category: string;
+  } | null;
   bucket: string; // e.g. "Female - WHH"
   logs: string[];
   startedAt: number;
@@ -40,6 +57,8 @@ export function setProgress(roundId: string, data: Partial<AllocationProgressDat
       allottedCount: 0,
       notAllottedCount: 0,
       currentStudent: null,
+      previousStudent: null,
+      nextStudent: null,
       bucket: '',
       logs: [],
       startedAt: Date.now(),
