@@ -727,21 +727,8 @@ export default function CounselingRounds() {
                                       />
                                     </>
                                   )}
-                                  {/* Re-run button: visible when allocation is done but round not yet closed */}
-                                  {round.isAllocationCompleted && !round.isAllocationFinalized && !round.isCompleted && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleRunAllocation(round)}
-                                      className="text-blue-600 border-blue-400 hover:bg-blue-50"
-                                      title="Reset and re-run the allocation with updated data"
-                                    >
-                                      <RefreshCw className="w-3 h-3 mr-1" />
-                                      Re-run
-                                    </Button>
-                                   )}
                                    {/* Reset Round: clears allotted data for this round */}
-                                   {round.isAllocationCompleted && !round.isCompleted && (
+                                   {!round.isCompleted && (
                                     <Button
                                       size="sm"
                                       variant="outline"
