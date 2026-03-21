@@ -10,11 +10,9 @@ interface InfographicsModalProps {
 }
 
 export default function InfographicsModal({ isOpen, onClose, stats, title = "Statistics Overview" }: InfographicsModalProps) {
-  if (!stats) return null;
-
-  const { lockedStudents, unlockedStudents, studentsWithPreferences, studentsWithoutPreferences, streamBreakdown, districtBreakdown } = stats;
-
-  const totalStudents = lockedStudents + unlockedStudents;
+  const totalStudents = stats ? (stats.lockedStudents + stats.unlockedStudents) : 0;
+  
+  if (!isOpen) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -22,7 +20,11 @@ export default function InfographicsModal({ isOpen, onClose, stats, title = "Sta
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {totalStudents > 0 ? (
+        {!stats ? (
+          <div className="p-8 text-center text-muted-foreground">
+            Loading statistics from database...
+          </div>
+        ) : totalStudents > 0 ? (
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-2">
             <Card>
@@ -76,11 +78,15 @@ export default function InfographicsModal({ isOpen, onClose, stats, title = "Sta
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+            </Card>
+          )}
+        </div>
+        ) : (
+          <div className="p-8 text-center text-muted-foreground">
+            No student data available to display statistics.
           </div>
-          {districtBreakdown && districtBreakdown.length > 0 && (
-            <Card className="mt-4">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">District-wise Lock Status</CardTitle>
+        )}
+      </DialogContent>
               </CardHeader>
               <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
