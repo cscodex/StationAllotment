@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Check, AlertTriangle, Trophy, BarChart3, Users, Pause, Play, Square, XSquare, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Check, AlertTriangle, Trophy, BarChart3, Users, Pause, Play, Square, XSquare, ChevronDown, ChevronUp } from "lucide-react";
 
 interface AllocationModalProps {
   open: boolean;
@@ -278,16 +278,8 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
         )}
 
         <DialogHeader className={progress > 0 && !allocationCompleted ? "pt-4" : ""}>
-          <DialogTitle className="flex justify-between items-center pr-6">
-            <span>{allocationCompleted ? "📊 Allocation Results" : "Running Seat Allocation"}</span>
-            {progress > 0 && !allocationCompleted && (
-              <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
-                <a href="/counseling-display" target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4" />
-                  Live Projector View
-                </a>
-              </Button>
-            )}
+          <DialogTitle>
+            {allocationCompleted ? "📊 Allocation Results" : "Running Seat Allocation"}
           </DialogTitle>
           <DialogDescription>
             {round ? (
