@@ -95,19 +95,12 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
     },
     onSuccess: (data) => {
       setRunRoundId(roundId!);
-      setAllocationCompleted(true);
-      setIsPolling(false);
-      setProgress(100);
-      queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/allocation/stats"] });
+      // We don't mark it completed here. The engine runs async in the background.
+      // We just continue polling until the status is 'completed'.
       toast({
-        title: "✅ Allocation Completed",
-        description: `Allotted ${data.allottedStudents} out of ${data.totalStudents} eligible students.`,
-        duration: 8000,
+        title: "🚀 Allocation Started",
+        description: "The engine is now running in the background. You can safely pause and resume.",
+        duration: 3000,
       });
     },
     onError: (error) => {
@@ -159,6 +152,21 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
             setIsPolling(false);
             if (data.status === 'cancelled') {
               toast({ title: "Allocation Cancelled", description: "The allocation process was physically halted.", variant: "destructive" });
+            }
+            if (data.status === 'completed') {
+              setAllocationCompleted(true);
+              setProgress(100);
+              queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/vacancies"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/allocation/stats"] });
+              toast({
+                title: "✅ Allocation Completed",
+                description: `All students have been processed successfully.`,
+                duration: 8000,
+              });
             }
           }
         }

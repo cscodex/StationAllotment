@@ -2384,9 +2384,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Wire real-time progress: allocation service calls onProgress, we write to in-memory store
-      setProgress(id, { status: 'resetting', queues: {}, processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, logs: [], startedAt: Date.now() });
+      setProgress(id, { status: 'starting', queues: {}, processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, logs: [], startedAt: Date.now() });
 
-      const result = await allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id, (event) => {
+      // RUN IN BACKGROUND - DO NOT AWAIT to prevent browser timeout on long pauses
+      allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id, (event) => {
         setProgress(id, {
           status: event.status || 'running',
           processed: event.processed,
@@ -2398,27 +2399,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           queues: event.queues,
           districtCounters: event.districtCounters,
         });
+      }).then(async (result) => {
+        setProgress(id, { status: 'completed', processed: result.totalStudents, total: result.totalStudents });
+
+        await storage.updateCounselingRound(activeRound.id, {
+          isAllocationCompleted: true
+        });
+
+        await auditService.log(req.user.id, 'allocation_run', 'allocation', 'system', {
+          counselingRoundId: activeRound.id,
+          result,
+        }, req.ip, req.get('User-Agent'));
+
+        // Clear progress store after 60 seconds of completion
+        setTimeout(() => clearProgress(id), 60000);
+      }).catch((error) => {
+        setProgress(id, { status: 'error' });
+        console.error("Run allocation background error:", error);
       });
 
-      setProgress(id, { status: 'completed', processed: result.totalStudents, total: result.totalStudents });
-
-      await storage.updateCounselingRound(activeRound.id, {
-        isAllocationCompleted: true
-      });
-
-      await auditService.log(req.user.id, 'allocation_run', 'allocation', 'system', {
-        counselingRoundId: activeRound.id,
-        result,
-      }, req.ip, req.get('User-Agent'));
-
-      res.json(result);
-
-      // Clear progress store after 30 seconds
-      setTimeout(() => clearProgress(id), 30000);
+      // Return immediately so the browser request doesn't timeout if the allocation is paused for minutes/hours
+      res.status(202).json({ message: "Allocation started and running in background", status: "starting" });
     } catch (error: any) {
-      setProgress(id, { status: 'error' });
-      console.error("Run allocation error:", error);
-      res.status(500).json({ message: error.message || "Failed to run allocation" });
+      setProgress(req.params.roundId, { status: 'error' });
+      console.error("Run allocation init error:", error);
+      res.status(500).json({ message: error.message || "Failed to initialize allocation" });
     }
   });
 
@@ -2719,6 +2724,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Export PDF error:", error);
       res.status(500).json({ message: "Failed to export PDF" });
+    }
+  });
+
+  app.get('/api/export/counseling/csv', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { roundIds } = req.query;
+      if (!roundIds) return res.status(400).json({ message: 'roundIds parameter is required' });
+      const ids = String(roundIds).split(',');
+
+      const csvData = await exportService.exportCounseledStudentsAsCSV(ids);
+
+      await auditService.log(req.user.id, 'export_counseling_csv', 'export', 'results', {
+        format: 'csv', roundIds: ids
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=counseled_students.csv');
+      res.send(csvData);
+    } catch (error) {
+      console.error("Export counseling CSV error:", error);
+      res.status(500).json({ message: "Failed to export counseling CSV" });
+    }
+  });
+
+  app.get('/api/export/counseling/pdf', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { roundIds } = req.query;
+      if (!roundIds) return res.status(400).json({ message: 'roundIds parameter is required' });
+      const ids = String(roundIds).split(',');
+
+      const pdfBuffer = await exportService.exportCounseledStudentsAsPDF(ids);
+
+      await auditService.log(req.user.id, 'export_counseling_pdf', 'export', 'results', {
+        format: 'pdf', roundIds: ids
+      }, req.ip, req.get('User-Agent'));
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename=counseled_students.pdf');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Export counseling PDF error:", error);
+      res.status(500).json({ message: "Failed to export counseling PDF" });
     }
   });
 

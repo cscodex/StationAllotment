@@ -32,7 +32,10 @@ import {
   PlayCircle,
   Lock,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  Download,
+  FileSpreadsheet,
+  FileText
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -159,6 +162,7 @@ export default function CounselingRounds() {
   const [allocationModalOpen, setAllocationModalOpen] = useState(false);
   const [allocationRoundId, setAllocationRoundId] = useState<string | null>(null);
   const [resetRoundId, setResetRoundId] = useState<string | null>(null);
+  const [selectedRoundIds, setSelectedRoundIds] = useState<string[]>([]);
   // Fetch current session
   const { data: currentSessionData } = useQuery<{ currentSession: string }>({
     queryKey: ["/api/session/current"],
@@ -512,6 +516,27 @@ export default function CounselingRounds() {
     }
   };
 
+  const toggleRoundSelection = (id: string) => {
+    setSelectedRoundIds(prev => 
+      prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAllRounds = () => {
+    if (!rounds) return;
+    if (selectedRoundIds.length === rounds.length) {
+      setSelectedRoundIds([]);
+    } else {
+      setSelectedRoundIds(rounds.map(r => r.id));
+    }
+  };
+
+  const exportSelectedRounds = (format: 'csv' | 'pdf') => {
+    if (selectedRoundIds.length === 0) return;
+    const idsParams = selectedRoundIds.join(',');
+    window.open(`/api/export/counseling/${format}?roundIds=${idsParams}`, '_blank');
+  };
+
   // Removed restrictive central admin block to allow read-only access for district admins
 
   return (
@@ -564,11 +589,26 @@ export default function CounselingRounds() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle>Counseling Rounds - {selectedAcademicYear}</CardTitle>
-                {user?.role === 'central_admin' && (!rounds || rounds.every(r => r.isCompleted)) && (
-                  <Button onClick={() => setShowCreateDialog(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    New Counseling Title
-                  </Button>
+                {user?.role === 'central_admin' && (
+                  <div className="flex items-center gap-2 border-l pl-4 ml-4 border-slate-200">
+                    {selectedRoundIds.length > 0 && (
+                      <div className="flex items-center gap-2 mr-2 bg-slate-50 p-1 rounded-md border border-slate-200">
+                        <span className="text-sm px-2 text-slate-600 font-medium">{selectedRoundIds.length} selected</span>
+                        <Button size="sm" variant="outline" onClick={() => exportSelectedRounds('csv')} className="h-8 bg-white" title="Download CSV">
+                          <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" /> Export CSV
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => exportSelectedRounds('pdf')} className="h-8 bg-white" title="Download PDF">
+                          <FileText className="w-4 h-4 mr-2 text-red-500" /> Export PDF
+                        </Button>
+                      </div>
+                    )}
+                    {(!rounds || rounds.every(r => r.isCompleted)) && (
+                      <Button onClick={() => setShowCreateDialog(true)}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        New Counseling Title
+                      </Button>
+                    )}
+                  </div>
                 )}
               </CardHeader>
               <CardContent>
@@ -586,6 +626,14 @@ export default function CounselingRounds() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[40px]">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary mx-2 cursor-pointer"
+                            checked={rounds && rounds.length > 0 && selectedRoundIds.length === rounds.length}
+                            onChange={toggleAllRounds}
+                          />
+                        </TableHead>
                         <TableHead>Counseling Title</TableHead>
                         <TableHead>Round No.</TableHead>
                         <TableHead>Start Date & Time</TableHead>
@@ -645,7 +693,15 @@ export default function CounselingRounds() {
                         };
 
                         return (
-                          <TableRow key={round.id}>
+                          <TableRow key={round.id} className={selectedRoundIds.includes(round.id) ? "bg-slate-50/50" : ""}>
+                            <TableCell>
+                              <input 
+                                type="checkbox" 
+                                className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary mx-2 cursor-pointer"
+                                checked={selectedRoundIds.includes(round.id)}
+                                onChange={() => toggleRoundSelection(round.id)}
+                              />
+                            </TableCell>
                             <TableCell className="font-medium">
                               {round.roundName}
                             </TableCell>

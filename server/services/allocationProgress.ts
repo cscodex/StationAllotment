@@ -59,7 +59,7 @@ export interface DistrictCounter {
 }
 
 export interface AllocationProgressData {
-  status: 'idle' | 'resetting' | 'running' | 'completed' | 'error' | 'paused' | 'cancelled';
+  status: 'idle' | 'resetting' | 'starting' | 'running' | 'completed' | 'error' | 'paused' | 'cancelled';
   isPaused: boolean;
   isCancelled: boolean;
   delayMs: number;

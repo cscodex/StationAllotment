@@ -47,6 +47,48 @@ export class ExportService {
     return csvContent;
   }
 
+  async exportCounseledStudentsAsCSV(roundIds: string[]): Promise<string> {
+    const students = await this.storage.getStudents(10000, 0);
+
+    const filteredStudents = students.filter(s => 
+      s.counselingRoundId && 
+      roundIds.includes(s.counselingRoundId) &&
+      (s.allocationStatus === 'allotted' || s.allocationStatus === 'not_allotted')
+    );
+
+    const headers = [
+      'Merit Number',
+      'Application Number',
+      'Name',
+      'Stream',
+      'Preferences (1-10)',
+      'Allotted District',
+      'Allotted Stream',
+      'Status',
+      'Counseling Round'
+    ];
+
+    const rows = filteredStudents.map(student => [
+      student.meritNumber,
+      student.appNo || '',
+      student.name,
+      student.stream,
+      [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+       student.choice6, student.choice7, student.choice8, student.choice9, student.choice10].filter(Boolean).join('; '),
+      student.allottedDistrict || '-',
+      student.allottedStream || '-',
+      student.allocationStatus || '-',
+      student.counselingRoundNumber?.toString() || '-'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell || ''}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
   async exportResultsAsPDF(): Promise<Buffer> {
     const students = await this.storage.getStudents(10000, 0); // Get all students
     const stats = await this.storage.getDashboardStats();
@@ -70,6 +112,39 @@ export class ExportService {
         // PAGE 2+: DETAILED STUDENT RECORDS
         this.generateDetailedStudentRecords(doc, students);
 
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async exportCounseledStudentsAsPDF(roundIds: string[]): Promise<Buffer> {
+    const students = await this.storage.getStudents(10000, 0);
+
+    const filteredStudents = students.filter(s => 
+      s.counselingRoundId && 
+      roundIds.includes(s.counselingRoundId) &&
+      (s.allocationStatus === 'allotted' || s.allocationStatus === 'not_allotted')
+    );
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 50 });
+        const buffers: Buffer[] = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+          resolve(Buffer.concat(buffers));
+        });
+
+        doc.fontSize(20).fillColor('#2563eb').text('Punjab Seat Allotment System', { align: 'center' });
+        doc.fontSize(14).fillColor('#64748b').text('Counseled Students Report', { align: 'center' });
+        doc.moveDown();
+        doc.fontSize(10).fillColor('#374151').text(`Rounds Included: ${roundIds.length} | Total Counseled: ${filteredStudents.length}`, { align: 'center' });
+        doc.moveDown(2);
+
+        this.generateDetailedStudentRecords(doc, filteredStudents);
         doc.end();
       } catch (error) {
         reject(error);
