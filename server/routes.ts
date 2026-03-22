@@ -2391,9 +2391,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: event.status || 'running',
           processed: event.processed,
           total: event.total,
+          totalSeats: event.totalSeats,
+          seatsFilled: event.seatsFilled,
           allottedCount: event.allottedCount,
           notAllottedCount: event.notAllottedCount,
           queues: event.queues,
+          districtCounters: event.districtCounters,
         });
       });
 
@@ -2425,7 +2428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { roundId } = req.params;
       const progress = getProgress(roundId);
       if (!progress) {
-        return res.json({ status: 'idle', isPaused: false, isCancelled: false, delayMs: 100, queues: {}, processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0 });
+        return res.json({ status: 'idle', isPaused: false, isCancelled: false, delayMs: 100, queues: {}, processed: 0, total: 0, totalSeats: 0, seatsFilled: 0, allottedCount: 0, notAllottedCount: 0, districtCounters: [] });
       }
       res.json(progress);
     } catch (error) {
