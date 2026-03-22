@@ -2520,6 +2520,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   appNo: student.appNo || '',
                   gender: student.gender,
                   category: student.category,
+                  stream: student.stream,
                   counselingDistrict: student.counselingDistrict || undefined,
                   result: 'processing',
                   allottedDistrict: student.allottedDistrict || undefined,

@@ -8,6 +8,7 @@ export interface QueueProgress {
     appNo: string;
     gender: string;
     category: string;
+    stream: string;
     counselingDistrict?: string;
     result: 'allotted' | 'not_allotted' | 'processing';
     allottedDistrict?: string;
@@ -21,11 +22,13 @@ export interface QueueProgress {
     appNo: string;
     gender: string;
     category: string;
+    stream: string;
     counselingDistrict?: string;
     result: 'allotted' | 'not_allotted';
     allottedDistrict?: string;
     choiceNumber?: number;
     reason?: string;
+    choices?: string[];
   } | null;
   nextStudent: {
     name: string;
@@ -33,7 +36,9 @@ export interface QueueProgress {
     appNo: string;
     gender: string;
     category: string;
+    stream: string;
     counselingDistrict?: string;
+    choices?: string[];
   } | null;
   message?: string;
   processedCount: number;

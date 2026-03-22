@@ -14,6 +14,7 @@ interface LiveProgress {
   queues: Record<string, {
     currentStudent: any;
     previousStudent: any;
+    nextStudent: any;
     message?: string;
   }>;
 }
@@ -57,7 +58,69 @@ function useElapsed(startedAt: string | undefined) {
     return () => clearInterval(t);
   }, [startedAt]);
   return elapsed;
+  return elapsed;
 }
+
+// Fixed height cards to prevent UI shifting
+const renderStudentCard = (student: any, label: string, variant: 'previous' | 'current' | 'next') => {
+  const borderClass = variant === 'current' ? 'border-2 border-primary bg-blue-50/50' :
+    variant === 'next' ? 'border border-dashed border-slate-300 bg-slate-50/50' :
+      'border border-slate-200 bg-slate-50 opacity-80';
+  const labelClass = variant === 'current' ? 'text-primary' :
+    variant === 'next' ? 'text-slate-500' : 'text-slate-500';
+
+  if (!student) {
+    return (
+      <div className={`p-2 rounded h-[90px] flex flex-col items-center justify-center ${borderClass}`}>
+         <span className="text-xs text-slate-400 italic">...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`p-2 rounded h-[90px] flex flex-col justify-between ${borderClass} overflow-hidden shadow-sm`}>
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0 flex-1">
+          <div className={`text-[10px] font-bold mb-0.5 tracking-wide uppercase ${labelClass}`}>{label}</div>
+          <div className="font-semibold text-xs truncate text-gray-900" title={student.name}>{student.name}</div>
+          <div className="text-[9px] text-slate-500 truncate mt-0.5 font-medium">
+            M:{student.meritNumber} • {student.gender === 'Female' ? '♀' : '♂'} • {student.category}
+            {student.stream && ` • ${student.stream}`}
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          {variant === 'current' && (
+            <span className="text-[10px] text-primary font-bold flex items-center justify-end gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Scanning
+            </span>
+          )}
+          {variant === 'previous' && student.result === 'allotted' && (
+            <span className="text-[9px] text-green-700 font-bold bg-green-50 px-1 py-0.5 rounded border border-green-200">
+              ✓ ALLOTTED
+            </span>
+          )}
+          {variant === 'previous' && student.result === 'not_allotted' && (
+            <span className="text-[9px] text-red-700 font-bold bg-red-50 px-1 py-0.5 rounded border border-red-200" title={student.reason}>
+              ✗ DENIED
+            </span>
+          )}
+        </div>
+      </div>
+      
+      {/* Choices Display */}
+      {student.choices && student.choices.length > 0 ? (
+        <div className="text-[9px] text-slate-600 mt-1.5 truncate border-t border-slate-200/60 pt-1">
+          <span className="font-semibold text-slate-400 mr-1">PREF:</span>
+          {student.choices.slice(0, 3).map((c: string, i: number) => `[${i + 1}] ${c}`).join(' ')}
+          {student.choices.length > 3 ? ' ...' : ''}
+        </div>
+      ) : (
+         <div className="text-[9px] text-slate-400 mt-1.5 italic border-t border-slate-200/60 pt-1">No preferences</div>
+      )}
+    </div>
+  );
+};
 
 export default function CounselingDisplay() {
   const [roundId, setRoundId] = useState<string | null>(null);
@@ -175,55 +238,26 @@ export default function CounselingDisplay() {
                   const styles = CATEGORY_COLORS[category];
                   
                   return (
-                    <div key={category} className={`bg-white rounded-xl shadow-sm border-t-4 ${styles.border} overflow-hidden flex flex-col h-64`}>
-                      <div className={`px-4 py-2 bg-gray-50 border-b flex justify-between items-center`}>
-                        <span className="font-black text-gray-700 uppercase tracking-widest">{category} Queue</span>
-                        {queueData?.currentStudent && <span className="flex h-2 w-2 rounded-full bg-blue-500 animate-ping" />}
+                    <div key={category} className={`bg-white rounded-xl shadow-sm border-t-4 ${styles.border} overflow-hidden flex flex-col h-[340px] relative`}>
+                      <div className={`px-3 py-1.5 bg-gray-50 border-b flex justify-between items-center`}>
+                        <span className="font-black text-gray-700 uppercase tracking-widest text-xs">{category} Queue</span>
+                        {queueData?.currentStudent && <span className="flex h-1.5 w-1.5 rounded-full bg-blue-500 animate-ping" />}
                       </div>
 
-                      <div className="flex-1 p-3 flex flex-col gap-3 overflow-y-auto">
-                        {/* Currently Processing */}
-                        {queueData?.currentStudent ? (
-                          <div className={`p-3 rounded-lg border-2 border-blue-400 bg-blue-50/50 shadow-inner`}>
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="text-[10px] font-black tracking-widest text-blue-800 uppercase bg-blue-200 px-1.5 py-0.5 rounded">Processing</span>
-                              <span className="font-mono text-xs font-bold text-gray-500">Merit #{queueData.currentStudent.meritNumber}</span>
-                            </div>
-                            <div className="font-bold text-gray-900 truncate">{queueData.currentStudent.name}</div>
-                            <div className="text-xs text-blue-600 font-semibold mt-1.5 flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-bounce" /> Checking choices...
-                            </div>
-                          </div>
-                        ) : queueData?.message ? (
-                          <div className="p-3 text-center text-sm font-semibold text-gray-400 animate-pulse border-2 border-dashed rounded-lg bg-gray-50 flex my-auto">
-                            {queueData.message}
-                          </div>
-                        ) : (
-                          <div className="p-3 text-center text-sm font-semibold text-gray-400 border-2 border-dashed rounded-lg bg-gray-50 my-auto">
-                            Idle...
-                          </div>
-                        )}
+                      <div className="flex-1 p-2 flex flex-col gap-1.5 overflow-hidden justify-between">
+                        {/* Previous */}
+                        {renderStudentCard(queueData?.previousStudent, 'PREVIOUS', 'previous')}
 
-                        {/* Previously Processed */}
-                        {queueData?.previousStudent && (
-                          <div className="p-3 rounded-lg border bg-gray-50 opacity-80 mt-auto">
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Previous</span>
-                              <span className="font-mono text-xs font-bold text-gray-400">Merit #{queueData.previousStudent.meritNumber}</span>
-                            </div>
-                            <div className="font-semibold text-sm text-gray-700 truncate">{queueData.previousStudent.name}</div>
-                            
-                            <div className="mt-1.5 pt-1.5 border-t border-gray-200">
-                              {queueData.previousStudent.result === 'allotted' ? (
-                                <div className="text-xs font-bold text-green-600 flex items-center gap-1">
-                                  <span className="text-[10px]">ALLOTTED:</span> {queueData.previousStudent.allottedDistrict} <span className="text-gray-400 font-normal ml-auto">(Ch #{queueData.previousStudent.choiceNumber})</span>
-                                </div>
-                              ) : (
-                                <div className="text-xs font-bold text-red-500 truncate" title={queueData.previousStudent.reason}>
-                                  <span className="text-[10px]">DENIED:</span> {queueData.previousStudent.reason}
-                                </div>
-                              )}
-                            </div>
+                        {/* Current */}
+                        {renderStudentCard(queueData?.currentStudent, 'CURRENT', 'current')}
+
+                        {/* Next */}
+                        {renderStudentCard(queueData?.nextStudent, 'NEXT', 'next')}
+
+                        {/* Queue Message (if idle and has message) */}
+                        {queueData?.message && !queueData?.currentStudent && (
+                          <div className="text-[10px] text-slate-500 animate-pulse text-center p-2 bg-slate-50 border border-slate-200 rounded absolute inset-x-2 top-1/2 -translate-y-1/2 z-10 shadow-sm">
+                            {queueData.message}
                           </div>
                         )}
                       </div>

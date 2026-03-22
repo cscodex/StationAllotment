@@ -272,6 +272,7 @@ export class AllocationService {
           appNo: student.appNo || '',
           gender: entranceResult.gender,
           category: entranceResult.category,
+          stream: student.stream,
           counselingDistrict: student.counselingDistrict || undefined,
           result: 'processing',
           choices: getChoices(student),
@@ -283,7 +284,9 @@ export class AllocationService {
           appNo: nextStudent.appNo || '',
           gender: nextER.gender,
           category: nextER.category,
+          stream: nextStudent.stream,
           counselingDistrict: nextStudent.counselingDistrict || undefined,
+          choices: getChoices(nextStudent),
         } : null;
         emitProgress();
 
@@ -332,10 +335,12 @@ export class AllocationService {
                 appNo: student.appNo || '',
                 gender: entranceResult.gender,
                 category: entranceResult.category,
+                stream: student.stream,
                 counselingDistrict: student.counselingDistrict || undefined,
                 result: 'allotted',
                 allottedDistrict: choice,
                 choiceNumber: i,
+                choices: getChoices(student),
               };
 
               break;
@@ -358,9 +363,11 @@ export class AllocationService {
             appNo: student.appNo || '',
             gender: entranceResult.gender,
             category: entranceResult.category,
+            stream: student.stream,
             counselingDistrict: student.counselingDistrict || undefined,
             result: 'not_allotted',
-            reason: `Denied: ${lastFailureReason}`,
+            reason: lastFailureReason,
+            choices: getChoices(student),
           };
         }
 

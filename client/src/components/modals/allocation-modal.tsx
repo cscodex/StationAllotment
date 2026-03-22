@@ -214,50 +214,63 @@ export default function AllocationModal({ open, onOpenChange, roundId }: Allocat
       const q = liveProgress?.queues?.[key];
       return { category: cat, processed: q?.processedCount || 0, allotted: q?.allottedCount || 0, denied: q?.deniedCount || 0 };
     });
-  };
-
+  };  // Fixed height cards to prevent modal height jumping
   const renderStudentCard = (student: any, label: string, variant: 'previous' | 'current' | 'next') => {
-    if (!student) return null;
-    const borderClass = variant === 'current' ? 'border-2 border-blue-400 bg-blue-50' :
-      variant === 'next' ? 'border border-dashed border-gray-300 bg-gray-50/50' :
-        'border border-gray-200 bg-gray-50 opacity-70';
-    const labelClass = variant === 'current' ? 'text-blue-800' :
-      variant === 'next' ? 'text-gray-500' : 'text-muted-foreground';
+    const borderClass = variant === 'current' ? 'border-2 border-primary bg-blue-50/50' :
+      variant === 'next' ? 'border border-dashed border-slate-300 bg-slate-50/50' :
+        'border border-slate-200 bg-slate-50 opacity-80';
+    const labelClass = variant === 'current' ? 'text-primary' :
+      variant === 'next' ? 'text-slate-500' : 'text-slate-500';
+
+    if (!student) {
+      return (
+        <div className={`p-2 rounded h-[90px] flex flex-col items-center justify-center ${borderClass}`}>
+           <span className="text-xs text-slate-400 italic">...</span>
+        </div>
+      );
+    }
 
     return (
-      <div className={`p-2 rounded ${borderClass}`}>
+      <div className={`p-2 rounded h-[90px] flex flex-col justify-between ${borderClass} overflow-hidden shadow-sm`}>
         <div className="flex items-start justify-between gap-1">
           <div className="min-w-0 flex-1">
             <div className={`text-[10px] font-bold mb-0.5 tracking-wide uppercase ${labelClass}`}>{label}</div>
-            <div className="font-semibold text-xs truncate">{student.name}</div>
-            <div className="text-[10px] text-muted-foreground">
-              Merit #{student.meritNumber} • {student.gender === 'Female' ? '♀' : '♂'} {student.gender} | {student.category}
-              {student.counselingDistrict && ` | ${student.counselingDistrict}`}
+            <div className="font-semibold text-xs truncate" title={student.name}>{student.name}</div>
+            <div className="text-[9px] text-slate-500 truncate mt-0.5 font-medium">
+              M:{student.meritNumber} • {student.gender === 'Female' ? '♀' : '♂'} • {student.category}
+              {student.stream && ` • ${student.stream}`}
             </div>
-            {variant === 'current' && student.choices && student.choices.length > 0 && (
-              <div className="text-[10px] text-blue-700 mt-0.5">
-                {student.choices.slice(0, 3).map((c: string, i: number) => `Pref ${i + 1}: ${c}`).join(' • ')}
-              </div>
-            )}
           </div>
           <div className="text-right flex-shrink-0">
             {variant === 'current' && (
-              <span className="text-[10px] text-blue-700 font-bold flex items-center justify-end gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                Scanning...
+              <span className="text-[10px] text-primary font-bold flex items-center justify-end gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                Scanning
               </span>
             )}
             {variant === 'previous' && student.result === 'allotted' && (
-              <span className="text-[10px] font-semibold text-green-700">✓ Choice {student.choiceNumber}: {student.allottedDistrict}</span>
+              <span className="text-[9px] text-green-700 font-bold bg-green-50 px-1 py-0.5 rounded border border-green-200">
+                ✓ ALLOTTED
+              </span>
             )}
             {variant === 'previous' && student.result === 'not_allotted' && (
-              <span className="text-[10px] font-semibold text-red-600">✗ {student.reason}</span>
-            )}
-            {variant === 'next' && (
-              <span className="text-[10px] text-gray-400">Waiting...</span>
+              <span className="text-[9px] text-red-700 font-bold bg-red-50 px-1 py-0.5 rounded border border-red-200" title={student.reason}>
+                ✗ DENIED
+              </span>
             )}
           </div>
         </div>
+        
+        {/* Choices Display */}
+        {student.choices && student.choices.length > 0 ? (
+          <div className="text-[9px] text-slate-600 mt-1.5 truncate border-t border-slate-200/60 pt-1">
+            <span className="font-semibold text-slate-400 mr-1">PREF:</span>
+            {student.choices.slice(0, 3).map((c: string, i: number) => `[${i + 1}] ${c}`).join(' ')}
+            {student.choices.length > 3 ? ' ...' : ''}
+          </div>
+        ) : (
+           <div className="text-[9px] text-slate-400 mt-1.5 italic border-t border-slate-200/60 pt-1">No preferences</div>
+        )}
       </div>
     );
   };
