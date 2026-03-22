@@ -923,6 +923,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
       const allocated = req.query.allocated === 'true';
+      const allocationStatus = req.query.allocationStatus as string | undefined;
+      const academicYear = req.query.academicYear as string | undefined;
+      const roundNumber = req.query.roundNumber ? parseInt(req.query.roundNumber as string) : undefined;
       const user = await storage.getUser(req.session.userId);
 
       if (allocated) {
@@ -942,8 +945,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const districtAdminUsername = user?.role === 'district_admin' ? user.username : undefined;
-      students = await storage.getStudents(limit, offset, undefined, undefined, districtAdminUsername, isFinalized);
-      total = await storage.getStudentsCount(undefined, districtAdminUsername, isFinalized);
+      students = await storage.getStudents(limit, offset, academicYear, roundNumber, districtAdminUsername, isFinalized, allocationStatus);
+      total = await storage.getStudentsCount(academicYear, districtAdminUsername, isFinalized, allocationStatus);
 
       // Map database fields to frontend expected fields
       // gender and category are already native columns on the students table

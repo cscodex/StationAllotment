@@ -735,9 +735,8 @@ export default function CounselingRounds() {
                                       size="sm"
                                       variant="outline"
                                       onClick={() => setResetRoundId(round.id)}
-                                      disabled={!round.isAllocationCompleted}
                                       className="text-red-600 border-red-400 hover:bg-red-50"
-                                      title={round.isAllocationCompleted ? "Clear all allocations for this round" : "No allocations to reset"}
+                                      title="Clear all allocations for this round"
                                     >
                                       <Trash2 className="w-3 h-3 mr-1" />
                                       Reset Round

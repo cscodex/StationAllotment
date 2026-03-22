@@ -28,6 +28,7 @@ export default function Students() {
   const [limit, setLimit] = useState(50);
   const [academicYear, setAcademicYear] = useState<string>("");
   const [roundNumber, setRoundNumber] = useState<number | undefined>(undefined);
+  const [allocationFilter, setAllocationFilter] = useState<string>("all");
   const [selectedStudent, setSelectedStudent] = useState<StudentsEntranceResult | Student | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [editingEntranceResult, setEditingEntranceResult] = useState<string | null>(null);
@@ -50,7 +51,7 @@ export default function Students() {
 
   // Fetch student records for central admin second tab (with year/round filtering)
   const { data: studentsData, isLoading: isLoadingStudents } = useQuery<{ students: Student[], total: number }>({
-    queryKey: ["/api/students", { limit, offset: page * limit, academicYear, roundNumber }],
+    queryKey: ["/api/students", { limit, offset: page * limit, academicYear, roundNumber, allocationStatus: allocationFilter === 'all' ? undefined : allocationFilter }],
     enabled: isCentralAdmin,
   });
 
@@ -415,6 +416,19 @@ export default function Students() {
                 data-testid="input-search-students"
               />
             </div>
+            {isCentralAdmin && (
+              <Select value={allocationFilter} onValueChange={(val) => { setAllocationFilter(val); setPage(0); }}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Students" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Students</SelectItem>
+                  <SelectItem value="allotted">Allotted Only</SelectItem>
+                  <SelectItem value="not_allotted">Not Allotted Only</SelectItem>
+                  <SelectItem value="pending">Pending Only</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             {isCentralAdmin && (
               <TooltipProvider>
                 <Tooltip delayDuration={300}>

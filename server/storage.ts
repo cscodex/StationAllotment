@@ -56,7 +56,7 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
 
   // Student operations
-  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned?: boolean): Promise<Student[]>;
+  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned?: boolean, allocationStatus?: string): Promise<Student[]>;
   getStudent(id: string): Promise<Student | undefined>;
   getStudentByMeritNumber(meritNumber: number): Promise<Student | undefined>;
   getStudentsByYearAndRound(academicYear: string, roundNumber: number): Promise<Student[]>;
@@ -64,7 +64,7 @@ export interface IStorage {
   updateStudent(id: string, student: Partial<InsertStudent>): Promise<Student>;
   bulkCreateStudents(students: InsertStudent[], onProgress?: (processed: number, total: number) => void): Promise<Student[]>;
   deleteAllStudents(): Promise<void>;
-  getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned?: boolean): Promise<number>;
+  getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned?: boolean, allocationStatus?: string): Promise<number>;
   getStudentsByStatus(status: string, academicYear?: string): Promise<Student[]>;
 
   // Students entrance result operations
@@ -254,13 +254,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Student operations
-  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned: boolean = false): Promise<Student[]> {
+  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned: boolean = false, allocationStatus?: string): Promise<Student[]> {
     const conditions = [];
     if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
     }
     if (roundNumber !== undefined) {
       conditions.push(eq(students.counselingRoundNumber, roundNumber));
+    }
+    if (allocationStatus) {
+      if (allocationStatus === 'not_allotted') {
+        conditions.push(sql`${students.allocationStatus} != 'allotted'`);
+      } else {
+        conditions.push(eq(students.allocationStatus, allocationStatus));
+      }
     }
     if (districtAdminUsername) {
       if (excludeUnassigned) {
@@ -375,10 +382,17 @@ export class DatabaseStorage implements IStorage {
     await db.delete(students);
   }
 
-  async getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned: boolean = false): Promise<number> {
+  async getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned: boolean = false, allocationStatus?: string): Promise<number> {
     const conditions = [];
     if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
+    }
+    if (allocationStatus) {
+      if (allocationStatus === 'not_allotted') {
+        conditions.push(sql`${students.allocationStatus} != 'allotted'`);
+      } else {
+        conditions.push(eq(students.allocationStatus, allocationStatus));
+      }
     }
     if (districtAdminUsername) {
       if (excludeUnassigned) {
