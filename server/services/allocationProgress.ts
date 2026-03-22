@@ -8,10 +8,12 @@ export interface QueueProgress {
     appNo: string;
     gender: string;
     category: string;
+    counselingDistrict?: string;
     result: 'allotted' | 'not_allotted' | 'processing';
     allottedDistrict?: string;
     choiceNumber?: number;
     reason?: string;
+    choices?: string[];
   } | null;
   previousStudent: {
     name: string;
@@ -19,12 +21,36 @@ export interface QueueProgress {
     appNo: string;
     gender: string;
     category: string;
+    counselingDistrict?: string;
     result: 'allotted' | 'not_allotted';
     allottedDistrict?: string;
     choiceNumber?: number;
     reason?: string;
   } | null;
+  nextStudent: {
+    name: string;
+    meritNumber: number;
+    appNo: string;
+    gender: string;
+    category: string;
+    counselingDistrict?: string;
+  } | null;
   message?: string;
+  processedCount: number;
+  allottedCount: number;
+  deniedCount: number;
+}
+
+export interface DistrictCounter {
+  district: string;
+  mOpen: number;
+  mDisabled: number;
+  mPrivate: number;
+  fOpen: number;
+  fDisabled: number;
+  fWHH: number;
+  fPrivate: number;
+  total: number;
 }
 
 export interface AllocationProgressData {
@@ -34,9 +60,12 @@ export interface AllocationProgressData {
   delayMs: number;
   processed: number;
   total: number;
+  totalSeats: number;
+  seatsFilled: number;
   allottedCount: number;
   notAllottedCount: number;
   queues: Record<string, QueueProgress>;
+  districtCounters: DistrictCounter[];
   logs: string[];
   startedAt: number;
 }
@@ -56,12 +85,15 @@ export function setProgress(roundId: string, data: Partial<AllocationProgressDat
       status: 'idle',
       isPaused: false,
       isCancelled: false,
-      delayMs: 100, // Default 100ms per step
+      delayMs: 100,
       processed: 0,
       total: 0,
+      totalSeats: 0,
+      seatsFilled: 0,
       allottedCount: 0,
       notAllottedCount: 0,
       queues: {},
+      districtCounters: [],
       logs: [],
       startedAt: Date.now(),
       ...data,
@@ -74,7 +106,7 @@ export function setQueueProgress(roundId: string, queueKey: string, queueData: P
   const existing = progressStore.get(roundId);
   if (existing) {
     if (!existing.queues[queueKey]) {
-      existing.queues[queueKey] = { currentStudent: null, previousStudent: null };
+      existing.queues[queueKey] = { currentStudent: null, previousStudent: null, nextStudent: null, processedCount: 0, allottedCount: 0, deniedCount: 0 };
     }
     Object.assign(existing.queues[queueKey], queueData);
   }

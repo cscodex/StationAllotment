@@ -1,15 +1,18 @@
 import { IStorage } from '../storage';
 import { Student, Vacancy, StudentsEntranceResult } from '@shared/schema';
 import { AuditService } from './auditService';
-import { getProgress, QueueProgress } from './allocationProgress';
+import { getProgress, QueueProgress, DistrictCounter } from './allocationProgress';
 
 export interface ProgressEvent {
   status?: 'running' | 'paused' | 'cancelled' | 'error';
   processed: number;
   total: number;
+  totalSeats: number;
+  seatsFilled: number;
   allottedCount: number;
   notAllottedCount: number;
   queues: Record<string, QueueProgress>;
+  districtCounters: DistrictCounter[];
 }
 
 export class AllocationService {
@@ -153,31 +156,77 @@ export class AllocationService {
     let processedCount = 0;
     const totalEligible = eligibleStudents.length;
 
+    // Compute total seats across all vacancies
+    let totalSeats = 0;
+    vacancies.forEach(v => { totalSeats += v.totalSeats || 0; });
+    let seatsFilled = totalSeats - totalAvailableSeats; // seats already taken before this run
+
+    // Helper to build districtCounters from live vacancy state
+    const buildDistrictCounters = () => {
+      const districtMap: Record<string, any> = {};
+      vacancies.forEach(v => {
+        if (!v.district) return;
+        if (!districtMap[v.district]) districtMap[v.district] = { district: v.district, mOpen: 0, mDisabled: 0, mPrivate: 0, fOpen: 0, fDisabled: 0, fWHH: 0, fPrivate: 0, total: 0 };
+        const d = districtMap[v.district];
+        const seats = v.availableSeats || 0;
+        const g = v.gender; const c = v.category;
+        if (g === 'Male' && c === 'Open') d.mOpen += seats;
+        else if (g === 'Male' && c === 'Disabled') d.mDisabled += seats;
+        else if (g === 'Male' && c === 'Private') d.mPrivate += seats;
+        else if (g === 'Female' && c === 'Open') d.fOpen += seats;
+        else if (g === 'Female' && c === 'Disabled') d.fDisabled += seats;
+        else if (g === 'Female' && c === 'WHH') d.fWHH += seats;
+        else if (g === 'Female' && c === 'Private') d.fPrivate += seats;
+        d.total += seats;
+      });
+      return Object.values(districtMap);
+    };
+
+    // Helper to extract student choices array
+    const getChoices = (s: Student) => {
+      const choices: string[] = [];
+      for (let i = 1; i <= 10; i++) { const c = (s as any)[`choice${i}`]; if (c) choices.push(c); }
+      return choices;
+    };
+
     log('🎯 Grouping students into independent parallel demographic queues...');
-    // Create partitioned queues
     const studentQueues: Record<string, Student[]> = {};
     eligibleStudents.forEach(student => {
       const entranceResult = entranceResultMap.get(student.appNo)!;
-      // Replace spaces with underscores for object keys
       const bucket = `${entranceResult.gender}_${entranceResult.category}`.replace(/\s+/g, '');
       if (!studentQueues[bucket]) studentQueues[bucket] = [];
       studentQueues[bucket].push(student);
     });
 
     log(`   Created ${Object.keys(studentQueues).length} independent queues tracking ${totalEligible} distinct eligible students.`);
-    
-    // Create the live queues dictionary to emit
+
+    // Create the live queues dictionary with full interface
     const liveQueues: Record<string, QueueProgress> = {};
-    Object.keys(studentQueues).forEach(key => liveQueues[key] = { currentStudent: null, previousStudent: null });
+    const queueStats: Record<string, { processed: number; allotted: number; denied: number }> = {};
+    Object.keys(studentQueues).forEach(key => {
+      liveQueues[key] = { currentStudent: null, previousStudent: null, nextStudent: null, processedCount: 0, allottedCount: 0, deniedCount: 0 };
+      queueStats[key] = { processed: 0, allotted: 0, denied: 0 };
+    });
 
     const emitProgress = () => {
+      // Sync per-queue stats into liveQueues
+      Object.keys(queueStats).forEach(k => {
+        if (liveQueues[k]) {
+          liveQueues[k].processedCount = queueStats[k].processed;
+          liveQueues[k].allottedCount = queueStats[k].allotted;
+          liveQueues[k].deniedCount = queueStats[k].denied;
+        }
+      });
       if (onProgress) {
         onProgress({
           processed: processedCount,
           total: totalEligible,
+          totalSeats,
+          seatsFilled,
           allottedCount,
           notAllottedCount,
           queues: liveQueues,
+          districtCounters: buildDistrictCounters(),
         });
       }
     };
@@ -212,16 +261,30 @@ export class AllocationService {
         }
         // --- END INTERCEPTOR ---
 
-        // Setup live processing state
+        // Setup live processing state with full details
+        const nextIdx = idx + 1;
+        const nextStudent = nextIdx < queueStudents.length ? queueStudents[nextIdx] : null;
+        const nextER = nextStudent ? entranceResultMap.get(nextStudent.appNo) : null;
+
         liveQueues[bucket].currentStudent = {
           name: student.name,
           meritNumber: student.meritNumber,
-          appNo: student.appNo,
+          appNo: student.appNo || '',
           gender: entranceResult.gender,
           category: entranceResult.category,
+          counselingDistrict: student.counselingDistrict || undefined,
           result: 'processing',
+          choices: getChoices(student),
         };
         liveQueues[bucket].previousStudent = previousStudentState;
+        liveQueues[bucket].nextStudent = nextStudent && nextER ? {
+          name: nextStudent.name,
+          meritNumber: nextStudent.meritNumber,
+          appNo: nextStudent.appNo || '',
+          gender: nextER.gender,
+          category: nextER.category,
+          counselingDistrict: nextStudent.counselingDistrict || undefined,
+        } : null;
         emitProgress();
 
         let allocated = false;
@@ -258,15 +321,18 @@ export class AllocationService {
               }
               
               allottedCount++;
+              seatsFilled++;
               allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
               allocated = true;
+              queueStats[bucket].allotted++;
 
               previousStudentState = {
                 name: student.name,
                 meritNumber: student.meritNumber,
-                appNo: student.appNo,
+                appNo: student.appNo || '',
                 gender: entranceResult.gender,
                 category: entranceResult.category,
+                counselingDistrict: student.counselingDistrict || undefined,
                 result: 'allotted',
                 allottedDistrict: choice,
                 choiceNumber: i,
@@ -284,22 +350,26 @@ export class AllocationService {
         if (!allocated) {
           await this.storage.updateStudent(student.id, { allocationStatus: 'not_allotted' });
           notAllottedCount++;
+          queueStats[bucket].denied++;
 
           previousStudentState = {
             name: student.name,
             meritNumber: student.meritNumber,
-            appNo: student.appNo,
+            appNo: student.appNo || '',
             gender: entranceResult.gender,
             category: entranceResult.category,
+            counselingDistrict: student.counselingDistrict || undefined,
             result: 'not_allotted',
             reason: `Denied: ${lastFailureReason}`,
           };
         }
 
         processedCount++;
-        
+        queueStats[bucket].processed++;
+
         liveQueues[bucket].currentStudent = null;
         liveQueues[bucket].previousStudent = previousStudentState;
+        liveQueues[bucket].nextStudent = null;
         emitProgress();
       }
     }));

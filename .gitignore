@@ -16,3 +16,9 @@ jar.txt
 *.jar
 
 uploads/
+force-reset.ts
+full_db_backup.sql
+get-districts.ts
+migrate-neon.sh
+probe.ts
+test-stats.ts

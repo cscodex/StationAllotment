@@ -786,6 +786,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Current session route — required by dashboard & counseling-progress
+  app.get('/api/session/current', isAuthenticated, async (req: any, res) => {
+    try {
+      const currentSession = await storage.getSetting('current_session');
+      res.json({ currentSession: currentSession?.value || '' });
+    } catch (error) {
+      console.error("Get current session error:", error);
+      res.status(500).json({ message: "Failed to fetch current session" });
+    }
+  });
+
   // File upload routes
   app.post('/api/files/upload/students', isCentralAdmin, upload.single('file'), async (req: any, res) => {
     try {
@@ -2478,7 +2489,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalToProcess = studentsToReset.length;
       let clearedCount = 0;
 
-      setProgress(id, { total: totalToProcess, queues: { 'Resetting': { currentStudent: null, previousStudent: null, message: `Clearing ${totalToProcess} student allocations...` } } });
+      setProgress(id, { total: totalToProcess, queues: { 'Resetting': { currentStudent: null, previousStudent: null, nextStudent: null, processedCount: 0, allottedCount: 0, deniedCount: 0, message: `Clearing ${totalToProcess} student allocations...` } } });
 
       // Clear ALL students with any allocation data
       for (const student of studentsToReset) {
@@ -2503,13 +2514,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 currentStudent: {
                   name: student.name,
                   meritNumber: student.meritNumber,
-                  appNo: student.appNo,
+                  appNo: student.appNo || '',
                   gender: student.gender,
                   category: student.category,
+                  counselingDistrict: student.counselingDistrict || undefined,
                   result: 'processing',
                   allottedDistrict: student.allottedDistrict || undefined,
                 },
                 previousStudent: null,
+                nextStudent: null,
+                processedCount: clearedCount,
+                allottedCount: 0,
+                deniedCount: 0,
                 message: `Clearing students... ${clearedCount}/${totalToProcess}`,
               }
             }
@@ -2518,7 +2534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Restore specific vacancies for seats given up by these students
-      setProgress(id, { queues: { 'Restoring': { currentStudent: null, previousStudent: null, message: 'Restoring vacancy seats...' } } });
+      setProgress(id, { queues: { 'Restoring': { currentStudent: null, previousStudent: null, nextStudent: null, processedCount: 0, allottedCount: 0, deniedCount: 0, message: 'Restoring vacancy seats...' } } });
       let restoredVacancies = 0;
       const allVacancies = await storage.getVacancies(round.academicYear);
       
@@ -2550,7 +2566,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'completed',
         processed: totalToProcess,
         total: totalToProcess,
-        queues: { 'Completed': { currentStudent: null, previousStudent: null, message: 'Reset complete!' } },
+        queues: { 'Completed': { currentStudent: null, previousStudent: null, nextStudent: null, processedCount: totalToProcess, allottedCount: 0, deniedCount: 0, message: 'Reset complete!' } },
       });
 
       // Clear progress after 10 seconds
