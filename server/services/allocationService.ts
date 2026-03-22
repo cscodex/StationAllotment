@@ -295,56 +295,62 @@ export class AllocationService {
           const choice = (student as any)[`choice${i}`];
           if (!choice) continue;
 
-          const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${entranceResult.category}`;
-          const availableVacancies = vacancyMap.get(vacancyKey);
-          
-          if (availableVacancies && availableVacancies.length > 0) {
-            const selectedVacancy = availableVacancies.find(v => v.availableSeats && v.availableSeats > 0);
+          lastFailureReason = `${choice} cutoffs exceeded or full.`;
+
+          // Categories to try: Open first, then their exact category (if not Open)
+          const categoriesToTry = entranceResult.category === 'Open' 
+            ? ['Open'] 
+            : ['Open', entranceResult.category];
+
+          for (const cat of categoriesToTry) {
+            const vacancyKey = `${choice}|${student.stream}|${entranceResult.gender}|${cat}`;
+            const availableVacancies = vacancyMap.get(vacancyKey);
             
-            if (selectedVacancy) {
-              await this.storage.updateStudent(student.id, {
-                allottedDistrict: choice,
-                allottedStream: student.stream,
-                allottedSchoolUdise: selectedVacancy.udiseCode || null,
-                counselingRoundId: counselingRoundId,
-                counselingRoundNumber: roundNumber,
-                allocationStatus: 'allotted',
-              });
-
-              await this.storage.updateVacancy(selectedVacancy.id, {
-                availableSeats: (selectedVacancy.availableSeats || 0) - 1,
-              });
+            if (availableVacancies && availableVacancies.length > 0) {
+              const selectedVacancy = availableVacancies.find(v => v.availableSeats && v.availableSeats > 0);
               
-              selectedVacancy.availableSeats = (selectedVacancy.availableSeats || 0) - 1;
-              if (selectedVacancy.availableSeats === 0) {
-                vacancyMap.set(vacancyKey, availableVacancies.filter(v => v.id !== selectedVacancy.id));
+              if (selectedVacancy) {
+                await this.storage.updateStudent(student.id, {
+                  allottedDistrict: choice,
+                  allottedStream: student.stream,
+                  allottedSchoolUdise: selectedVacancy.udiseCode || null,
+                  counselingRoundId: counselingRoundId,
+                  counselingRoundNumber: roundNumber,
+                  allocationStatus: 'allotted',
+                });
+
+                await this.storage.updateVacancy(selectedVacancy.id, {
+                  availableSeats: (selectedVacancy.availableSeats || 0) - 1,
+                });
+                
+                selectedVacancy.availableSeats = (selectedVacancy.availableSeats || 0) - 1;
+                if (selectedVacancy.availableSeats === 0) {
+                  vacancyMap.set(vacancyKey, availableVacancies.filter(v => v.id !== selectedVacancy.id));
+                }
+                
+                allottedCount++;
+                seatsFilled++;
+                allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
+                allocated = true;
+                queueStats[bucket].allotted++;
+
+                previousStudentState = {
+                  name: student.name,
+                  meritNumber: student.meritNumber,
+                  appNo: student.appNo || '',
+                  gender: entranceResult.gender,
+                  category: entranceResult.category,
+                  counselingDistrict: student.counselingDistrict || undefined,
+                  result: 'allotted',
+                  allottedDistrict: choice,
+                  choiceNumber: i,
+                };
+
+                break; // Break category loop
               }
-              
-              allottedCount++;
-              seatsFilled++;
-              allocationsByDistrict[choice] = (allocationsByDistrict[choice] || 0) + 1;
-              allocated = true;
-              queueStats[bucket].allotted++;
-
-              previousStudentState = {
-                name: student.name,
-                meritNumber: student.meritNumber,
-                appNo: student.appNo || '',
-                gender: entranceResult.gender,
-                category: entranceResult.category,
-                counselingDistrict: student.counselingDistrict || undefined,
-                result: 'allotted',
-                allottedDistrict: choice,
-                choiceNumber: i,
-              };
-
-              break;
-            } else {
-              lastFailureReason = `${choice} full.`;
             }
-          } else {
-            lastFailureReason = `${choice} cutoffs exceeded.`;
           }
+          if (allocated) break; // Break choice loop
         }
 
         if (!allocated) {
