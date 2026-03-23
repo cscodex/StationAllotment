@@ -353,7 +353,11 @@ export class AllocationService {
         }
 
         if (!allocated) {
-          await this.storage.updateStudent(student.id, { allocationStatus: 'not_allotted' });
+          await this.storage.updateStudent(student.id, { 
+            allocationStatus: 'not_allotted',
+            counselingRoundId: counselingRoundId,
+            counselingRoundNumber: roundNumber,
+          });
           notAllottedCount++;
           queueStats[bucket].denied++;
 
@@ -484,6 +488,8 @@ export class AllocationService {
           allottedDistrict: null,
           allottedStream: null,
           allottedSchoolUdise: null,
+          counselingRoundId: null,
+          counselingRoundNumber: null,
           allocationStatus: 'pending',
         });
 
@@ -501,6 +507,8 @@ export class AllocationService {
       for (const student of notAllottedStudents) {
         await this.storage.updateStudent(student.id, {
           allocationStatus: 'pending',
+          counselingRoundId: null,
+          counselingRoundNumber: null,
         });
         resetCount++;
       }
