@@ -1911,6 +1911,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create next round for an existing title
+  app.post('/api/counseling-titles/:academicYear/:roundName/next', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { academicYear, roundName } = req.params;
+      const decodedYear = decodeURIComponent(academicYear);
+      const decodedName = decodeURIComponent(roundName);
+
+      // Verify vacancies
+      const vacancies = await storage.getVacancies(decodedYear);
+      const titleVacancies = vacancies.filter(v => v.roundName === decodedName);
+      
+      let totalOriginalSeats = 0;
+      titleVacancies.forEach(v => {
+        totalOriginalSeats += (v.availableSeats || 0);
+      });
+
+      // Get allocated students for this title
+      const allRounds = await storage.getCounselingRounds(decodedYear);
+      const titleRounds = allRounds.filter((r: any) => r.roundName === decodedName);
+      
+      if (titleRounds.length === 0) {
+        return res.status(404).json({ message: "Counseling title not found" });
+      }
+
+      const titleRoundIds = titleRounds.map((r: any) => r.id);
+      const allStudents = await storage.getStudents(10000, 0);
+      
+      let totalAllotted = 0;
+      allStudents.forEach(s => {
+        if (s.counselingRoundId && titleRoundIds.includes(s.counselingRoundId) && s.allocationStatus === 'allotted') {
+          totalAllotted++;
+        }
+      });
+
+      const remainingVacancies = totalOriginalSeats - totalAllotted;
+      
+      if (totalOriginalSeats > 0 && remainingVacancies <= 0) {
+        return res.status(400).json({ message: "Cannot create next round: All vacancies have been filled." });
+      }
+
+      // Check if the latest round is finalized
+      const maxRoundNum = Math.max(...titleRounds.map((r: any) => r.roundNumber));
+      const latestRound = titleRounds.find((r: any) => r.roundNumber === maxRoundNum);
+      
+      if (latestRound && !latestRound.isAllocationFinalized && !latestRound.isCompleted) {
+         return res.status(400).json({ message: "Cannot create next round: The latest round must be finalized first." });
+      }
+
+      // Mark current round as inactive
+      if (latestRound) {
+        await storage.updateCounselingRound(latestRound.id, { isActive: false });
+      }
+
+      // Spawn new round
+      const newRoundNumber = maxRoundNum + 1;
+      const newRound = await storage.createCounselingRound({
+        academicYear: decodedYear,
+        roundName: decodedName,
+        roundNumber: newRoundNumber,
+        startDate: new Date(),
+        endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
+        isActive: true,
+        isAllocationCompleted: false,
+        isAllocationFinalized: false
+      });
+
+      await auditService.log(req.user.id, 'counseling_round_spawned', 'counseling_rounds', newRound.id, {
+        previousRoundId: latestRound?.id,
+        newRoundName: newRound.roundName,
+        newRoundNumber: newRound.roundNumber
+      }, req.ip, req.get('User-Agent'));
+
+      res.status(201).json(newRound);
+    } catch (error: any) {
+      console.error("Create next round error:", error);
+      res.status(500).json({ message: error.message || "Failed to create next round" });
+    }
+  });
+
   // Iterative rounds endpoints
   app.post('/api/counseling-rounds/next', isCentralAdmin, async (req: any, res) => {
     try {

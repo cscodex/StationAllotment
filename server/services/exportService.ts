@@ -73,6 +73,19 @@ export class ExportService {
 
     const rows = filteredStudents.map(student => {
       const timestamp = student.updatedAt ? new Date(student.updatedAt).toLocaleString('en-IN') : '-';
+      
+      let districtText = student.allottedDistrict || '-';
+      if (student.allocationStatus === 'not_allotted') {
+         districtText = `Not Allotted (Cat: ${student.category || '-'}, Stream: ${student.stream})`;
+      } else if (student.allocationStatus === 'allotted') {
+         const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+           student.choice6, student.choice7, student.choice8, student.choice9, student.choice10];
+         const choiceIdx = choices.findIndex(c => c === student.allottedDistrict);
+         if (choiceIdx !== -1) {
+             districtText = `Choice ${choiceIdx + 1} - ${student.allottedDistrict}`;
+         }
+      }
+
       return [
         student.meritNumber,
         student.appNo || '-',
@@ -83,7 +96,7 @@ export class ExportService {
         [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
          student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
           .filter(Boolean).map((c, i) => `${i + 1}. ${c}`).join('; '),
-        student.allottedDistrict || '-',
+        districtText,
         student.allottedStream || '-',
         student.allocationStatus || '-',
         student.counselingRoundNumber?.toString() || '-',
@@ -321,11 +334,9 @@ export class ExportService {
     const headers = ['Merit No', 'Name', 'Gen', 'Cat', 'Stream', 'Preferences (1-10)', 'Allotted Dist.', 'Allotted Stream', 'Status', 'Rnd', 'Timestamp'];
     let x = 50;
 
-    doc.fontSize(9).fillColor('#374151');
-
     headers.forEach((header, i) => {
-      doc.rect(x, y, colWidths[i], 25).fillAndStroke('#f1f5f9', '#d1d5db');
-      doc.text(header, x + 3, y + 8, { width: colWidths[i] - 6, align: 'left' });
+      doc.rect(x, y, colWidths[i], 25).fillAndStroke('#1f2937', '#111827');
+      doc.fontSize(9).fillColor('#ffffff').text(header, x + 3, y + 8, { width: colWidths[i] - 6, align: 'left' });
       x += colWidths[i];
     });
   }
@@ -384,8 +395,18 @@ export class ExportService {
     doc.fontSize(7); // Restore font size
     x += colWidths[5];
 
-    // Allotted District
-    doc.text(student.allottedDistrict || '-', x + 3, y + 6, { width: colWidths[6] - 6 });
+    // Allotted District & Reason formatting
+    let districtText = student.allottedDistrict || '-';
+    if (student.allocationStatus === 'not_allotted') {
+       districtText = `Not Allotted (Cat: ${student.category || '-'}, Stream: ${student.stream})`;
+    } else if (student.allocationStatus === 'allotted') {
+       const choiceIdx = choices.findIndex(c => c === student.allottedDistrict);
+       if (choiceIdx !== -1) {
+           districtText = `Choice ${choiceIdx + 1} - ${student.allottedDistrict}`;
+       }
+    }
+
+    doc.text(districtText, x + 3, y + 6, { width: colWidths[6] - 6, height: rowHeight - 6, overflow: 'hidden' });
     x += colWidths[6];
 
     // Allotted Stream

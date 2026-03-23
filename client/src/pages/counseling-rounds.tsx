@@ -382,6 +382,28 @@ export default function CounselingRounds() {
     },
   });
 
+  const spawnNextRoundMutation = useMutation({
+    mutationFn: async (roundName: string) => {
+      if (!selectedAcademicYear) throw new Error("Academic year not selected");
+      const res = await apiRequest("POST", `/api/counseling-titles/${encodeURIComponent(selectedAcademicYear)}/${encodeURIComponent(roundName)}/next`, {});
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
+      refetch();
+      toast({
+        title: "Next Round Created",
+        description: "Successfully created the next counseling round for this title.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to create round",
+        description: error.message || "Could not spawn next round. Ensure there are vacancies available.",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Run allocation: open modal instead of native confirm
   const handleRunAllocation = (round: CounselingRound) => {
@@ -654,19 +676,17 @@ export default function CounselingRounds() {
                   <div className="flex items-center gap-2 border-l pl-4 ml-4 border-slate-200">
                     {selectedRoundIds.length > 0 && (
                       <div className="flex items-center gap-2 mr-2 bg-slate-50 p-1 rounded-md border border-slate-200">
-                        <span className="text-sm px-2 text-slate-600 font-medium">{selectedRoundIds.length} selected</span>
-                        <Button size="sm" variant="outline" onClick={() => exportSelectedRounds('csv')} className="h-8 bg-white" title="Download CSV">
-                          <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" /> Export CSV
+                        <Button size="icon" variant="outline" onClick={() => exportSelectedRounds('csv')} className="h-8 w-8 bg-white" title="Export Selected to CSV">
+                          <FileSpreadsheet className="w-4 h-4 text-green-600" />
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => exportSelectedRounds('pdf')} className="h-8 bg-white" title="Download PDF">
-                          <FileText className="w-4 h-4 mr-2 text-red-500" /> Export PDF
+                        <Button size="icon" variant="outline" onClick={() => exportSelectedRounds('pdf')} className="h-8 w-8 bg-white" title="Export Selected to PDF">
+                          <FileText className="w-4 h-4 text-red-500" />
                         </Button>
                       </div>
                     )}
                     {(!rounds || rounds.every(r => r.isCompleted || r.isAllocationFinalized) || rounds.length === 0) && (
-                      <Button onClick={() => setShowCreateDialog(true)}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        New Counseling Title
+                      <Button size="icon" onClick={() => setShowCreateDialog(true)} className="h-8 w-8" title="New Counseling Title">
+                        <Plus className="w-4 h-4" />
                       </Button>
                     )}
                   </div>
@@ -793,6 +813,19 @@ export default function CounselingRounds() {
                                       >
                                         <ShieldCheck className="w-3 h-3 mr-1" /> Finalize
                                       </Button>
+                                    )}
+
+                                    {/* Next Round Button */}
+                                    {(round.isCompleted || round.isAllocationFinalized) && 
+                                     rounds.filter(r => r.roundName === round.roundName).every(r => r.roundNumber <= round.roundNumber) && (
+                                     <Button
+                                       size="sm" variant="outline" className="h-7 text-xs border-blue-200 text-blue-700 ml-auto"
+                                       onClick={() => spawnNextRoundMutation.mutate(round.roundName!)}
+                                       disabled={spawnNextRoundMutation.isPending}
+                                       title="Spawn next round for this title"
+                                     >
+                                       <Plus className="w-3 h-3 mr-1" /> Next Round
+                                     </Button>
                                     )}
                                     
                                     {canDelete(round) && (
@@ -945,6 +978,21 @@ export default function CounselingRounds() {
                                     >
                                       <ShieldCheck className="w-4 h-4" />
                                     </Button>
+                                  )}
+                                  
+                                  {/* Check if latest round for this title and finalized to spawn next */}
+                                  {(round.isCompleted || round.isAllocationFinalized) && 
+                                   rounds.filter(r => r.roundName === round.roundName).every(r => r.roundNumber <= round.roundNumber) && (
+                                   <Button
+                                     size="icon"
+                                     variant="outline"
+                                     onClick={() => spawnNextRoundMutation.mutate(round.roundName!)}
+                                     disabled={spawnNextRoundMutation.isPending}
+                                     className="border-blue-300 text-blue-600 hover:bg-blue-50 h-8 w-8"
+                                     title="Create Next Round for this Title"
+                                   >
+                                     <Plus className="w-4 h-4" />
+                                   </Button>
                                   )}
                                   {canDelete(round) && (
                                     <Button
