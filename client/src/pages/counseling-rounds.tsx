@@ -150,6 +150,57 @@ function PrerequisitesButton({
   );
 }
 
+/**
+ * Shared component to show the readiness status of a round
+ */
+const PrerequisitesCell = ({ round }: { round: CounselingRound }) => {
+  const { data: prerequisites, isLoading: isLoadingPrerequisites } = useQuery<PrerequisitesStatus>({
+    queryKey: ["/api/counseling-rounds", round.id, "prerequisites"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/counseling-rounds/${round.id}/prerequisites`);
+      return await res.json();
+    },
+    enabled: round.isActive && !round.isCompleted,
+  });
+
+  if (!round.isActive || round.isCompleted) {
+    return <span className="text-xs text-muted-foreground">-</span>;
+  }
+
+  if (isLoadingPrerequisites) {
+    return <span className="text-xs text-muted-foreground">Checking...</span>;
+  }
+
+  if (!prerequisites) {
+    return <span className="text-xs text-muted-foreground">-</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1 text-xs">
+      <div className={`flex items-center gap-1 ${prerequisites.hasVacancyData ? 'text-green-600' : 'text-red-600'}`}>
+        {prerequisites.hasVacancyData ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+        <span>Vacancies: {prerequisites.totalAvailableSeats}</span>
+      </div>
+      <div className={`flex items-center gap-1 ${prerequisites.hasEntranceResults ? 'text-green-600' : 'text-red-600'}`}>
+        {prerequisites.hasEntranceResults ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+        <span>Results: {prerequisites.entranceResultsCount}</span>
+      </div>
+      <div className={`flex items-center gap-1 ${prerequisites.hasStudentChoices ? 'text-green-600' : 'text-red-600'}`}>
+        {prerequisites.hasStudentChoices ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+        <span>Choices: {prerequisites.lockedStudentsCount}/{prerequisites.studentsWithChoicesCount}</span>
+      </div>
+      <div className={`flex items-center gap-1 ${prerequisites.allDistrictsFinalized ? 'text-green-600' : 'text-red-600'}`}>
+        {prerequisites.allDistrictsFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+        <span>Districts: {prerequisites.finalizedDistrictsCount}/{prerequisites.totalDistrictsCount}</span>
+      </div>
+      <div className={`flex items-center gap-1 ${prerequisites.isAllocationFinalized ? 'text-green-600' : 'text-red-600'}`}>
+        {prerequisites.isAllocationFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+        <span>Data Locked & Ready</span>
+      </div>
+    </div>
+  );
+};
+
 export default function CounselingRounds() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -622,7 +673,143 @@ export default function CounselingRounds() {
                     </Button>
                   </div>
                 ) : rounds && rounds.length > 0 ? (
-                  <Table>
+                  <>
+                    {/* MOBILE CARD VIEW (<md) */}
+                    <div className="md:hidden space-y-4">
+                      {rounds.map((round) => (
+                        <div key={round.id} className={`bg-white p-4 rounded-lg border shadow-sm space-y-3 ${selectedRoundIds.includes(round.id) ? "ring-2 ring-primary bg-slate-50/50" : ""}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-start gap-3">
+                              <input 
+                                type="checkbox" 
+                                className="w-4 h-4 mt-1 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
+                                checked={selectedRoundIds.includes(round.id)}
+                                onChange={() => toggleRoundSelection(round.id)}
+                              />
+                              <div>
+                                <div className="font-bold text-base text-slate-800">{round.roundName}</div>
+                                <div className="text-xs text-slate-500 font-mono mt-0.5">Round #{round.roundNumber}</div>
+                              </div>
+                            </div>
+                            {(() => {
+                              const status = getRoundStatus(round);
+                              const Icon = status.icon;
+                              return (
+                                <Badge variant={status.variant} className={status.className}>
+                                  <Icon className="w-3 h-3 mr-1" />
+                                  {status.text}
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 gap-2 text-sm pt-2 bg-slate-50 p-2 rounded-md">
+                            <div>
+                              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1">Start Date & Time</span>
+                              <div className="text-slate-700 font-medium text-xs">
+                                {round.startDate && round.startDate !== 'null' ? (
+                                  (() => {
+                                    try {
+                                      const date = new Date(round.startDate);
+                                      if (!isNaN(date.getTime())) {
+                                        return format(date, "MMM dd, yyyy HH:mm");
+                                      }
+                                    } catch (e) {}
+                                    return <span className="text-muted-foreground italic">Invalid date</span>;
+                                  })()
+                                ) : (
+                                  <span className="text-muted-foreground italic">No date set</span>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {user?.role === 'central_admin' && (
+                              <div className="mt-2 border-t pt-2">
+                                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1.5">Readiness & Prerequisites</span>
+                                <PrerequisitesCell round={round} />
+                              </div>
+                            )}
+                          </div>
+
+                          {user?.role === 'central_admin' && (
+                            <div className="flex flex-wrap items-center gap-2 pt-3 border-t mt-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() => handleEdit(round)}
+                                disabled={round.isCompleted}
+                                title="Edit Start Date"
+                                className="h-8 w-8"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              {round.roundNumber === 1 && (
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => handleSuspend(round, !round.isSuspended)}
+                                  disabled={suspendMutation.isPending}
+                                  className={`h-8 w-8 ${round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}`}
+                                  title={round.isSuspended ? "Unsuspend subsequent rounds" : "Suspend subsequent rounds"}
+                                >
+                                  {round.isSuspended ? <PlayCircle className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                                </Button>
+                              )}
+                              {round.isActive && !round.isCompleted && (
+                                <PrerequisitesButton
+                                  round={round}
+                                  onRunAllocation={handleRunAllocation}
+                                  isPending={false}
+                                />
+                              )}
+                              {!round.isCompleted && (
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => setResetRoundId(round.id)}
+                                  className="text-red-600 border-red-400 hover:bg-red-50 h-8 w-8"
+                                  title="Reset Round Data"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {round.isAllocationCompleted && !round.isCompleted && (
+                                <Button
+                                  size="icon"
+                                  variant="default"
+                                  onClick={() => {
+                                    if (confirm(`Finalize Counseling Round ${round.roundNumber} ("${round.roundName}")?\n\nThis will permanently close this round — no further allocations can be run. This cannot be undone.`)) {
+                                      finalizeRoundMutation.mutate(round.id);
+                                    }
+                                  }}
+                                  disabled={finalizeRoundMutation.isPending}
+                                  className="bg-purple-600 hover:bg-purple-700 text-white h-8 w-8"
+                                  title={`Finalize Round ${round.roundNumber}`}
+                                >
+                                  <ShieldCheck className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {canDelete(round) && (
+                                <Button
+                                  size="icon"
+                                  variant="outline"
+                                  onClick={() => handleDelete(round)}
+                                  disabled={deleteRoundMutation.isPending || isPastRound(round)}
+                                  className="text-red-600 hover:text-red-700 h-8 w-8 ml-auto"
+                                  title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* DESKTOP TABLE VIEW (>=md) */}
+                    <div className="hidden md:block rounded-md overflow-x-auto">
+                      <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[40px]">
@@ -643,53 +830,6 @@ export default function CounselingRounds() {
                     </TableHeader>
                     <TableBody>
                       {rounds.map((round) => {
-                        const PrerequisitesCell = ({ round }: { round: CounselingRound }) => {
-                          const { data: prerequisites, isLoading: isLoadingPrerequisites } = useQuery<PrerequisitesStatus>({
-                            queryKey: ["/api/counseling-rounds", round.id, "prerequisites"],
-                            queryFn: async () => {
-                              const res = await apiRequest("GET", `/api/counseling-rounds/${round.id}/prerequisites`);
-                              return await res.json();
-                            },
-                            enabled: round.isActive && !round.isCompleted,
-                          });
-
-                          if (!round.isActive || round.isCompleted) {
-                            return <span className="text-xs text-muted-foreground">-</span>;
-                          }
-
-                          if (isLoadingPrerequisites) {
-                            return <span className="text-xs text-muted-foreground">Checking...</span>;
-                          }
-
-                          if (!prerequisites) {
-                            return <span className="text-xs text-muted-foreground">-</span>;
-                          }
-
-                          return (
-                            <div className="flex flex-col gap-1 text-xs">
-                              <div className={`flex items-center gap-1 ${prerequisites.hasVacancyData ? 'text-green-600' : 'text-red-600'}`}>
-                                {prerequisites.hasVacancyData ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Vacancies: {prerequisites.totalAvailableSeats}</span>
-                              </div>
-                              <div className={`flex items-center gap-1 ${prerequisites.hasEntranceResults ? 'text-green-600' : 'text-red-600'}`}>
-                                {prerequisites.hasEntranceResults ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Results: {prerequisites.entranceResultsCount}</span>
-                              </div>
-                              <div className={`flex items-center gap-1 ${prerequisites.hasStudentChoices ? 'text-green-600' : 'text-red-600'}`}>
-                                {prerequisites.hasStudentChoices ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Choices: {prerequisites.lockedStudentsCount}/{prerequisites.studentsWithChoicesCount}</span>
-                              </div>
-                              <div className={`flex items-center gap-1 ${prerequisites.allDistrictsFinalized ? 'text-green-600' : 'text-red-600'}`}>
-                                {prerequisites.allDistrictsFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Districts: {prerequisites.finalizedDistrictsCount}/{prerequisites.totalDistrictsCount}</span>
-                              </div>
-                              <div className={`flex items-center gap-1 ${prerequisites.isAllocationFinalized ? 'text-green-600' : 'text-red-600'}`}>
-                                {prerequisites.isAllocationFinalized ? <CheckCircle className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                                <span>Data Locked & Ready</span>
-                              </div>
-                            </div>
-                          );
-                        };
 
                         return (
                           <TableRow key={round.id} className={selectedRoundIds.includes(round.id) ? "bg-slate-50/50" : ""}>
@@ -824,7 +964,9 @@ export default function CounselingRounds() {
                       })}
                     </TableBody>
                   </Table>
-                ) : (
+                </div>
+              </>
+            ) : (
                   <div className="text-center py-8">
                     <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground mb-4">

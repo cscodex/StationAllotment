@@ -416,7 +416,162 @@ export default function ManageDistrictAdmins() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="rounded-md border">
+                {/* MOBILE CARD VIEW (<md) */}
+                <div className="md:hidden space-y-4">
+                  {paginatedAdmins.map((admin) => (
+                    <div key={admin.id} className="bg-white p-4 rounded-lg border shadow-sm flex flex-col gap-3">
+                      <div className="flex justify-between items-start border-b pb-3">
+                        <div>
+                          <div className="font-bold text-base text-slate-800">{admin.firstName} {admin.lastName}</div>
+                          <div className="text-xs text-slate-500 font-mono mt-0.5">{admin.username}</div>
+                        </div>
+                        {admin.isBlocked ? (
+                          <Badge variant="destructive">Blocked</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">Active</Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col gap-2 text-sm bg-slate-50 p-3 rounded-md border border-slate-100">
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                           <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider col-span-1">Email</span>
+                           <span className="font-medium text-slate-800 col-span-2 truncate">{admin.email || 'N/A'}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                           <span className="text-slate-500 text-[10px] font-bold uppercase tracking-wider col-span-1">District</span>
+                           <div className="col-span-2">
+                             <Badge variant="outline">{admin.district}</Badge>
+                           </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 pt-2 border-t mt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startEdit(admin)}
+                          data-testid={`button-edit-mobile-${admin.id}`}
+                          className="flex-1"
+                        >
+                          <Edit2 className="w-3 h-3 mr-2" /> Edit
+                        </Button>
+                        
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startPasswordReset(admin)}
+                          className="text-blue-600 hover:text-blue-700 flex-1"
+                          data-testid={`button-reset-password-mobile-${admin.id}`}
+                        >
+                          <Key className="w-3 h-3 mr-2" /> Reset
+                        </Button>
+                        
+                        {admin.isBlocked ? (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-green-600 hover:text-green-700 flex-1"
+                                data-testid={`button-unblock-mobile-${admin.id}`}
+                              >
+                                <Shield className="w-3 h-3 mr-2" /> Unblock
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Unblock Administrator</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to unblock {admin.firstName} {admin.lastName}? 
+                                  They will be able to access the system again.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => unblockMutation.mutate(admin.id)}
+                                  disabled={unblockMutation.isPending}
+                                  data-testid={`confirm-unblock-${admin.id}`}
+                                >
+                                  {unblockMutation.isPending ? "Unblocking..." : "Unblock"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-orange-600 hover:text-orange-700 flex-1"
+                                data-testid={`button-block-mobile-${admin.id}`}
+                              >
+                                <Ban className="w-3 h-3 mr-2" /> Block
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Block Administrator</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to block {admin.firstName} {admin.lastName}? 
+                                  They will not be able to access the system until unblocked.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => blockMutation.mutate(admin.id)}
+                                  disabled={blockMutation.isPending}
+                                  data-testid={`confirm-block-${admin.id}`}
+                                  className="bg-orange-600 hover:bg-orange-700"
+                                >
+                                  {blockMutation.isPending ? "Blocking..." : "Block"}
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                        
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:text-red-700 w-full mt-1"
+                              data-testid={`button-delete-mobile-${admin.id}`}
+                            >
+                              <Trash2 className="w-3 h-3 mr-2" /> Delete Administrator
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Administrator</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete {admin.firstName} {admin.lastName}? 
+                                This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteMutation.mutate(admin.id)}
+                                disabled={deleteMutation.isPending}
+                                data-testid={`confirm-delete-${admin.id}`}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* DESKTOP TABLE VIEW (>=md) */}
+                <div className="hidden md:block rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>

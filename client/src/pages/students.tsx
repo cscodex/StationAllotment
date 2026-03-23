@@ -484,8 +484,62 @@ export default function Students() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
         ) : (
-          <div className="rounded-md border">
-            <Table>
+          <>
+            {/* MOBILE CARD VIEW (<md) */}
+            <div className="md:hidden space-y-4">
+              {students.map((student: Student) => (
+                <div key={student.id} className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectedStudentIds.includes(student.id)}
+                        onCheckedChange={(checked) => handleSelectStudent(student.id, checked as boolean)}
+                        aria-label={`Select student ${student.name}`}
+                      />
+                      <div>
+                        <div className="font-bold text-base text-slate-800">{student.name}</div>
+                        <div className="text-xs text-slate-500 font-mono mt-0.5">App No: {student.appNo} | Merit: {student.meritNumber}</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 text-sm pt-2">
+                    <div>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1.5">Demographics</span>
+                      <div className="flex gap-1 flex-wrap">
+                        <Badge variant={student.gender === 'Male' ? 'default' : student.gender === 'Female' ? 'secondary' : 'outline'}>{student.gender}</Badge>
+                        <Badge variant={student.category === 'Open' ? 'default' : 'secondary'}>{student.category}</Badge>
+                        {student.stream && (
+                          <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>{student.stream}</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1.5">Allocation</span>
+                      <div className="flex flex-col gap-1.5">
+                        {getStatusBadge(student.allocationStatus || 'pending')}
+                        {student.allottedDistrict ? (
+                          <Badge className="bg-green-100 text-green-800 self-start">{student.allottedDistrict}</Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-3 border-t mt-2">
+                    <Button variant="outline" size="sm" onClick={() => handleViewStudent(student)} className="flex-1">
+                      <Eye className="w-4 h-4 mr-2" /> View
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleDownloadOMR(student)} className="flex-1">
+                      <FileText className="w-4 h-4 mr-2 text-blue-600" /> OMR
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* DESKTOP TABLE VIEW (>=md) */}
+            <div className="hidden md:block rounded-md border overflow-x-auto">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">
@@ -584,7 +638,8 @@ export default function Students() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+            </div>
+          </>
         )}
         {students.length === 0 && !isLoading && (
           <div className="text-center py-8">

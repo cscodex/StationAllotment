@@ -1255,7 +1255,165 @@ export default function DistrictAdmin() {
                         </div>
                       </div>
 
-                      <div className="rounded-md border overflow-auto max-h-[600px]">
+                      {/* MOBILE CARD VIEW (<md) */}
+                      <div className="md:hidden space-y-4 max-h-[600px] overflow-auto pb-4">
+                        {paginatedStudents.map((student: Student) => (
+                           <div key={student.id} className="bg-white p-4 rounded-lg border shadow-sm flex flex-col gap-3">
+                              <div className="flex justify-between items-start border-b pb-2">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedStudents.has(student.id)}
+                                    onChange={() => toggleStudentSelection(student.id)}
+                                    className="rounded border-gray-300 w-4 h-4"
+                                  />
+                                  <div>
+                                    <div className="font-bold text-base text-slate-800">{student.name}</div>
+                                    <div className="text-xs text-slate-500 font-mono mt-0.5">{student.appNo} | Merit: {student.meritNumber}</div>
+                                  </div>
+                                </div>
+                                {student.isLocked === true ? (
+                                  <Badge variant="destructive" className="bg-red-100 text-red-800 shrink-0">🔒 Locked</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="bg-green-100 text-green-800 shrink-0">🔓 Unlocked</Badge>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1 text-sm bg-slate-50 p-3 rounded-md border border-slate-100">
+                                <div className="grid grid-cols-2 gap-1 mb-1 items-center">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Stream</span>
+                                  <span className="font-medium text-slate-700">{student.stream || 'N/A'}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1 mb-1 items-center">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Counseling Dist.</span>
+                                  <span className="font-medium text-slate-700 truncate">{student.counselingDistrict || 'N/A'}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1 mb-1 items-center">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Dist. Admin</span>
+                                  <span className="font-medium text-slate-700 truncate">{student.districtAdmin || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-200">
+                                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Choices</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openChoicesModal(student)}
+                                    className="h-6 text-xs px-2 text-primary hover:text-primary hover:bg-primary/10"
+                                  >
+                                    <Eye className="w-3 h-3 mr-1" /> View All 10
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t mt-1">
+                                {!isFinalized && canEditStudent(student) && (
+                                  <>
+                                    {!student.isLocked && !isDeadlinePassed && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-emerald-600 border-emerald-300"
+                                          onClick={() => setPerStudentLiveScanStudent(student)}
+                                          title="Live Camera Scan"
+                                        >
+                                          <Camera className="w-4 h-4" />
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-8 w-8 p-0 text-violet-600 border-violet-300"
+                                          onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
+                                          title="Upload OMR Image"
+                                        >
+                                          <UploadCloud className="w-4 h-4" />
+                                        </Button>
+                                      </>
+                                    )}
+                                    <Button
+                                      asChild
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 w-8 p-0"
+                                      title="Download Unfilled OMR"
+                                    >
+                                      <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
+                                        <FileText className="w-4 h-4" />
+                                      </a>
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex-1 h-8"
+                                      onClick={() => openEditModal(student)}
+                                      disabled={isDeadlinePassed || student.isLocked === true}
+                                      data-testid={`button-edit-mobile-${student.meritNumber}`}
+                                    >
+                                      <Edit className="w-3 h-3 mr-1" /> Edit
+                                    </Button>
+                                  </>
+                                )}
+                                {canEditStudent(student) && (
+                                  student.isLocked === true ? (
+                                    user?.role === 'central_admin' ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 h-8"
+                                        onClick={() => handleLockToggle(student)}
+                                        disabled={isDeadlinePassed}
+                                      >
+                                        🔓 Unlock
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 h-8 text-xs px-1"
+                                        onClick={() => handleRequestUnlock(student)}
+                                        disabled={isDeadlinePassed}
+                                      >
+                                        📝 Request Unlock
+                                      </Button>
+                                    )
+                                  ) : areAllPreferencesFilled(student) ? (
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      className="flex-1 h-8"
+                                      onClick={() => handleLockToggle(student)}
+                                      disabled={isDeadlinePassed}
+                                    >
+                                      🔒 Lock
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="flex-1 h-8 text-muted-foreground"
+                                      disabled
+                                    >
+                                      🔒 Lock
+                                    </Button>
+                                  )
+                                )}
+                                {canEditStudent(student) && user?.role === 'central_admin' && student.counselingDistrict && !student.isLocked && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 h-8 border-orange-200 text-orange-600 hover:bg-orange-50"
+                                    onClick={() => handleReleaseStudent(student)}
+                                    disabled={isDeadlinePassed}
+                                  >
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    Release
+                                  </Button>
+                                )}
+                              </div>
+                           </div>
+                        ))}
+                      </div>
+
+                      {/* DESKTOP TABLE VIEW (>=md) */}
+                      <div className="hidden md:block rounded-md border overflow-auto max-h-[600px]">
                         <Table>
                           <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
                             <TableRow className="hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">

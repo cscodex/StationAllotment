@@ -272,8 +272,36 @@ export default function Vacancies() {
               {viewMode === "table" ? (
                 // Individual Vacancy Records Table
                 filteredVacancies && filteredVacancies.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
+                  <>
+                    {/* MOBILE CARD VIEW (<md) */}
+                    <div className="md:hidden space-y-4">
+                      {filteredVacancies.map((vacancy) => (
+                        <div key={vacancy.id} className="bg-white p-4 rounded-lg border shadow-sm flex flex-col gap-3">
+                           <div className="flex justify-between items-start">
+                             <div className="font-bold text-base text-slate-800">{vacancy.district}</div>
+                             <Badge variant={vacancy.category === 'Open' ? 'default' : 'secondary'}>{vacancy.category}</Badge>
+                           </div>
+                           <div className="flex flex-wrap gap-2 text-sm z-10">
+                             <Badge variant={vacancy.gender === 'Male' ? 'default' : 'secondary'}>{vacancy.gender}</Badge>
+                             <Badge variant={vacancy.stream === 'Medical' ? 'default' : vacancy.stream === 'Commerce' ? 'secondary' : 'outline'}>{vacancy.stream}</Badge>
+                           </div>
+                           <div className="grid grid-cols-2 gap-4 pt-2 border-t mt-1">
+                             <div className="text-center p-2 bg-blue-50/50 rounded-md">
+                               <span className="text-[10px] text-blue-600/70 font-bold uppercase tracking-wider block mb-1">Total Seats</span>
+                               <span className="font-bold text-blue-700 text-lg">{vacancy.totalSeats || 0}</span>
+                             </div>
+                             <div className="text-center p-2 bg-green-50/50 rounded-md">
+                               <span className="text-[10px] text-green-600/70 font-bold uppercase tracking-wider block mb-1">Available Seats</span>
+                               <span className="font-bold text-green-700 text-lg">{vacancy.availableSeats || 0}</span>
+                             </div>
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* DESKTOP TABLE VIEW (>=md) */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <Table>
                       <TableHeader>
                         <TableRow>
                           <TableHead>District</TableHead>
@@ -318,6 +346,7 @@ export default function Vacancies() {
                       </TableBody>
                     </Table>
                   </div>
+                  </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <TableIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -328,8 +357,63 @@ export default function Vacancies() {
               ) : (
                 // District Summary View (existing)
                 districts && districts.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
+                  <>
+                    {/* MOBILE CARD VIEW (<md) */}
+                    <div className="md:hidden space-y-4">
+                      {districts.map((district) => {
+                        const allocated = district.totalSeats - district.availableSeats;
+                        const fillRate = district.totalSeats ? Math.round((allocated / district.totalSeats) * 100) : 0;
+                        return (
+                          <div key={district.district} className="bg-white p-4 rounded-lg border shadow-sm">
+                            <div className="font-bold text-lg mb-3 border-b pb-2">{district.district}</div>
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <div className="bg-blue-50 p-2 rounded text-center border border-blue-100 overflow-hidden">
+                                <div className="text-[10px] text-blue-600/70 font-bold mb-1 uppercase tracking-wider leading-none">Total Seats</div>
+                                <div className="font-bold text-lg text-blue-700 leading-none">{district.totalSeats}</div>
+                              </div>
+                              <div className="bg-green-50 p-2 rounded text-center border border-green-100 overflow-hidden">
+                                <div className="text-[10px] text-green-600/70 font-bold mb-1 uppercase tracking-wider leading-none">Available</div>
+                                <div className="font-bold text-lg text-green-700 leading-none">{district.availableSeats}</div>
+                              </div>
+                              <div className="bg-orange-50 p-2 rounded text-center border border-orange-100 overflow-hidden">
+                                <div className="text-[10px] text-orange-600/70 font-bold mb-1 uppercase tracking-wider leading-none">Allocated</div>
+                                <div className="font-bold text-lg text-orange-700 leading-none">{allocated}</div>
+                              </div>
+                              <div className={`p-2 rounded text-center border overflow-hidden ${fillRate >= 80 ? 'bg-red-50 border-red-100' : fillRate >= 60 ? 'bg-orange-50 border-orange-100' : 'bg-green-50 border-green-100'}`}>
+                                <div className={`text-[10px] font-bold mb-1 uppercase tracking-wider leading-none ${fillRate >= 80 ? 'text-red-600/70' : fillRate >= 60 ? 'text-orange-600/70' : 'text-green-600/70'}`}>Fill Rate</div>
+                                <div className={`font-bold text-lg leading-none ${fillRate >= 80 ? 'text-red-700' : fillRate >= 60 ? 'text-orange-700' : 'text-green-700'}`}>{fillRate}%</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {/* Mobile Total Card */}
+                      <div className="bg-slate-800 text-white p-4 rounded-lg shadow-sm mt-6">
+                        <div className="font-bold text-lg mb-3 border-b border-slate-700 pb-2">TOTAL SUMMARY</div>
+                        <div className="grid grid-cols-2 gap-y-3 gap-x-2">
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-wider leading-none">Total Seats</div>
+                            <div className="font-bold text-xl text-blue-400 leading-none">{totalSeats}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-wider leading-none">Available</div>
+                            <div className="font-bold text-xl text-green-400 leading-none">{totalAvailable}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-wider leading-none">Allocated</div>
+                            <div className="font-bold text-xl text-orange-400 leading-none">{totalSeats - totalAvailable}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-wider leading-none">Fill Rate</div>
+                            <div className="font-bold text-xl text-white leading-none">{totalSeats ? Math.round(((totalSeats - totalAvailable) / totalSeats) * 100) : 0}%</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* DESKTOP TABLE VIEW (>=md) */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full">
                       <thead>
                         <tr className="border-b border-border">
                           <th className="text-left py-3 px-4 font-medium text-muted-foreground">District</th>
@@ -451,6 +535,7 @@ export default function Vacancies() {
                       </div>
                     </div>
                   </div>
+                  </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />

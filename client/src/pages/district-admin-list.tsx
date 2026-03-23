@@ -59,7 +59,38 @@ export default function DistrictAdminList() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="rounded-md border">
+                {/* MOBILE CARD VIEW (<md) */}
+                <div className="md:hidden space-y-4">
+                  {currentAdmins.map((admin: User) => (
+                    <div key={admin.id} className="bg-white p-4 rounded-lg border shadow-sm flex flex-col gap-3" data-testid={`admin-card-${admin.district}`}>
+                      <div className="flex justify-between items-start border-b pb-3">
+                        <div className="flex items-center">
+                          <MapPin className="w-5 h-5 mr-3 text-primary" />
+                          <div className="font-bold text-lg text-slate-800">{admin.district || 'N/A'}</div>
+                        </div>
+                        {getStatusBadge(admin)}
+                      </div>
+                      <div className="flex flex-col gap-2 text-sm bg-slate-50 p-3 rounded-md border border-slate-100">
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                           <span className="text-slate-500 text-xs font-semibold col-span-1 uppercase tracking-wider">Admin Name</span>
+                           <span className="font-medium text-slate-800 col-span-2">{admin.firstName && admin.lastName ? `${admin.firstName} ${admin.lastName}` : 'N/A'}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 items-center">
+                           <span className="text-slate-500 text-xs font-semibold col-span-1 uppercase tracking-wider">Username</span>
+                           <span className="font-mono text-slate-700 col-span-2">{admin.username}</span>
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-2">
+                        <Button variant="outline" size="sm" data-testid={`button-edit-${admin.district}`} className="flex-1">
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* DESKTOP TABLE VIEW (>=md) */}
+                <div className="hidden md:block rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
