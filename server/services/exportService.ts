@@ -4,8 +4,27 @@ import PDFDocument from 'pdfkit';
 export class ExportService {
   constructor(private storage: IStorage) { }
 
+  private getClosingRanks(students: any[]): Record<string, number> {
+    const closingRanks: Record<string, number> = {};
+    students.filter(s => s.allocationStatus === 'allotted').forEach(s => {
+      const key = `${s.gender}_${s.category}_${s.stream}`;
+      if (!closingRanks[key] || (s.meritNumber || 0) > closingRanks[key]) {
+        closingRanks[key] = s.meritNumber || 0;
+      }
+    });
+    return closingRanks;
+  }
+
+  private getNotAllottedReason(student: any, closingRanks: Record<string, number>): string {
+    const key = `${student.gender}_${student.category}_${student.stream}`;
+    const rank = closingRanks[key];
+    const rankStr = rank ? rank.toString() : 'N/A';
+    return `${student.category} for ${student.stream} closed at rank ${rankStr} for Gender:${student.gender} Stream:${student.stream}`;
+  }
+
   async exportResultsAsCSV(): Promise<string> {
     const students = await this.storage.getStudents(10000, 0); // Get all students
+    const closingRanks = this.getClosingRanks(students);
 
     const headers = [
       'Merit Number',
@@ -19,25 +38,32 @@ export class ExportService {
       'Status'
     ];
 
-    const rows = students.map(student => [
-      student.meritNumber,
-      student.appNo || '',
-      student.name,
-      student.stream,
-      student.choice1 || '',
-      student.choice2 || '',
-      student.choice3 || '',
-      student.choice4 || '',
-      student.choice5 || '',
-      student.choice6 || '',
-      student.choice7 || '',
-      student.choice8 || '',
-      student.choice9 || '',
-      student.choice10 || '',
-      student.allottedDistrict || '',
-      student.allottedStream || '',
-      student.allocationStatus || 'pending'
-    ]);
+    const rows = students.map(student => {
+      let allottedDistrict = student.allottedDistrict || '';
+      if (student.allocationStatus === 'not_allotted') {
+        allottedDistrict = this.getNotAllottedReason(student, closingRanks);
+      }
+
+      return [
+        student.meritNumber,
+        student.appNo || '',
+        student.name,
+        student.stream,
+        student.choice1 || '',
+        student.choice2 || '',
+        student.choice3 || '',
+        student.choice4 || '',
+        student.choice5 || '',
+        student.choice6 || '',
+        student.choice7 || '',
+        student.choice8 || '',
+        student.choice9 || '',
+        student.choice10 || '',
+        allottedDistrict,
+        student.allottedStream || '',
+        student.allocationStatus || 'pending'
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -71,12 +97,14 @@ export class ExportService {
       'Allotment Timestamp'
     ];
 
+    const closingRanks = this.getClosingRanks(students);
+
     const rows = filteredStudents.map(student => {
       const timestamp = student.updatedAt ? new Date(student.updatedAt).toLocaleString('en-IN') : '-';
       
       let districtText = student.allottedDistrict || '-';
       if (student.allocationStatus === 'not_allotted') {
-         districtText = `Not Allotted (Cat: ${student.category || '-'}, Stream: ${student.stream})`;
+         districtText = this.getNotAllottedReason(student, closingRanks);
       } else if (student.allocationStatus === 'allotted') {
          const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
            student.choice6, student.choice7, student.choice8, student.choice9, student.choice10];
@@ -133,7 +161,8 @@ export class ExportService {
         this.generateSummaryPage(doc, students, stats, vacancies);
 
         // PAGE 2+: DETAILED STUDENT RECORDS
-        this.generateDetailedStudentRecords(doc, students);
+        const closingRanks = this.getClosingRanks(students);
+        this.generateDetailedStudentRecords(doc, students, closingRanks);
 
         doc.end();
       } catch (error) {
@@ -167,7 +196,8 @@ export class ExportService {
         doc.fontSize(10).fillColor('#374151').text(`Rounds Included: ${roundIds.length} | Total Counseled: ${filteredStudents.length}`, { align: 'center' });
         doc.moveDown(2);
 
-        this.generateDetailedStudentRecords(doc, filteredStudents);
+        const closingRanks = this.getClosingRanks(students);
+        this.generateDetailedStudentRecords(doc, filteredStudents, closingRanks);
         doc.end();
       } catch (error) {
         reject(error);
@@ -274,7 +304,7 @@ export class ExportService {
     });
   }
 
-  private generateDetailedStudentRecords(doc: any, students: any[]) {
+  private generateDetailedStudentRecords(doc: any, students: any[], closingRanks: Record<string, number>) {
     doc.addPage();
 
     // Header for detailed records
@@ -325,7 +355,7 @@ export class ExportService {
         currentY += rowHeight;
       }
 
-      this.drawStudentRow(doc, student, currentY, colWidths, index);
+      this.drawStudentRow(doc, student, currentY, colWidths, index, closingRanks);
       currentY += rowHeight;
     });
   }
@@ -341,7 +371,7 @@ export class ExportService {
     });
   }
 
-  private drawStudentRow(doc: any, student: any, y: number, colWidths: number[], index: number) {
+  private drawStudentRow(doc: any, student: any, y: number, colWidths: number[], index: number, closingRanks: Record<string, number>) {
     let x = 50;
     const rowHeight = 35; // Must match the value in generateDetailedStudentRecords
 
@@ -398,7 +428,7 @@ export class ExportService {
     // Allotted District & Reason formatting
     let districtText = student.allottedDistrict || '-';
     if (student.allocationStatus === 'not_allotted') {
-       districtText = `Not Allotted (Cat: ${student.category || '-'}, Stream: ${student.stream})`;
+       districtText = this.getNotAllottedReason(student, closingRanks);
     } else if (student.allocationStatus === 'allotted') {
        const choiceIdx = choices.findIndex(c => c === student.allottedDistrict);
        if (choiceIdx !== -1) {
