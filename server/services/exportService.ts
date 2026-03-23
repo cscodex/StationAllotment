@@ -258,14 +258,35 @@ export class ExportService {
     doc.fontSize(18).fillColor('#1f2937').text('Detailed Student Records', { align: 'center' });
     doc.moveDown();
 
-    // Sort students by merit number
-    const sortedStudents = students.sort((a, b) => a.meritNumber - b.meritNumber);
+    // Sort students by gender, then category (WHH > Disabled > Private > Open), then merit number
+    const categoryOrder: Record<string, number> = {
+      'WHH': 1,
+      'Disabled': 2,
+      'Private': 3,
+      'Open': 4
+    };
+
+    const sortedStudents = students.sort((a, b) => {
+      // 1. Gender sort
+      if (a.gender !== b.gender) {
+        return (a.gender || '').localeCompare(b.gender || '');
+      }
+      // 2. Category sort
+      const catA = categoryOrder[a.category] || 99;
+      const catB = categoryOrder[b.category] || 99;
+      if (catA !== catB) {
+        return catA - catB;
+      }
+      // 3. Merit number
+      return (a.meritNumber || 0) - (b.meritNumber || 0);
+    });
 
     // Table setup
     const pageHeight = doc.page.height;
     const startY = 120;
-    const rowHeight = 20;
-    const colWidths = [60, 120, 80, 80, 200, 120, 80, 80]; // Merit, Name, App No, Stream, Preferences, Allotted District, Allotted Stream, Status
+    const rowHeight = 35; // Increased raw height for multi-line preferences
+    // Adjusted widths to fit within 780 printable width (landscape A4 with 30 margins)
+    const colWidths = [35, 95, 40, 50, 60, 240, 110, 60, 50]; // Merit, Name, Gender, Cat, Stream, Preferences, Allotted District, Allotted Stream, Status
     let currentY = startY;
 
     // Headers
@@ -287,64 +308,85 @@ export class ExportService {
   }
 
   private drawTableHeader(doc: any, y: number, colWidths: number[]) {
-    const headers = ['Merit No', 'Name', 'App No', 'Stream', 'Preferences (1-10)', 'Allotted District', 'Allotted Stream', 'Status'];
+    const headers = ['Merit No', 'Name', 'Gender', 'Category', 'Stream', 'Preferences (1-10)', 'Allotted Dist.', 'Allotted Stream', 'Status'];
     let x = 50;
 
     doc.fontSize(9).fillColor('#374151');
 
     headers.forEach((header, i) => {
-      doc.rect(x, y, colWidths[i], 20).fillAndStroke('#f1f5f9', '#d1d5db');
-      doc.text(header, x + 5, y + 6, { width: colWidths[i] - 10, align: 'left' });
+      doc.rect(x, y, colWidths[i], 25).fillAndStroke('#f1f5f9', '#d1d5db');
+      doc.text(header, x + 3, y + 8, { width: colWidths[i] - 6, align: 'left' });
       x += colWidths[i];
     });
   }
 
   private drawStudentRow(doc: any, student: any, y: number, colWidths: number[], index: number) {
     let x = 50;
+    const rowHeight = 35; // Must match the value in generateDetailedStudentRecords
 
-    // Alternate row colors
+    // Background color
     if (index % 2 === 0) {
-      doc.rect(x, y, colWidths.reduce((sum, width) => sum + width, 0), 20).fillAndStroke('#fafafa', '#e5e7eb');
+      doc.rect(x, y, colWidths.reduce((sum, width) => sum + width, 0), rowHeight).fillAndStroke('#fafafa', '#e5e7eb');
+    } else {
+      doc.rect(x, y, colWidths.reduce((sum, width) => sum + width, 0), rowHeight).fillAndStroke('#ffffff', '#e5e7eb');
     }
 
-    doc.fontSize(8).fillColor('#374151');
+    // Draw vertical Borders for each cell
+    let borderX = x;
+    colWidths.forEach((width) => {
+      doc.rect(borderX, y, width, rowHeight).stroke('#e5e7eb');
+      borderX += width;
+    });
+
+    doc.fontSize(7).fillColor('#374151');
 
     // Merit Number
-    doc.text(student.meritNumber.toString(), x + 5, y + 6, { width: colWidths[0] - 10 });
+    doc.text(student.meritNumber.toString(), x + 3, y + 6, { width: colWidths[0] - 6 });
     x += colWidths[0];
 
     // Name
-    doc.text(student.name, x + 5, y + 6, { width: colWidths[1] - 10 });
+    doc.text(student.name, x + 3, y + 6, { width: colWidths[1] - 6 });
     x += colWidths[1];
 
-    // App Number
-    doc.text(student.appNo || '', x + 5, y + 6, { width: colWidths[2] - 10 });
+    // Gender
+    doc.text(student.gender || '-', x + 3, y + 6, { width: colWidths[2] - 6 });
     x += colWidths[2];
-
-    // Stream
-    doc.text(student.stream, x + 5, y + 6, { width: colWidths[3] - 10 });
+    
+    // Category
+    doc.text(student.category || '-', x + 3, y + 6, { width: colWidths[3] - 6 });
     x += colWidths[3];
 
-    // Preferences (abbreviated)
-    const preferences = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-    student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
-      .filter(Boolean).join(', ');
-    doc.text(preferences || 'No preferences', x + 5, y + 6, { width: colWidths[4] - 10 });
+    // Stream
+    doc.text(student.stream, x + 3, y + 6, { width: colWidths[4] - 6 });
     x += colWidths[4];
 
-    // Allotted District
-    doc.text(student.allottedDistrict || '-', x + 5, y + 6, { width: colWidths[5] - 10 });
+    // Preferences with numbers
+    const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+      student.choice6, student.choice7, student.choice8, student.choice9, student.choice10];
+    
+    const preferences = choices
+      .filter(Boolean)
+      .map((c, i) => `${i + 1}. ${c}`)
+      .join(', ');
+      
+    doc.fontSize(6); // Smaller font for preferences to fit all 10
+    doc.text(preferences || 'No preferences', x + 3, y + 6, { width: colWidths[5] - 6, height: rowHeight - 6, overflow: 'hidden' });
+    doc.fontSize(7); // Restore font size
     x += colWidths[5];
 
-    // Allotted Stream
-    doc.text(student.allottedStream || '-', x + 5, y + 6, { width: colWidths[6] - 10 });
+    // Allotted District
+    doc.text(student.allottedDistrict || '-', x + 3, y + 6, { width: colWidths[6] - 6 });
     x += colWidths[6];
+
+    // Allotted Stream
+    doc.text(student.allottedStream || '-', x + 3, y + 6, { width: colWidths[7] - 6 });
+    x += colWidths[7];
 
     // Status with color coding
     const status = student.allocationStatus || 'pending';
     const statusColor = status === 'allotted' ? '#10b981' : status === 'not_allotted' ? '#ef4444' : '#f59e0b';
     doc.fillColor(statusColor);
-    doc.text(status.charAt(0).toUpperCase() + status.slice(1), x + 5, y + 6, { width: colWidths[7] - 10 });
+    doc.text(status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '), x + 3, y + 6, { width: colWidths[8] - 6 });
   }
 
   async exportVacanciesAsCSV(): Promise<string> {

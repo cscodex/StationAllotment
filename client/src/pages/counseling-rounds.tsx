@@ -33,9 +33,10 @@ import {
   Lock,
   RefreshCw,
   ShieldCheck,
-  Download,
   FileSpreadsheet,
-  FileText
+  FileText,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -213,6 +214,16 @@ export default function CounselingRounds() {
   const [allocationRoundId, setAllocationRoundId] = useState<string | null>(null);
   const [resetRoundId, setResetRoundId] = useState<string | null>(null);
   const [selectedRoundIds, setSelectedRoundIds] = useState<string[]>([]);
+  const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
+
+  const toggleRoundExpansion = (id: string) => {
+    setExpandedRoundIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   // Fetch current session
   const { data: currentSessionData } = useQuery<{ currentSession: string }>({
     queryKey: ["/api/session/current"],
@@ -674,137 +685,128 @@ export default function CounselingRounds() {
                   </div>
                 ) : rounds && rounds.length > 0 ? (
                   <>
-                    {/* MOBILE CARD VIEW (<md) */}
-                    <div className="md:hidden space-y-4">
-                      {rounds.map((round) => (
-                        <div key={round.id} className={`bg-white p-4 rounded-lg border shadow-sm space-y-3 ${selectedRoundIds.includes(round.id) ? "ring-2 ring-primary bg-slate-50/50" : ""}`}>
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-start gap-3">
-                              <input 
-                                type="checkbox" 
-                                className="w-4 h-4 mt-1 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer"
-                                checked={selectedRoundIds.includes(round.id)}
-                                onChange={() => toggleRoundSelection(round.id)}
-                              />
-                              <div>
-                                <div className="font-bold text-base text-slate-800">{round.roundName}</div>
-                                <div className="text-xs text-slate-500 font-mono mt-0.5">Round #{round.roundNumber}</div>
+                    {/* MOBILE LIST VIEW (<md) */}
+                    <div className="md:hidden divide-y rounded-md border min-w-full">
+                      {rounds.map((round) => {
+                        const isExpanded = expandedRoundIds.has(round.id);
+                        return (
+                          <div key={round.id} className={`p-3 bg-white ${selectedRoundIds.includes(round.id) ? "bg-slate-50" : ""}`}>
+                            {/* Collapsed view */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <input 
+                                  type="checkbox" 
+                                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer shrink-0"
+                                  checked={selectedRoundIds.includes(round.id)}
+                                  onChange={() => toggleRoundSelection(round.id)}
+                                />
+                                <button
+                                  className="flex-1 text-left flex items-center gap-2 min-w-0"
+                                  onClick={() => toggleRoundExpansion(round.id)}
+                                >
+                                  {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-sm truncate">{round.roundName}</p>
+                                    <p className="text-xs text-muted-foreground font-mono">Round #{round.roundNumber}</p>
+                                  </div>
+                                </button>
                               </div>
-                            </div>
-                            {(() => {
-                              const status = getRoundStatus(round);
-                              const Icon = status.icon;
-                              return (
-                                <Badge variant={status.variant} className={status.className}>
-                                  <Icon className="w-3 h-3 mr-1" />
-                                  {status.text}
-                                </Badge>
-                              );
-                            })()}
-                          </div>
-                          
-                          <div className="grid grid-cols-1 gap-2 text-sm pt-2 bg-slate-50 p-2 rounded-md">
-                            <div>
-                              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1">Start Date & Time</span>
-                              <div className="text-slate-700 font-medium text-xs">
-                                {round.startDate && round.startDate !== 'null' ? (
-                                  (() => {
-                                    try {
-                                      const date = new Date(round.startDate);
-                                      if (!isNaN(date.getTime())) {
-                                        return format(date, "MMM dd, yyyy HH:mm");
-                                      }
-                                    } catch (e) {}
-                                    return <span className="text-muted-foreground italic">Invalid date</span>;
-                                  })()
-                                ) : (
-                                  <span className="text-muted-foreground italic">No date set</span>
-                                )}
+                              <div className="flex items-center gap-1 shrink-0">
+                                {(() => {
+                                  const status = getRoundStatus(round);
+                                  const Icon = status.icon;
+                                  return (
+                                    <Badge variant={status.variant} className={`text-xs px-1.5 py-0 ${status.className}`}>
+                                      <Icon className="w-3 h-3 mr-1" />
+                                      {status.text}
+                                    </Badge>
+                                  );
+                                })()}
                               </div>
                             </div>
                             
-                            {user?.role === 'central_admin' && (
-                              <div className="mt-2 border-t pt-2">
-                                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1.5">Readiness & Prerequisites</span>
-                                <PrerequisitesCell round={round} />
+                            {/* Expanded view */}
+                            {isExpanded && (
+                              <div className="mt-3 ml-8 space-y-2 text-sm border-t pt-2">
+                                <div className="grid grid-cols-1 gap-y-1.5">
+                                  <div>
+                                    <span className="text-muted-foreground text-xs uppercase font-semibold">Start Date & Time: </span>
+                                    <span className="text-sm">
+                                      {round.startDate && round.startDate !== 'null' ? (
+                                        (() => {
+                                          try {
+                                            const date = new Date(round.startDate);
+                                            if (!isNaN(date.getTime())) {
+                                              return format(date, "MMM dd, yyyy HH:mm");
+                                            }
+                                          } catch (e) {}
+                                          return <span className="text-muted-foreground italic">Invalid date</span>;
+                                        })()
+                                      ) : (
+                                        <span className="text-muted-foreground italic">No date set</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  
+                                  {user?.role === 'central_admin' && (
+                                    <div className="mt-1">
+                                      <span className="text-muted-foreground text-xs uppercase font-semibold block mb-1">Readiness & Prerequisites:</span>
+                                      <PrerequisitesCell round={round} />
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {user?.role === 'central_admin' && (
+                                  <div className="flex flex-wrap gap-1.5 pt-2 mt-2 border-t border-slate-100">
+                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleEdit(round)} disabled={round.isCompleted}>
+                                      <Edit className="w-3 h-3 mr-1" /> Edit
+                                    </Button>
+                                    
+                                    {round.roundNumber === 1 && (
+                                      <Button
+                                        size="sm" variant="outline" className={`h-7 text-xs ${round.isSuspended ? "text-orange-600" : ""}`}
+                                        onClick={() => handleSuspend(round, !round.isSuspended)} disabled={suspendMutation.isPending}
+                                      >
+                                        {round.isSuspended ? <PlayCircle className="w-3 h-3 mr-1" /> : <Pause className="w-3 h-3 mr-1" />}
+                                        {round.isSuspended ? "Unsuspend" : "Suspend"}
+                                      </Button>
+                                    )}
+                                    
+                                    {round.isActive && !round.isCompleted && (
+                                      <PrerequisitesButton round={round} onRunAllocation={handleRunAllocation} isPending={false} />
+                                    )}
+
+                                    {!round.isCompleted && (
+                                      <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200" onClick={() => setResetRoundId(round.id)}>
+                                        <Trash2 className="w-3 h-3 mr-1" /> Reset
+                                      </Button>
+                                    )}
+
+                                    {round.isAllocationCompleted && !round.isCompleted && (
+                                      <Button
+                                        size="sm" variant="default" className="h-7 text-xs bg-purple-600"
+                                        onClick={() => {
+                                          if (confirm(`Finalize Counseling Round ${round.roundNumber}?\nThis is permanent.`)) {
+                                            finalizeRoundMutation.mutate(round.id);
+                                          }
+                                        }} disabled={finalizeRoundMutation.isPending}
+                                      >
+                                        <ShieldCheck className="w-3 h-3 mr-1" /> Finalize
+                                      </Button>
+                                    )}
+                                    
+                                    {canDelete(round) && (
+                                      <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 ml-auto" onClick={() => handleDelete(round)} disabled={deleteRoundMutation.isPending || isPastRound(round)}>
+                                        <Trash2 className="w-3 h-3 mr-1" /> Delete
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
-
-                          {user?.role === 'central_admin' && (
-                            <div className="flex flex-wrap items-center gap-2 pt-3 border-t mt-2">
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                onClick={() => handleEdit(round)}
-                                disabled={round.isCompleted}
-                                title="Edit Start Date"
-                                className="h-8 w-8"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              {round.roundNumber === 1 && (
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  onClick={() => handleSuspend(round, !round.isSuspended)}
-                                  disabled={suspendMutation.isPending}
-                                  className={`h-8 w-8 ${round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}`}
-                                  title={round.isSuspended ? "Unsuspend subsequent rounds" : "Suspend subsequent rounds"}
-                                >
-                                  {round.isSuspended ? <PlayCircle className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-                                </Button>
-                              )}
-                              {round.isActive && !round.isCompleted && (
-                                <PrerequisitesButton
-                                  round={round}
-                                  onRunAllocation={handleRunAllocation}
-                                  isPending={false}
-                                />
-                              )}
-                              {!round.isCompleted && (
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  onClick={() => setResetRoundId(round.id)}
-                                  className="text-red-600 border-red-400 hover:bg-red-50 h-8 w-8"
-                                  title="Reset Round Data"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {round.isAllocationCompleted && !round.isCompleted && (
-                                <Button
-                                  size="icon"
-                                  variant="default"
-                                  onClick={() => {
-                                    if (confirm(`Finalize Counseling Round ${round.roundNumber} ("${round.roundName}")?\n\nThis will permanently close this round — no further allocations can be run. This cannot be undone.`)) {
-                                      finalizeRoundMutation.mutate(round.id);
-                                    }
-                                  }}
-                                  disabled={finalizeRoundMutation.isPending}
-                                  className="bg-purple-600 hover:bg-purple-700 text-white h-8 w-8"
-                                  title={`Finalize Round ${round.roundNumber}`}
-                                >
-                                  <ShieldCheck className="w-4 h-4" />
-                                </Button>
-                              )}
-                              {canDelete(round) && (
-                                <Button
-                                  size="icon"
-                                  variant="outline"
-                                  onClick={() => handleDelete(round)}
-                                  disabled={deleteRoundMutation.isPending || isPastRound(round)}
-                                  className="text-red-600 hover:text-red-700 h-8 w-8 ml-auto"
-                                  title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
 
                     {/* DESKTOP TABLE VIEW (>=md) */}

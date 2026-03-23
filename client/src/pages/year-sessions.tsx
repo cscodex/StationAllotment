@@ -17,7 +17,9 @@ import {
     CheckCircle,
     Clock,
     Star,
-    AlertTriangle
+    AlertTriangle,
+    ChevronDown,
+    ChevronUp
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -38,6 +40,16 @@ export default function YearSessions() {
     const queryClient = useQueryClient();
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [newStartDate, setNewStartDate] = useState("");
+    const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(new Set());
+
+    const toggleSessionExpansion = (id: string) => {
+        setExpandedSessionIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     // Fetch all year sessions
     const { data: sessions, isLoading, error } = useQuery<YearSession[]>({
@@ -207,6 +219,96 @@ export default function YearSessions() {
                             ) : error ? (
                                 <p className="text-red-600">Error loading sessions</p>
                             ) : sessions && sessions.length > 0 ? (
+                                <>
+                                {/* MOBILE LIST VIEW (<md) */}
+                                <div className="md:hidden divide-y rounded-md border min-w-full">
+                                    {sessions
+                                        .sort((a: YearSession, b: YearSession) => b.sessionName.localeCompare(a.sessionName))
+                                        .map((session: YearSession) => {
+                                            const isExpanded = expandedSessionIds.has(session.id);
+                                            return (
+                                                <div key={session.id} className={`p-3 bg-white ${session.isCurrent ? "bg-green-50/50" : ""}`}>
+                                                    {/* Collapsed view */}
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <button
+                                                            className="flex-1 text-left flex items-center gap-2 min-w-0"
+                                                            onClick={() => toggleSessionExpansion(session.id)}
+                                                        >
+                                                            {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                                                            <div className="font-semibold text-sm truncate flex items-center gap-2 flex-grow">
+                                                                {session.sessionName}
+                                                                {session.isCurrent && (
+                                                                    <Badge className="bg-green-600 px-1 py-0 h-4 text-[10px]">
+                                                                        <Star className="w-2.5 h-2.5 mr-0.5" />
+                                                                        Current
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            {session.isActive ? (
+                                                                <Badge variant="outline" className="text-green-600 border-green-600 text-xs px-1.5 py-0">
+                                                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                                                    Active
+                                                                </Badge>
+                                                            ) : (
+                                                                <Badge variant="outline" className="text-gray-500 text-xs px-1.5 py-0">
+                                                                    <Clock className="w-3 h-3 mr-1" />
+                                                                    Inactive
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Expanded view */}
+                                                    {isExpanded && (
+                                                        <div className="mt-3 ml-6 space-y-2 text-sm border-t pt-2">
+                                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                                                <div>
+                                                                    <span className="text-muted-foreground text-xs uppercase font-semibold">Start: </span>
+                                                                    <span>{format(new Date(session.startDate), "MMM dd, yyyy")}</span>
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-muted-foreground text-xs uppercase font-semibold">End: </span>
+                                                                    <span>{format(new Date(session.endDate), "MMM dd, yyyy")}</span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap gap-1.5 pt-2 mt-2 border-t border-slate-100">
+                                                                {!session.isCurrent && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        className="h-7 text-xs"
+                                                                        onClick={() => setCurrentMutation.mutate(session.id)}
+                                                                        disabled={setCurrentMutation.isPending}
+                                                                    >
+                                                                        <Star className="w-3 h-3 mr-1" />
+                                                                        Set Current
+                                                                    </Button>
+                                                                )}
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="h-7 text-xs"
+                                                                    onClick={() => toggleActiveMutation.mutate({
+                                                                        id: session.id,
+                                                                        isActive: !session.isActive
+                                                                    })}
+                                                                    disabled={toggleActiveMutation.isPending || session.isCurrent}
+                                                                >
+                                                                    {session.isActive ? "Deactivate" : "Activate"}
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+
+                                {/* DESKTOP TABLE VIEW (>=md) */}
+                                <div className="hidden md:block overflow-x-auto rounded-md border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -283,6 +385,8 @@ export default function YearSessions() {
                                             ))}
                                     </TableBody>
                                 </Table>
+                                </div>
+                                </>
                             ) : (
                                 <div className="text-center py-8">
                                     <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />

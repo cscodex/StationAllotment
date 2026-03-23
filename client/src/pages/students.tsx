@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud, BarChart3, ShieldQuestion } from "lucide-react";
+import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud, BarChart3, ShieldQuestion, ChevronDown, ChevronUp, Lock } from "lucide-react";
 import InfographicsModal from "@/components/dashboard/infographics-modal";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -35,6 +35,26 @@ export default function Students() {
   const [editingStream, setEditingStream] = useState<string>("");
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
+  const [expandedEntranceIds, setExpandedEntranceIds] = useState<Set<string>>(new Set());
+  const [expandedStudentRecordIds, setExpandedStudentRecordIds] = useState<Set<string>>(new Set());
+
+  const toggleEntranceCard = (id: string) => {
+    setExpandedEntranceIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleStudentCard = (id: string) => {
+    setExpandedStudentRecordIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -267,7 +287,88 @@ export default function Students() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <>
+          {/* MOBILE LIST VIEW (<md) */}
+          <div className="md:hidden divide-y rounded-md border min-w-full">
+            {results.map((entranceResult: StudentsEntranceResult) => {
+              const isExpanded = expandedEntranceIds.has(entranceResult.id);
+              return (
+                <div key={entranceResult.id} className="p-3 bg-white">
+                  {/* Collapsed view */}
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      className="flex-1 text-left flex items-center gap-2 min-w-0"
+                      onClick={() => toggleEntranceCard(entranceResult.id)}
+                    >
+                      {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{entranceResult.studentName}</p>
+                        <p className="text-xs text-muted-foreground font-mono">Merit: {entranceResult.meritNo} | App: {entranceResult.applicationNo}</p>
+                      </div>
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Badge variant={entranceResult.stream === 'Medical' ? 'default' : entranceResult.stream === 'Commerce' ? 'secondary' : 'outline'} className="text-xs px-1.5 py-0">
+                        {entranceResult.stream || 'Not Set'}
+                      </Badge>
+                      {isCentralAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => handleEditStream(entranceResult)}
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Expanded view */}
+                  {isExpanded && (
+                    <div className="mt-3 ml-6 space-y-2 text-sm border-t pt-2">
+                       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                         <div><span className="text-muted-foreground">Roll No:</span> {entranceResult.rollNo}</div>
+                         <div><span className="text-muted-foreground">Marks:</span> {entranceResult.marks}</div>
+                         <div><span className="text-muted-foreground">Gender:</span> {entranceResult.gender}</div>
+                         <div><span className="text-muted-foreground">Category:</span> {entranceResult.category}</div>
+                       </div>
+                       
+                       {editingEntranceResult === entranceResult.id && (
+                         <div className="mt-2 flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+                           <Select value={editingStream} onValueChange={setEditingStream}>
+                             <SelectTrigger className="flex-1 h-8">
+                               <SelectValue placeholder="Select stream" />
+                             </SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="none">None</SelectItem>
+                               <SelectItem value="Medical">Medical</SelectItem>
+                               <SelectItem value="Commerce">Commerce</SelectItem>
+                               <SelectItem value="NonMedical">NonMedical</SelectItem>
+                             </SelectContent>
+                           </Select>
+                           <Button variant="ghost" size="sm" onClick={handleSaveStream} disabled={updateEntranceResultMutation.isPending} className="h-8 w-8 p-0">
+                             <Save className="w-4 h-4" />
+                           </Button>
+                           <Button variant="ghost" size="sm" onClick={handleCancelEdit} disabled={updateEntranceResultMutation.isPending} className="h-8 w-8 p-0 text-red-600">
+                             <X className="w-4 h-4" />
+                           </Button>
+                         </div>
+                       )}
+
+                       <div className="flex flex-wrap gap-1.5 pt-1">
+                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleViewStudent(entranceResult)}>
+                           <Eye className="w-3 h-3 mr-1" /> View Details
+                         </Button>
+                       </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* DESKTOP TABLE VIEW (>=md) */}
+          <div className="hidden md:block rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -375,6 +476,7 @@ export default function Students() {
             </TableBody>
           </Table>
         </div>
+        </>
       )}
       {results.length === 0 && !isLoading && (
         <div className="text-center py-8">
@@ -485,56 +587,66 @@ export default function Students() {
           </div>
         ) : (
           <>
-            {/* MOBILE CARD VIEW (<md) */}
-            <div className="md:hidden space-y-4">
-              {students.map((student: Student) => (
-                <div key={student.id} className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        checked={selectedStudentIds.includes(student.id)}
-                        onCheckedChange={(checked) => handleSelectStudent(student.id, checked as boolean)}
-                        aria-label={`Select student ${student.name}`}
-                      />
-                      <div>
-                        <div className="font-bold text-base text-slate-800">{student.name}</div>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">App No: {student.appNo} | Merit: {student.meritNumber}</div>
-                      </div>
+            {/* MOBILE LIST VIEW (<md) */}
+            <div className="md:hidden divide-y rounded-md border min-w-full">
+              {students.map((student: Student) => {
+                const isExpanded = expandedStudentRecordIds.has(student.id);
+                return (
+                  <div key={student.id} className="p-3 bg-white">
+                    {/* Collapsed view */}
+                    <div className="flex items-center justify-between gap-2">
+                       <div className="flex items-center gap-2 flex-1 min-w-0">
+                         <Checkbox
+                           checked={selectedStudentIds.includes(student.id)}
+                           onCheckedChange={(checked) => handleSelectStudent(student.id, checked as boolean)}
+                           aria-label={`Select student ${student.name}`}
+                         />
+                         <button
+                           className="flex-1 text-left flex items-center gap-2 min-w-0"
+                           onClick={() => toggleStudentCard(student.id)}
+                         >
+                           {isExpanded ? <ChevronUp className="w-4 h-4 shrink-0 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                           <div className="min-w-0">
+                             <p className="font-medium text-sm truncate">{student.name}</p>
+                             <p className="text-xs text-muted-foreground font-mono">{student.appNo}</p>
+                           </div>
+                         </button>
+                       </div>
+                       <div className="flex items-center gap-1 shrink-0">
+                         <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'} className="text-xs px-1.5 py-0">
+                           {student.stream || 'Not Set'}
+                         </Badge>
+                         {student.isLocked && (
+                           <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-800 border-yellow-200 px-1.5 py-0">
+                             <Lock className="w-3 h-3" />
+                           </Badge>
+                         )}
+                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-3 text-sm pt-2">
-                    <div>
-                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1.5">Demographics</span>
-                      <div className="flex gap-1 flex-wrap">
-                        <Badge variant={student.gender === 'Male' ? 'default' : student.gender === 'Female' ? 'secondary' : 'outline'}>{student.gender}</Badge>
-                        <Badge variant={student.category === 'Open' ? 'default' : 'secondary'}>{student.category}</Badge>
-                        {student.stream && (
-                          <Badge variant={student.stream === 'Medical' ? 'default' : student.stream === 'Commerce' ? 'secondary' : 'outline'}>{student.stream}</Badge>
-                        )}
+                    
+                    {/* Expanded view */}
+                    {isExpanded && (
+                      <div className="mt-3 ml-8 space-y-2 text-sm border-t pt-2">
+                         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                           <div><span className="text-muted-foreground">Merit #:</span> <span className="font-mono">{student.meritNumber}</span></div>
+                           <div><span className="text-muted-foreground">Status:</span> {getStatusBadge(student.allocationStatus || 'pending')}</div>
+                           <div><span className="text-muted-foreground">Gender:</span> {student.gender}</div>
+                           <div><span className="text-muted-foreground">Category:</span> {student.category}</div>
+                           <div className="col-span-2"><span className="text-muted-foreground">Allotted:</span> {student.allottedDistrict || 'N/A'}</div>
+                         </div>
+                         <div className="flex flex-wrap gap-1.5 pt-1">
+                           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => handleViewStudent(student)}>
+                             <Eye className="w-3 h-3 mr-1" /> View Details
+                           </Button>
+                           <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-600" onClick={() => handleDownloadOMR(student)}>
+                             <FileText className="w-3 h-3 mr-1" /> OMR
+                           </Button>
+                         </div>
                       </div>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block mb-1.5">Allocation</span>
-                      <div className="flex flex-col gap-1.5">
-                        {getStatusBadge(student.allocationStatus || 'pending')}
-                        {student.allottedDistrict ? (
-                          <Badge className="bg-green-100 text-green-800 self-start">{student.allottedDistrict}</Badge>
-                        ) : null}
-                      </div>
-                    </div>
+                    )}
                   </div>
-
-                  <div className="flex justify-end gap-2 pt-3 border-t mt-2">
-                    <Button variant="outline" size="sm" onClick={() => handleViewStudent(student)} className="flex-1">
-                      <Eye className="w-4 h-4 mr-2" /> View
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDownloadOMR(student)} className="flex-1">
-                      <FileText className="w-4 h-4 mr-2 text-blue-600" /> OMR
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* DESKTOP TABLE VIEW (>=md) */}
