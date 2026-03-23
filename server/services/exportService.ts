@@ -60,26 +60,36 @@ export class ExportService {
       'Merit Number',
       'Application Number',
       'Name',
+      'Gender',
+      'Category',
       'Stream',
       'Preferences (1-10)',
       'Allotted District',
       'Allotted Stream',
       'Status',
-      'Counseling Round'
+      'Counseling Round',
+      'Allotment Timestamp'
     ];
 
-    const rows = filteredStudents.map(student => [
-      student.meritNumber,
-      student.appNo || '',
-      student.name,
-      student.stream,
-      [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-       student.choice6, student.choice7, student.choice8, student.choice9, student.choice10].filter(Boolean).join('; '),
-      student.allottedDistrict || '-',
-      student.allottedStream || '-',
-      student.allocationStatus || '-',
-      student.counselingRoundNumber?.toString() || '-'
-    ]);
+    const rows = filteredStudents.map(student => {
+      const timestamp = student.updatedAt ? new Date(student.updatedAt).toLocaleString('en-IN') : '-';
+      return [
+        student.meritNumber,
+        student.appNo || '-',
+        student.name,
+        student.gender || '-',
+        student.category || '-',
+        student.stream,
+        [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+         student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+          .filter(Boolean).map((c, i) => `${i + 1}. ${c}`).join('; '),
+        student.allottedDistrict || '-',
+        student.allottedStream || '-',
+        student.allocationStatus || '-',
+        student.counselingRoundNumber?.toString() || '-',
+        timestamp
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
@@ -286,7 +296,7 @@ export class ExportService {
     const startY = 120;
     const rowHeight = 35; // Increased raw height for multi-line preferences
     // Adjusted widths to fit within 780 printable width (landscape A4 with 30 margins)
-    const colWidths = [35, 95, 40, 50, 60, 240, 110, 60, 50]; // Merit, Name, Gender, Cat, Stream, Preferences, Allotted District, Allotted Stream, Status
+    const colWidths = [30, 85, 30, 45, 45, 230, 70, 55, 45, 30, 70]; // Merit, Name, Gender, Cat, Stream, Preferences, Allotted District, Allotted Stream, Status, Round, Timestamp
     let currentY = startY;
 
     // Headers
@@ -308,7 +318,7 @@ export class ExportService {
   }
 
   private drawTableHeader(doc: any, y: number, colWidths: number[]) {
-    const headers = ['Merit No', 'Name', 'Gender', 'Category', 'Stream', 'Preferences (1-10)', 'Allotted Dist.', 'Allotted Stream', 'Status'];
+    const headers = ['Merit No', 'Name', 'Gen', 'Cat', 'Stream', 'Preferences (1-10)', 'Allotted Dist.', 'Allotted Stream', 'Status', 'Rnd', 'Timestamp'];
     let x = 50;
 
     doc.fontSize(9).fillColor('#374151');
@@ -349,7 +359,7 @@ export class ExportService {
     x += colWidths[1];
 
     // Gender
-    doc.text(student.gender || '-', x + 3, y + 6, { width: colWidths[2] - 6 });
+    doc.text(student.gender?.substring(0, 1) || '-', x + 3, y + 6, { width: colWidths[2] - 6 });
     x += colWidths[2];
     
     // Category
@@ -387,6 +397,20 @@ export class ExportService {
     const statusColor = status === 'allotted' ? '#10b981' : status === 'not_allotted' ? '#ef4444' : '#f59e0b';
     doc.fillColor(statusColor);
     doc.text(status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '), x + 3, y + 6, { width: colWidths[8] - 6 });
+    doc.fillColor('#374151');
+    x += colWidths[8];
+
+    // Round
+    doc.text(student.counselingRoundNumber?.toString() || '-', x + 3, y + 6, { width: colWidths[9] - 6 });
+    x += colWidths[9];
+    
+    // Timestamp
+    const timestamp = student.updatedAt ? new Date(student.updatedAt).toLocaleString('en-IN', {
+      year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+    }) : '-';
+    doc.fontSize(6);
+    doc.text(timestamp, x + 3, y + 6, { width: colWidths[10] - 6 });
+    doc.fontSize(7);
   }
 
   async exportVacanciesAsCSV(): Promise<string> {

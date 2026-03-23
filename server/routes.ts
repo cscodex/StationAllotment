@@ -789,6 +789,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Current session route — required by dashboard & counseling-progress
   app.get('/api/session/current', isAuthenticated, async (req: any, res) => {
     try {
+      const yearSessions = await storage.getYearSessions();
+      const currentYS = yearSessions.find(y => y.isCurrent);
+      if (currentYS) {
+        return res.json({ currentSession: currentYS.sessionName });
+      }
+
       const currentSession = await storage.getSetting('current_session');
       res.json({ currentSession: currentSession?.value || '' });
     } catch (error) {
@@ -2280,12 +2286,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/counseling-rounds/:id', isCentralAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
-      const { startDate, endDate, isActive, isSuspended } = req.body;
+      const { startDate, endDate, isActive, isSuspended, isCompleted, isAllocationFinalized } = req.body;
       const updates: any = {};
       if (startDate !== undefined) updates.startDate = startDate ? new Date(startDate) : null;
       if (endDate !== undefined) updates.endDate = endDate ? new Date(endDate) : null;
       if (isActive !== undefined) updates.isActive = isActive;
       if (isSuspended !== undefined) updates.isSuspended = isSuspended;
+      if (req.body.hasOwnProperty('isCompleted')) updates.isCompleted = isCompleted;
+      if (req.body.hasOwnProperty('isAllocationFinalized')) {
+        updates.isAllocationFinalized = isAllocationFinalized;
+        if (isAllocationFinalized) {
+          updates.allocationFinalizedAt = new Date();
+          updates.allocationFinalizedBy = req.user.id;
+        }
+      }
 
       const round = await storage.updateCounselingRound(id, updates);
       res.json(round);
@@ -2602,8 +2616,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/allocation/status', isAuthenticated, async (req, res) => {
     try {
+      const yearSessions = await storage.getYearSessions();
+      const currentYS = yearSessions.find(y => y.isCurrent);
       const currentSessionSetting = await storage.getSetting('current_session');
-      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const academicYear = currentYS?.sessionName || currentSessionSetting?.value || '2024-2025';
       const activeRound = await storage.getActiveCounselingRound(academicYear);
 
       res.json({

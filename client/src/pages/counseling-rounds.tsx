@@ -362,7 +362,7 @@ export default function CounselingRounds() {
   // Finalize round mutation — marks round as completed, blocks further allocations
   const finalizeRoundMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await apiRequest("PUT", `/api/counseling-rounds/${id}`, { isCompleted: true, isActive: false });
+      const res = await apiRequest("PUT", `/api/counseling-rounds/${id}`, { isCompleted: true, isActive: false, isAllocationFinalized: true });
       return await res.json();
     },
     onSuccess: () => {
@@ -467,13 +467,13 @@ export default function CounselingRounds() {
 
   // Get round status display
   const getRoundStatus = (round: CounselingRound): { text: string; variant: "default" | "secondary" | "destructive"; className: string; icon: any } => {
-    // Priority: Completed > Suspended > Active > Inactive
-    if (round.isCompleted) {
+    // Priority: Completed/Finalized > Suspended > Active > Inactive
+    if (round.isCompleted || round.isAllocationFinalized) {
       return {
-        text: "Completed",
+        text: "Finalized",
         variant: "default",
         className: "bg-green-600",
-        icon: CheckCircle
+        icon: ShieldCheck
       };
     }
 
@@ -663,7 +663,7 @@ export default function CounselingRounds() {
                         </Button>
                       </div>
                     )}
-                    {(!rounds || rounds.every(r => r.isCompleted)) && (
+                    {(!rounds || rounds.every(r => r.isCompleted || r.isAllocationFinalized) || rounds.length === 0) && (
                       <Button onClick={() => setShowCreateDialog(true)}>
                         <Plus className="w-4 h-4 mr-2" />
                         New Counseling Title
@@ -758,11 +758,11 @@ export default function CounselingRounds() {
                                 
                                 {user?.role === 'central_admin' && (
                                   <div className="flex flex-wrap gap-1.5 pt-2 mt-2 border-t border-slate-100">
-                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleEdit(round)} disabled={round.isCompleted}>
+                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleEdit(round)} disabled={round.isCompleted || round.isAllocationFinalized}>
                                       <Edit className="w-3 h-3 mr-1" /> Edit
                                     </Button>
                                     
-                                    {round.roundNumber === 1 && (
+                                    {round.roundNumber === 1 && !round.isCompleted && !round.isAllocationFinalized && (
                                       <Button
                                         size="sm" variant="outline" className={`h-7 text-xs ${round.isSuspended ? "text-orange-600" : ""}`}
                                         onClick={() => handleSuspend(round, !round.isSuspended)} disabled={suspendMutation.isPending}
@@ -772,17 +772,17 @@ export default function CounselingRounds() {
                                       </Button>
                                     )}
                                     
-                                    {round.isActive && !round.isCompleted && (
+                                    {round.isActive && !round.isCompleted && !round.isAllocationFinalized && (
                                       <PrerequisitesButton round={round} onRunAllocation={handleRunAllocation} isPending={false} />
                                     )}
 
-                                    {!round.isCompleted && (
+                                    {!round.isCompleted && !round.isAllocationFinalized && (
                                       <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 border-red-200" onClick={() => setResetRoundId(round.id)}>
                                         <Trash2 className="w-3 h-3 mr-1" /> Reset
                                       </Button>
                                     )}
 
-                                    {round.isAllocationCompleted && !round.isCompleted && (
+                                    {round.isAllocationCompleted && !round.isCompleted && !round.isAllocationFinalized && (
                                       <Button
                                         size="sm" variant="default" className="h-7 text-xs bg-purple-600"
                                         onClick={() => {
@@ -890,13 +890,13 @@ export default function CounselingRounds() {
                                     size="icon"
                                     variant="outline"
                                     onClick={() => handleEdit(round)}
-                                    disabled={round.isCompleted}
+                                    disabled={round.isCompleted || round.isAllocationFinalized}
                                     title="Edit Start Date"
                                     className="h-8 w-8"
                                   >
                                     <Edit className="w-4 h-4" />
                                   </Button>
-                                  {round.roundNumber === 1 && (
+                                  {round.roundNumber === 1 && !round.isCompleted && !round.isAllocationFinalized && (
                                     <Button
                                       size="icon"
                                       variant="outline"
@@ -908,7 +908,7 @@ export default function CounselingRounds() {
                                       {round.isSuspended ? <PlayCircle className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
                                     </Button>
                                   )}
-                                  {round.isActive && !round.isCompleted && (
+                                  {round.isActive && !round.isCompleted && !round.isAllocationFinalized && (
                                     <>
                                       <PrerequisitesButton
                                         round={round}
@@ -918,7 +918,7 @@ export default function CounselingRounds() {
                                     </>
                                   )}
                                    {/* Reset Round: clears allotted data for this round */}
-                                   {!round.isCompleted && (
+                                   {!round.isCompleted && !round.isAllocationFinalized && (
                                     <Button
                                       size="icon"
                                       variant="outline"
@@ -930,7 +930,7 @@ export default function CounselingRounds() {
                                     </Button>
                                    )}
                                   {/* Finalize Round: locks the round permanently after allocation is accepted */}
-                                  {round.isAllocationCompleted && !round.isCompleted && (
+                                  {round.isAllocationCompleted && !round.isCompleted && !round.isAllocationFinalized && (
                                     <Button
                                       size="icon"
                                       variant="default"
