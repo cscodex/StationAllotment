@@ -94,6 +94,8 @@ export default function StudentPreferenceManagement() {
   const [recordsPerPage, setRecordsPerPage] = useState(50);
   const [statusFilter, setStatusFilter] = useState<"all" | "locked" | "unlocked">("all");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
+  const [allocationStatusFilter, setAllocationStatusFilter] = useState<string>("all");
+  const [roundFilter, setRoundFilter] = useState<string>("all");
   const [activeTab, setActiveTab] = useState<string>("All");
 
   // Finalize dialog state
@@ -236,6 +238,11 @@ export default function StudentPreferenceManagement() {
     staleTime: 60000,
   });
 
+  const { data: roundsData } = useQuery<any[]>({
+    queryKey: ["/api/counseling-rounds"],
+    staleTime: 60000,
+  });
+
   // Derived state: Filtered students based on search term & status toggle
   const filteredStudents = useMemo(() => {
     if (!(studentsData as any)?.students) return [];
@@ -249,7 +256,21 @@ export default function StudentPreferenceManagement() {
       filtered = filtered.filter((s: Student) => !s.lockedBy && s.choice1 && s.stream);
     }
 
-    // 2. District Filter (For Central Admin)
+    // 2. Allocation Status Filter
+    if (allocationStatusFilter !== "all") {
+      if (allocationStatusFilter === "pending") {
+        filtered = filtered.filter((s: Student) => !s.allocationStatus || s.allocationStatus === "pending");
+      } else {
+        filtered = filtered.filter((s: Student) => s.allocationStatus === allocationStatusFilter);
+      }
+    }
+
+    // 3. Round Filter
+    if (roundFilter !== "all") {
+      filtered = filtered.filter((s: Student) => s.counselingRoundId === roundFilter);
+    }
+
+    // 4. District Filter (For Central Admin)
     if (user?.role === 'central_admin' && districtFilter !== "all") {
       filtered = filtered.filter((s: Student) => {
         if (districtFilter === "unassigned") return !s.counselingDistrict;
@@ -273,7 +294,7 @@ export default function StudentPreferenceManagement() {
       s.appNo?.toLowerCase().includes(lowerSearch) ||
       s.stream?.toLowerCase().includes(lowerSearch)
     );
-  }, [(studentsData as any)?.students, searchTerm, statusFilter, districtFilter, activeTab]);
+  }, [(studentsData as any)?.students, searchTerm, statusFilter, allocationStatusFilter, roundFilter, districtFilter, activeTab]);
 
   // Derived state: Paginated students
   const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
@@ -285,7 +306,7 @@ export default function StudentPreferenceManagement() {
   // Reset page to 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, districtFilter, activeTab, recordsPerPage]);
+  }, [searchTerm, statusFilter, allocationStatusFilter, roundFilter, districtFilter, activeTab, recordsPerPage]);
 
   // Update preferences mutation
   const updatePreferencesMutation = useMutation({
@@ -581,24 +602,22 @@ export default function StudentPreferenceManagement() {
                 {user?.role === 'central_admin' && (
                   <Button
                     variant={isAllocationFinalized ? "outline" : "default"}
-                    size="sm"
+                    size="icon"
                     onClick={() => {
                       if (!isAllocationFinalized) setIsFinalizeDialogOpen(true);
                     }}
                     disabled={finalizeAllocationMutation.isPending || isAllocationFinalized}
+                    title={isAllocationFinalized ? "Phase 1 Finalized" : "Finalize Central"}
                     data-testid="button-finalize-allocation"
                     className={isAllocationFinalized
-                      ? "bg-gray-100 text-gray-600 cursor-not-allowed"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      ? "bg-gray-100 text-gray-600 cursor-not-allowed h-10 w-10"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white h-10 w-10"
                     }
                   >
                     {finalizeAllocationMutation.isPending ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Finalizing...</>
+                      <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        {isAllocationFinalized ? "Phase 1 Finalized ✓" : "Finalize Central (Phase 1)"}
-                      </>
+                      <CheckCircle className="w-5 h-5" />
                     )}
                   </Button>
                 )}
@@ -607,30 +626,30 @@ export default function StudentPreferenceManagement() {
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    title="Live Scan"
                     onClick={() => setIsLiveScannerOpen(true)}
-                    className="text-orange-500 border-orange-500 hover:bg-orange-50"
+                    className="text-orange-500 border-orange-500 hover:bg-orange-50 h-10 w-10"
                   >
-                    <Camera className="w-4 h-4 mr-2" />
-                    Live Scan
+                    <Camera className="w-5 h-5" />
                   </Button>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    title="Bulk OMR Scan"
                     onClick={() => setIsBulkScannerOpen(true)}
-                    className="text-primary border-primary hover:bg-primary/10"
+                    className="text-primary border-primary hover:bg-primary/10 h-10 w-10"
                   >
-                    <UploadCloud className="w-4 h-4 mr-2" />
-                    Bulk OMR Scan
+                    <UploadCloud className="w-5 h-5" />
                   </Button>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
+                    title="Upload Image"
                     onClick={() => { setScannerStudent(undefined); setIsGlobalImageScanOpen(true); }}
-                    className="text-violet-600 border-violet-500 hover:bg-violet-50"
+                    className="text-violet-600 border-violet-500 hover:bg-violet-50 h-10 w-10"
                   >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Upload Image
+                    <FileText className="w-5 h-5" />
                   </Button>
                 </div>
               </CardTitle>
@@ -647,21 +666,53 @@ export default function StudentPreferenceManagement() {
                     data-testid="input-search-students"
                   />
                 </div>
-                <div className="w-full sm:w-[180px]">
+                <div className="w-full sm:w-[150px]">
                   <Select value={statusFilter} onValueChange={(v: "all"|"locked"|"unlocked") => setStatusFilter(v)}>
                     <SelectTrigger>
                       <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder="Filter by status" />
+                      <SelectValue placeholder="Lock Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="locked">Only Locked</SelectItem>
-                      <SelectItem value="unlocked">Only Unlocked (Filled)</SelectItem>
+                      <SelectItem value="all">All Locks</SelectItem>
+                      <SelectItem value="locked">Locked</SelectItem>
+                      <SelectItem value="unlocked">Unlocked</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="w-full sm:w-[160px]">
+                  <Select value={allocationStatusFilter} onValueChange={(v: string) => setAllocationStatusFilter(v)}>
+                    <SelectTrigger>
+                      <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                      <SelectValue placeholder="Allocation Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="allotted">Allotted</SelectItem>
+                      <SelectItem value="not_allotted">Not Allotted</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {roundsData && roundsData.length > 0 && (
+                  <div className="w-full sm:w-[160px]">
+                    <Select value={roundFilter} onValueChange={(v: string) => setRoundFilter(v)}>
+                      <SelectTrigger>
+                        <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                        <SelectValue placeholder="Counseling Round" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Rounds</SelectItem>
+                        {roundsData.map((r: any) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.roundName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 {user?.role === 'central_admin' && (
-                  <div className="w-full sm:w-[180px]">
+                  <div className="w-full sm:w-[160px]">
                     <Select value={districtFilter} onValueChange={(v: string) => setDistrictFilter(v)}>
                       <SelectTrigger>
                         <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
@@ -669,7 +720,7 @@ export default function StudentPreferenceManagement() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Districts</SelectItem>
-                        <SelectItem value="unassigned">Unassigned District</SelectItem>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
                         {COUNSELING_DISTRICTS.map((district) => (
                           <SelectItem key={district} value={district}>
                             {district}

@@ -124,11 +124,11 @@ function PrerequisitesButton({
   return (
     <div className="flex items-center gap-2">
       <Button
-        size="sm"
+        size="icon"
         variant="default"
         onClick={() => onRunAllocation(round)}
         disabled={isPending || isLoading || !canRunAllocation || round.isAllocationCompleted}
-        className="bg-green-600 hover:bg-green-700"
+        className="bg-green-600 hover:bg-green-700 h-8 w-8"
         title={
           round.isAllocationCompleted
             ? "Allocation is already completed for this round. Please reset it first."
@@ -139,8 +139,7 @@ function PrerequisitesButton({
                 : "Run allocation"
         }
       >
-        <Rocket className="w-3 h-3 mr-1" />
-        Run Allocation
+        <Rocket className="w-4 h-4" />
       </Button>
       {prerequisites && !canRunAllocation && (
         <div className="text-xs text-muted-foreground max-w-[200px]">
@@ -746,34 +745,25 @@ export default function CounselingRounds() {
                               <TableCell>
                                 <div className="flex items-center space-x-2 flex-wrap gap-1">
                                   <Button
-                                    size="sm"
+                                    size="icon"
                                     variant="outline"
                                     onClick={() => handleEdit(round)}
                                     disabled={round.isCompleted}
+                                    title="Edit Start Date"
+                                    className="h-8 w-8"
                                   >
-                                    <Edit className="w-3 h-3 mr-1" />
-                                    Edit
+                                    <Edit className="w-4 h-4" />
                                   </Button>
                                   {round.roundNumber === 1 && (
                                     <Button
-                                      size="sm"
+                                      size="icon"
                                       variant="outline"
                                       onClick={() => handleSuspend(round, !round.isSuspended)}
                                       disabled={suspendMutation.isPending}
-                                      className={round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}
+                                      className={`h-8 w-8 ${round.isSuspended ? "text-orange-600 hover:text-orange-700" : ""}`}
                                       title={round.isSuspended ? "Unsuspend subsequent rounds" : "Suspend subsequent rounds"}
                                     >
-                                      {round.isSuspended ? (
-                                        <>
-                                          <PlayCircle className="w-3 h-3 mr-1" />
-                                          Unsuspend
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Pause className="w-3 h-3 mr-1" />
-                                          Suspend
-                                        </>
-                                      )}
+                                      {round.isSuspended ? <PlayCircle className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
                                     </Button>
                                   )}
                                   {round.isActive && !round.isCompleted && (
@@ -788,20 +778,19 @@ export default function CounselingRounds() {
                                    {/* Reset Round: clears allotted data for this round */}
                                    {!round.isCompleted && (
                                     <Button
-                                      size="sm"
+                                      size="icon"
                                       variant="outline"
                                       onClick={() => setResetRoundId(round.id)}
-                                      className="text-red-600 border-red-400 hover:bg-red-50"
-                                      title="Clear all allocations for this round"
+                                      className="text-red-600 border-red-400 hover:bg-red-50 h-8 w-8"
+                                      title="Reset Round Data"
                                     >
-                                      <Trash2 className="w-3 h-3 mr-1" />
-                                      Reset Round
+                                      <Trash2 className="w-4 h-4" />
                                     </Button>
                                    )}
                                   {/* Finalize Round: locks the round permanently after allocation is accepted */}
                                   {round.isAllocationCompleted && !round.isCompleted && (
                                     <Button
-                                      size="sm"
+                                      size="icon"
                                       variant="default"
                                       onClick={() => {
                                         if (confirm(`Finalize Counseling Round ${round.roundNumber} ("${round.roundName}")?\n\nThis will permanently close this round — no further allocations can be run. This cannot be undone.`)) {
@@ -809,23 +798,22 @@ export default function CounselingRounds() {
                                         }
                                       }}
                                       disabled={finalizeRoundMutation.isPending}
-                                      className="bg-purple-600 hover:bg-purple-700 text-white"
-                                      title="Permanently close this counseling round"
+                                      className="bg-purple-600 hover:bg-purple-700 text-white h-8 w-8"
+                                      title={`Finalize Round ${round.roundNumber}`}
                                     >
-                                      <ShieldCheck className="w-3 h-3 mr-1" />
-                                      Finalize Round {round.roundNumber}
+                                      <ShieldCheck className="w-4 h-4" />
                                     </Button>
                                   )}
                                   {canDelete(round) && (
                                     <Button
-                                      size="sm"
+                                      size="icon"
                                       variant="outline"
                                       onClick={() => handleDelete(round)}
                                       disabled={deleteRoundMutation.isPending || isPastRound(round)}
-                                      className="text-red-600 hover:text-red-700"
+                                      className="text-red-600 hover:text-red-700 h-8 w-8"
                                       title={isPastRound(round) ? "Cannot delete past counseling rounds" : "Delete round"}
                                     >
-                                      <Trash2 className="w-3 h-3" />
+                                      <Trash2 className="w-4 h-4" />
                                     </Button>
                                   )}
                                 </div>
