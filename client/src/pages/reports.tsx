@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +124,36 @@ export default function Reports() {
     };
   });
 
+  const detailedBreakdown = useMemo(() => {
+    const map: Record<string, { district: string, category: string, gender: string, stream: string, total: number, allocated: number }> = {};
+    
+    filteredVacancies.forEach(v => {
+      if (!v.district || !v.category || !v.gender || !v.stream) return;
+      const str = v.stream === 'Non-Medical' ? 'NonMedical' : v.stream;
+      const key = `${v.district}-${v.category}-${v.gender}-${str}`;
+      if (!map[key]) {
+        map[key] = { district: v.district, category: v.category, gender: v.gender, stream: str, total: 0, allocated: 0 };
+      }
+      map[key].total += (v.totalSeats || 0);
+    });
+
+    allottedStudents.forEach(s => {
+      if (!s.allottedDistrict || !s.category || !s.gender || !s.stream) return;
+      const str = s.stream === 'Non-Medical' ? 'NonMedical' : s.stream;
+      const key = `${s.allottedDistrict}-${s.category}-${s.gender}-${str}`;
+      if (map[key]) {
+        map[key].allocated += 1;
+      }
+    });
+
+    return Object.values(map).sort((a,b) => {
+      if (a.district !== b.district) return a.district.localeCompare(b.district);
+      if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
+      if (a.category !== b.category) return a.category.localeCompare(b.category);
+      return a.gender.localeCompare(b.gender);
+    });
+  }, [filteredVacancies, allottedStudents]);
+
   const exportToCSV = () => {
     if (activeTab === 'station-allotments') {
       const csvData = allottedStudents.map(student => ({
@@ -229,10 +259,16 @@ export default function Reports() {
             View allocation results and remaining vacancies
           </p>
         </div>
-        <Button onClick={exportToCSV} data-testid="button-export-csv">
-          <Download className="w-4 h-4 mr-2" />
-          Export CSV
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => window.open(`/api/export/reports/pdf?academicYear=${academicYear || ''}`, '_blank')}>
+            <Download className="w-4 h-4 mr-2" />
+            Export PDF Report
+          </Button>
+          <Button variant="outline" onClick={exportToCSV} data-testid="button-export-csv">
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -329,7 +365,7 @@ export default function Reports() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="station-allotments" data-testid="tab-station-allotments">
             <FileText className="w-4 h-4 mr-2" />
             Station Allotments
@@ -337,6 +373,10 @@ export default function Reports() {
           <TabsTrigger value="remaining-vacancies" data-testid="tab-remaining-vacancies">
             <MapPin className="w-4 h-4 mr-2" />
             Remaining Vacancies
+          </TabsTrigger>
+          <TabsTrigger value="detailed-breakdown">
+            <FileText className="w-4 h-4 mr-2" />
+            Detailed Breakdown
           </TabsTrigger>
         </TabsList>
 
@@ -462,6 +502,57 @@ export default function Reports() {
                                 <span className="text-muted-foreground"> / {vacancy.totalVacancies}</span>
                               </div>
                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="detailed-breakdown" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Detailed Breakdown (Category & Gender)</CardTitle>
+              <CardDescription>
+                Granular view of all allotted seats and remaining vacancies
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {detailedBreakdown.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No vacancy data available for detailed breakdown.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-border">
+                    <thead>
+                      <tr className="bg-muted">
+                        <th className="border border-border p-3 text-left">District</th>
+                        <th className="border border-border p-3 text-left">Stream</th>
+                        <th className="border border-border p-3 text-left">Category</th>
+                        <th className="border border-border p-3 text-left">Gender</th>
+                        <th className="border border-border p-3 text-center">Total Seats</th>
+                        <th className="border border-border p-3 text-center">Filled</th>
+                        <th className="border border-border p-3 text-center">Remaining</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailedBreakdown.map((row: any, index: number) => (
+                        <tr key={`detail-${index}`}>
+                          <td className="border border-border p-3">{row.district}</td>
+                          <td className="border border-border p-3">{row.stream}</td>
+                          <td className="border border-border p-3">{row.category}</td>
+                          <td className="border border-border p-3">{row.gender}</td>
+                          <td className="border border-border p-3 text-center">{row.total}</td>
+                          <td className="border border-border p-3 text-center text-blue-600 font-medium">{row.allocated}</td>
+                          <td className="border border-border p-3 text-center">
+                            <span className={(row.total - row.allocated) > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                              {row.total - row.allocated}
+                            </span>
                           </td>
                         </tr>
                       ))}

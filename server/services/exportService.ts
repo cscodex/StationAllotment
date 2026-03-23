@@ -798,4 +798,105 @@ export class ExportService {
       doc.fontSize(12).fillColor('#374151').text(`• ${item}`, { align: 'center' });
     });
   }
+
+  async exportReportsPDF(academicYear: string, res: any) {
+    const students = await this.storage.getStudents(10000, 0, academicYear);
+    const vacancies = await this.storage.getVacancies(academicYear);
+    const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
+
+    const PDFDocument = (await import('pdfkit')).default;
+    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="counseling-reports-${academicYear || 'all'}.pdf"`);
+    doc.pipe(res);
+
+    doc.fontSize(16).fillColor('#111827').text(`Counseling Reports Insights - ${academicYear || 'All Time'}`, { align: 'center' }).moveDown(1);
+
+    // 1. Round-wise Insights
+    const rounds: Record<string, number> = {};
+    allottedStudents.forEach(s => {
+      const r = s.counselingRoundNumber || 'Unknown';
+      rounds[`Round ${r}`] = (rounds[`Round ${r}`] || 0) + 1;
+    });
+
+    doc.fontSize(14).fillColor('#1f2937').text('Round-wise Allotments', { underline: true }).moveDown(0.5);
+    doc.fontSize(11).fillColor('#374151');
+    if (Object.keys(rounds).length === 0) {
+      doc.text("No allotted students found.");
+    } else {
+      Object.keys(rounds).sort().forEach(round => {
+        doc.text(`${round}: ${rounds[round]} students allotted`);
+      });
+    }
+    doc.moveDown(1.5);
+
+    // 2. Category & Gender Breakdown
+    doc.fontSize(14).fillColor('#1f2937').text('Category & Gender wise Vacancy Breakdown', { underline: true }).moveDown(0.5);
+
+    const map: Record<string, { district: string, category: string, gender: string, stream: string, total: number, allocated: number }> = {};
+    vacancies.forEach(v => {
+      if (!v.district || !v.category || !v.gender || !v.stream) return;
+      const str = v.stream === 'Non-Medical' ? 'NonMedical' : v.stream;
+      const key = `${v.district}-${v.category}-${v.gender}-${str}`;
+      if (!map[key]) {
+        map[key] = { district: v.district, category: v.category, gender: v.gender, stream: str, total: 0, allocated: 0 };
+      }
+      map[key].total += (v.totalSeats || 0);
+    });
+
+    allottedStudents.forEach(s => {
+      if (!s.allottedDistrict || !s.category || !s.gender || !s.stream) return;
+      const str = s.stream === 'Non-Medical' ? 'NonMedical' : s.stream;
+      const key = `${s.allottedDistrict}-${s.category}-${s.gender}-${str}`;
+      if (map[key]) map[key].allocated += 1;
+    });
+
+    const breakdown = Object.values(map).sort((a,b) => {
+      if (a.district !== b.district) return a.district.localeCompare(b.district);
+      if (a.stream !== b.stream) return a.stream.localeCompare(b.stream);
+      return a.category.localeCompare(b.category);
+    });
+
+    // Draw Table
+    let y = doc.y;
+    const colWidths = [140, 70, 70, 60, 50, 50, 50];
+    const headers = ['District', 'Stream', 'Category', 'Gender', 'Total', 'Filled', 'Remain'];
+
+    const drawBreakdownHeader = (docY: number) => {
+      let x = 30;
+      headers.forEach((h, i) => {
+        doc.rect(x, docY, colWidths[i], 20).fillAndStroke('#1f2937', '#111827');
+        doc.fontSize(9).fillColor('#ffffff').text(h, x + 3, docY + 6, { width: colWidths[i] - 6, align: 'left' });
+        x += colWidths[i];
+      });
+      return docY + 20;
+    };
+
+    y = drawBreakdownHeader(y);
+
+    doc.fontSize(8);
+    breakdown.forEach(row => {
+      if (y > doc.page.height - 50) {
+        doc.addPage();
+        y = drawBreakdownHeader(30);
+      }
+
+      let x = 30;
+      doc.fontSize(8);
+      const texts = [
+        row.district, row.stream, row.category, row.gender, 
+        row.total.toString(), row.allocated.toString(), (row.total - row.allocated).toString()
+      ];
+
+      texts.forEach((text, i) => {
+        doc.rect(x, y, colWidths[i], 15).fillAndStroke('#ffffff', '#d1d5db');
+        doc.fillColor('#374151').text(text, x + 3, y + 4, { width: colWidths[i] - 6, align: 'left', height: 11 });
+        x += colWidths[i];
+      });
+      y += 15;
+    });
+
+    doc.end();
+  }
 }

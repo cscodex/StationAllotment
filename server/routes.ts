@@ -946,8 +946,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.session.userId);
 
       if (allocated) {
-        // For the reports page - return all students
-        const students = await storage.getStudents(10000, 0);
+        // For the reports page - return all students matching the year constraint
+        const students = await storage.getStudents(10000, 0, academicYear);
         return res.json(students);
       }
 
@@ -2879,6 +2879,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Export flow diagram PDF error:", error);
       res.status(500).json({ message: "Failed to export flow diagram PDF" });
+    }
+  });
+
+  // Export Reports PDF
+  app.get('/api/export/reports/pdf', isAuthenticated, async (req: any, res) => {
+    try {
+      const academicYear = req.query.academicYear as string | undefined;
+      await exportService.exportReportsPDF(academicYear || '', res);
+    } catch (error) {
+      console.error("Export reports PDF error:", error);
+      res.status(500).send("Failed to generate insights PDF");
     }
   });
 
