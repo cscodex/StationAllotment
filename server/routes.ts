@@ -2893,6 +2893,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Custom Export Routes
+  app.post('/api/export/custom/csv', isAuthenticated, async (req: any, res) => {
+    try {
+      const { academicYear, filters, columns } = req.body;
+      const csvData = await exportService.exportCustomCSV(academicYear, filters, columns);
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=custom_allotment_report.csv');
+      res.send(csvData);
+    } catch (error) {
+      console.error("Custom export CSV error:", error);
+      res.status(500).send("Failed to generate custom CSV");
+    }
+  });
+
+  app.post('/api/export/custom/pdf', isAuthenticated, async (req: any, res) => {
+    try {
+      const { academicYear, filters, columns } = req.body;
+      await exportService.exportCustomPDF(academicYear, filters, columns, res);
+    } catch (error) {
+      console.error("Custom export PDF error:", error);
+      res.status(500).send("Failed to generate custom PDF");
+    }
+  });
+
   // District status routes
   app.get('/api/district-status', isDistrictAdmin, async (req: any, res) => {
     try {

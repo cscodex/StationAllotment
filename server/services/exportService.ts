@@ -929,4 +929,175 @@ export class ExportService {
 
     doc.end();
   }
+
+  async exportCustomCSV(academicYear: string, filters: any, columns: string[]): Promise<string> {
+    const students = await this.storage.getStudents(10000, 0, academicYear);
+    const allotted = students.filter(s => s.allocationStatus === 'allotted');
+    
+    // Filter by criteria
+    const filtered = allotted.filter(s => 
+      (!filters.districts?.length || filters.districts.includes(s.allottedDistrict || '')) &&
+      (!filters.streams?.length || filters.streams.includes(s.stream)) &&
+      (!filters.categories?.length || filters.categories.includes(s.category || '')) &&
+      (!filters.genders?.length || filters.genders.includes(s.gender || ''))
+    );
+
+    const AVAILABLE_COLUMNS_MAP: Record<string, string> = {
+      meritNumber: 'Merit Number',
+      appNo: 'App Number',
+      name: 'Student Name',
+      category: 'Category',
+      gender: 'Gender',
+      stream: 'Stream',
+      choices: 'Choices (1-10)',
+      allottedDistrict: 'Allotted District'
+    };
+
+    const headers = columns.map(c => AVAILABLE_COLUMNS_MAP[c] || c);
+
+    const rows = filtered.map(student => {
+      const rowData: string[] = [];
+      columns.forEach(col => {
+        if (col === 'meritNumber') rowData.push(student.meritNumber.toString());
+        else if (col === 'appNo') rowData.push(student.appNo || '');
+        else if (col === 'name') rowData.push(student.name);
+        else if (col === 'category') rowData.push(student.category || '');
+        else if (col === 'gender') rowData.push(student.gender || '');
+        else if (col === 'stream') rowData.push(student.stream);
+        else if (col === 'choices') {
+          const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+            student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+             .filter(Boolean).map((c, i) => `${i + 1}. ${c}`).join('; ');
+          rowData.push(choices);
+        }
+        else if (col === 'allottedDistrict') rowData.push(student.allottedDistrict || '');
+      });
+      return rowData;
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell || ''}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  }
+
+  async exportCustomPDF(academicYear: string, filters: any, columns: string[], res: any) {
+    const students = await this.storage.getStudents(10000, 0, academicYear);
+    const allotted = students.filter(s => s.allocationStatus === 'allotted');
+    
+    const filtered = allotted.filter(s => 
+      (!filters.districts?.length || filters.districts.includes(s.allottedDistrict || '')) &&
+      (!filters.streams?.length || filters.streams.includes(s.stream)) &&
+      (!filters.categories?.length || filters.categories.includes(s.category || '')) &&
+      (!filters.genders?.length || filters.genders.includes(s.gender || ''))
+    );
+
+    const PDFDocument = (await import('pdfkit')).default;
+    const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="custom-allotments-${academicYear || 'all'}.pdf"`);
+    doc.pipe(res);
+
+    doc.fontSize(16).fillColor('#111827').text(`Custom Filtered Allotment Report`, { align: 'center' }).moveDown(1);
+    
+    // Group and show summary logic
+    const summary: Record<string, number> = {};
+    filtered.forEach(s => {
+       const key = `${s.allottedDistrict} -> ${s.stream} -> ${s.category} -> ${s.gender}`;
+       summary[key] = (summary[key] || 0) + 1;
+    });
+
+    doc.fontSize(14).fillColor('#1f2937').text('Summary Counts', { underline: true }).moveDown(0.5);
+    doc.fontSize(10).fillColor('#374151');
+    doc.text(`Total Students Matching Criteria: ${filtered.length}`).moveDown(0.5);
+
+    Object.keys(summary).sort().forEach(key => {
+       doc.text(`${key}: ${summary[key]} allotted`);
+    });
+    
+    doc.moveDown(1.5);
+    doc.fontSize(14).fillColor('#1f2937').text('Detailed Student List', { underline: true }).moveDown(0.5);
+
+    // Grouping the items for tables
+    const groups: Record<string, any[]> = {};
+    filtered.forEach(s => {
+       const key = `${s.allottedDistrict} -> ${s.stream} -> ${s.category} -> ${s.gender}`;
+       if (!groups[key]) groups[key] = [];
+       groups[key].push(s);
+    });
+
+    const AVAILABLE_COLUMNS_MAP: Record<string, string> = {
+      meritNumber: 'Merit No',
+      appNo: 'App No',
+      name: 'Name',
+      category: 'Cat',
+      gender: 'Gen',
+      stream: 'Stream',
+      choices: 'Choices',
+      allottedDistrict: 'Allotted Dist'
+    };
+
+    const headers = columns.map(c => AVAILABLE_COLUMNS_MAP[c] || c);
+    
+    const printableWidth = 780;
+    const colWidth = printableWidth / Math.max(columns.length, 1);
+
+    Object.keys(groups).sort().forEach(groupKey => {
+       doc.addPage();
+       doc.fontSize(12).fillColor('#2563eb').text(`Group: ${groupKey}`, { underline: true }).moveDown(0.5);
+
+       let y = doc.y;
+       
+       const drawHeader = (docY: number) => {
+         let x = 30;
+         headers.forEach(h => {
+           doc.rect(x, docY, colWidth, 20).fillAndStroke('#1f2937', '#111827');
+           doc.fontSize(9).fillColor('#ffffff').text(h, x + 3, docY + 6, { width: colWidth - 6, align: 'left' });
+           x += colWidth;
+         });
+         return docY + 20;
+       };
+
+       y = drawHeader(y);
+
+       groups[groupKey].sort((a,b) => a.meritNumber - b.meritNumber).forEach((student, idx) => {
+         if (y > doc.page.height - 50) {
+           doc.addPage();
+           y = drawHeader(30);
+         }
+
+         let x = 30;
+         doc.fontSize(8);
+         
+         const rowData: string[] = [];
+         columns.forEach(col => {
+           if (col === 'meritNumber') rowData.push(student.meritNumber.toString());
+           else if (col === 'appNo') rowData.push(student.appNo || '-');
+           else if (col === 'name') rowData.push(student.name);
+           else if (col === 'category') rowData.push(student.category || '-');
+           else if (col === 'gender') rowData.push(student.gender?.substring(0,1) || '-');
+           else if (col === 'stream') rowData.push(student.stream);
+           else if (col === 'choices') {
+             const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
+               student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
+                .filter(Boolean).map((c, i) => `${i + 1}. ${c}`).join('; ');
+             rowData.push(choices || '-');
+           }
+           else if (col === 'allottedDistrict') rowData.push(student.allottedDistrict || '-');
+         });
+
+         rowData.forEach((text, i) => {
+           doc.rect(x, y, colWidth, 15).fillAndStroke(idx % 2 === 0 ? '#fafafa' : '#ffffff', '#e5e7eb');
+           doc.fillColor('#374151').text(text, x + 3, y + 4, { width: colWidth - 6, align: 'left', height: 11 });
+           x += colWidth;
+         });
+         y += 15;
+       });
+    });
+
+    doc.end();
+  }
 }
