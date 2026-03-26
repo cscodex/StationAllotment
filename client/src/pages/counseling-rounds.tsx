@@ -656,11 +656,9 @@ export default function CounselingRounds() {
                         </Button>
                       </div>
                     )}
-                    {(!rounds || rounds.every(r => r.isCompleted || r.isAllocationFinalized) || rounds.length === 0) && (
-                      <Button size="icon" onClick={() => setShowCreateDialog(true)} className="h-8 w-8" title="New Counseling Title">
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    )}
+                    <Button size="icon" onClick={() => setShowCreateDialog(true)} className="h-8 w-8" title="New Counseling Title">
+                      <Plus className="w-4 h-4" />
+                    </Button>
                   </div>
                 )}
               </CardHeader>
