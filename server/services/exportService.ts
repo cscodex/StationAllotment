@@ -1004,27 +1004,70 @@ export class ExportService {
     doc.fontSize(16).fillColor('#111827').text(`Custom Filtered Allotment Report`, { align: 'center' }).moveDown(1);
     
     // Group and show summary logic
-    const summary: Record<string, number> = {};
+    const summary: Record<string, { district: string, stream: string, category: string, gender: string, count: number }> = {};
     filtered.forEach(s => {
-       const key = `${s.allottedDistrict} -> ${s.stream} -> ${s.category} -> ${s.gender}`;
-       summary[key] = (summary[key] || 0) + 1;
+       const key = `${s.allottedDistrict}|${s.stream}|${s.category}|${s.gender}`;
+       if (!summary[key]) {
+         summary[key] = { district: s.allottedDistrict || '', stream: s.stream, category: s.category || '', gender: s.gender || '', count: 0 };
+       }
+       summary[key].count += 1;
     });
 
-    doc.fontSize(14).fillColor('#1f2937').text('Summary Counts', { underline: true }).moveDown(0.5);
+    doc.fontSize(14).fillColor('#1f2937').text('Summary Counts Table', { underline: true }).moveDown(0.5);
     doc.fontSize(10).fillColor('#374151');
     doc.text(`Total Students Matching Criteria: ${filtered.length}`).moveDown(0.5);
 
-    Object.keys(summary).sort().forEach(key => {
-       doc.text(`${key}: ${summary[key]} allotted`);
+    // Render Summary Table
+    const summaryList = Object.values(summary).sort((a,b) => a.district.localeCompare(b.district) || a.stream.localeCompare(b.stream));
+    const usableWidth = doc.page.width - 60; // 30 margin on each side
+    const sumWidths = [usableWidth * 0.25, usableWidth * 0.2, usableWidth * 0.2, usableWidth * 0.2, usableWidth * 0.15];
+    const sumHeaders = ['District', 'Stream', 'Category', 'Gender', 'Count'];
+    
+    let ySum = doc.y;
+    let xSum = 30;
+    sumHeaders.forEach((h, i) => {
+      doc.rect(xSum, ySum, sumWidths[i], 20).fillAndStroke('#1f2937', '#111827');
+      doc.fontSize(9).fillColor('#ffffff').text(h, xSum + 3, ySum + 6, { width: sumWidths[i] - 6, align: 'left' });
+      xSum += sumWidths[i];
+    });
+    ySum += 20;
+
+    summaryList.forEach((row, idx) => {
+       if (ySum > doc.page.height - 50) {
+          doc.addPage();
+          ySum = 30;
+          let xH = 30;
+          sumHeaders.forEach((h, i) => {
+            doc.rect(xH, ySum, sumWidths[i], 20).fillAndStroke('#1f2937', '#111827');
+            doc.fontSize(9).fillColor('#ffffff').text(h, xH + 3, ySum + 6, { width: sumWidths[i] - 6, align: 'left' });
+            xH += sumWidths[i];
+          });
+          ySum += 20;
+       }
+       xSum = 30;
+       const texts = [row.district, row.stream, row.category, row.gender, row.count.toString()];
+       texts.forEach((text, i) => {
+          doc.rect(xSum, ySum, sumWidths[i], 15).fillAndStroke(idx % 2 === 0 ? '#fafafa' : '#ffffff', '#e5e7eb');
+          doc.fillColor('#374151').text(text, xSum + 3, ySum + 4, { width: sumWidths[i] - 6, align: 'left', height: 11 });
+          xSum += sumWidths[i];
+       });
+       ySum += 15;
     });
     
     doc.moveDown(1.5);
+    doc.y = ySum + 20; // Ensure detailed list starts below summary
+
+    // Only add a new page if there's no space for the title and the first couple of rows
+    if (doc.y > doc.page.height - 150) {
+      doc.addPage();
+    }
+    
     doc.fontSize(14).fillColor('#1f2937').text('Detailed Student List', { underline: true }).moveDown(0.5);
 
     // Grouping the items for tables
     const groups: Record<string, any[]> = {};
     filtered.forEach(s => {
-       const key = `${s.allottedDistrict} -> ${s.stream} -> ${s.category} -> ${s.gender}`;
+       const key = `${s.allottedDistrict} -> ${s.stream} -> ${s.category}`;
        if (!groups[key]) groups[key] = [];
        groups[key].push(s);
     });
@@ -1042,21 +1085,37 @@ export class ExportService {
 
     const headers = columns.map(c => AVAILABLE_COLUMNS_MAP[c] || c);
     
-    const printableWidth = 780;
-    const colWidth = printableWidth / Math.max(columns.length, 1);
+    // Allocate widths based on column
+    const defaultColWidths = columns.map(c => {
+       if (c === 'choices') return 200;
+       if (c === 'allottedDistrict') return 100;
+       if (c === 'name') return 120;
+       if (c === 'stream') return 80;
+       return 50;
+    });
+    
+    const totalDefaultWidth = defaultColWidths.reduce((a, b) => a + b, 0);
+    const scaleFactor = Math.max(1, usableWidth / totalDefaultWidth);
+    const colWidths = defaultColWidths.map(w => w * scaleFactor);
 
-    Object.keys(groups).sort().forEach(groupKey => {
-       doc.addPage();
-       doc.fontSize(12).fillColor('#2563eb').text(`Group: ${groupKey}`, { underline: true }).moveDown(0.5);
+    Object.keys(groups).sort().forEach((groupKey, idx) => {
+       if (idx > 0) {
+         doc.addPage();
+       } else if (doc.y > doc.page.height - 100) {
+         // If it's the first group but we are completely out of room on page 1 after the title
+         doc.addPage();
+       }
+       
+       doc.fontSize(12).fillColor('#2563eb').text(`Group: ${groupKey} (${groups[groupKey].length} students)`, { underline: true }).moveDown(0.5);
 
        let y = doc.y;
        
        const drawHeader = (docY: number) => {
          let x = 30;
-         headers.forEach(h => {
-           doc.rect(x, docY, colWidth, 20).fillAndStroke('#1f2937', '#111827');
-           doc.fontSize(9).fillColor('#ffffff').text(h, x + 3, docY + 6, { width: colWidth - 6, align: 'left' });
-           x += colWidth;
+         headers.forEach((h, i) => {
+           doc.rect(x, docY, colWidths[i], 20).fillAndStroke('#1f2937', '#111827');
+           doc.fontSize(9).fillColor('#ffffff').text(h, x + 3, docY + 6, { width: colWidths[i] - 6, align: 'left' });
+           x += colWidths[i];
          });
          return docY + 20;
        };
@@ -1064,6 +1123,9 @@ export class ExportService {
        y = drawHeader(y);
 
        groups[groupKey].sort((a,b) => a.meritNumber - b.meritNumber).forEach((student, idx) => {
+         // Auto expand height if choices is long
+         const rowHeight = columns.includes('choices') ? 25 : 15;
+         
          if (y > doc.page.height - 50) {
            doc.addPage();
            y = drawHeader(30);
@@ -1072,29 +1134,33 @@ export class ExportService {
          let x = 30;
          doc.fontSize(8);
          
-         const rowData: string[] = [];
-         columns.forEach(col => {
-           if (col === 'meritNumber') rowData.push(student.meritNumber.toString());
-           else if (col === 'appNo') rowData.push(student.appNo || '-');
-           else if (col === 'name') rowData.push(student.name);
-           else if (col === 'category') rowData.push(student.category || '-');
-           else if (col === 'gender') rowData.push(student.gender?.substring(0,1) || '-');
-           else if (col === 'stream') rowData.push(student.stream);
+         columns.forEach((col, i) => {
+           let text = '';
+           if (col === 'meritNumber') text = student.meritNumber.toString();
+           else if (col === 'appNo') text = student.appNo || '-';
+           else if (col === 'name') text = student.name;
+           else if (col === 'category') text = student.category || '-';
+           else if (col === 'gender') text = student.gender?.substring(0,1) || '-';
+           else if (col === 'stream') text = student.stream;
            else if (col === 'choices') {
              const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
                student.choice6, student.choice7, student.choice8, student.choice9, student.choice10]
                 .filter(Boolean).map((c, i) => `${i + 1}. ${c}`).join('; ');
-             rowData.push(choices || '-');
+             text = choices || '-';
            }
-           else if (col === 'allottedDistrict') rowData.push(student.allottedDistrict || '-');
-         });
+           else if (col === 'allottedDistrict') text = student.allottedDistrict || '-';
 
-         rowData.forEach((text, i) => {
-           doc.rect(x, y, colWidth, 15).fillAndStroke(idx % 2 === 0 ? '#fafafa' : '#ffffff', '#e5e7eb');
-           doc.fillColor('#374151').text(text, x + 3, y + 4, { width: colWidth - 6, align: 'left', height: 11 });
-           x += colWidth;
+           // Highlight Allotted District and Stream columns
+           const isHighlighted = (col === 'allottedDistrict' || col === 'stream');
+           const bgColor = isHighlighted ? '#e0f2fe' : (idx % 2 === 0 ? '#fafafa' : '#ffffff');
+           const strokeColor = isHighlighted ? '#bae6fd' : '#e5e7eb';
+           const textColor = isHighlighted ? '#0369a1' : '#374151';
+
+           doc.rect(x, y, colWidths[i], rowHeight).fillAndStroke(bgColor, strokeColor);
+           doc.fillColor(textColor).text(text, x + 3, y + 4, { width: colWidths[i] - 6, align: 'left', height: rowHeight - 4 });
+           x += colWidths[i];
          });
-         y += 15;
+         y += rowHeight;
        });
     });
 

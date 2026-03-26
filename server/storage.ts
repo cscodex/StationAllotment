@@ -40,6 +40,12 @@ import {
   type InsertYearSession,
   type AppDocument,
   type InsertAppDocument,
+  vacatedSeats,
+  type VacatedSeat,
+  type InsertVacatedSeat,
+  counselingTitles,
+  type CounselingTitle,
+  type InsertCounselingTitle,
 } from "@shared/schema";
 import { db } from "./db";
 import { appDocuments } from "@shared/schema";
@@ -55,8 +61,8 @@ export interface IStorage {
   updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
 
-  // Student operations
-  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned?: boolean, allocationStatus?: string): Promise<Student[]>;
+  getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned?: boolean, allocationStatus?: string, counselingTitleId?: string): Promise<Student[]>;
+  getStudentsByTitleId(counselingTitleId: string): Promise<Student[]>;
   getStudent(id: string): Promise<Student | undefined>;
   getStudentByMeritNumber(meritNumber: number): Promise<Student | undefined>;
   getStudentsByYearAndRound(academicYear: string, roundNumber: number): Promise<Student[]>;
@@ -64,15 +70,15 @@ export interface IStorage {
   updateStudent(id: string, student: Partial<InsertStudent>): Promise<Student>;
   bulkCreateStudents(students: InsertStudent[], onProgress?: (processed: number, total: number) => void): Promise<Student[]>;
   deleteAllStudents(): Promise<void>;
-  getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned?: boolean, allocationStatus?: string): Promise<number>;
+  getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned?: boolean, allocationStatus?: string, counselingTitleId?: string): Promise<number>;
   getStudentsByStatus(status: string, academicYear?: string): Promise<Student[]>;
 
   // Students entrance result operations
-  getStudentsEntranceResults(limit?: number, offset?: number): Promise<StudentsEntranceResult[]>;
+  getStudentsEntranceResults(limit?: number, offset?: number, counselingTitleId?: string): Promise<StudentsEntranceResult[]>;
   getStudentsEntranceResult(id: string): Promise<StudentsEntranceResult | undefined>;
   getStudentsEntranceResultByMeritNumber(meritNumber: number): Promise<StudentsEntranceResult | undefined>;
-  getStudentsEntranceResultsCount(): Promise<number>;
-  getStudentsEntranceResultsByRound(academicYear: string, roundName: string): Promise<StudentsEntranceResult[]>;
+  getStudentsEntranceResultsCount(counselingTitleId?: string): Promise<number>;
+  getStudentsEntranceResultsByRound(academicYear: string, roundName: string, counselingTitleId?: string): Promise<StudentsEntranceResult[]>;
   searchStudentsEntranceResults(query: string): Promise<StudentsEntranceResult[]>;
   createStudentsEntranceResult(result: InsertStudentsEntranceResult): Promise<StudentsEntranceResult>;
   bulkCreateStudentsEntranceResults(results: InsertStudentsEntranceResult[], onProgress?: (processed: number, total: number) => void): Promise<StudentsEntranceResult[]>;
@@ -96,7 +102,7 @@ export interface IStorage {
   bulkUpsertSchools(schools: InsertSchool[]): Promise<School[]>;
 
   // Counseling round operations
-  getCounselingRounds(academicYear?: string): Promise<CounselingRound[]>;
+  getCounselingRounds(academicYear?: string, counselingTitleId?: string): Promise<CounselingRound[]>;
   getCounselingRound(id: string): Promise<CounselingRound | undefined>;
   getActiveCounselingRound(academicYear?: string): Promise<CounselingRound | undefined>;
   createCounselingRound(round: InsertCounselingRound): Promise<CounselingRound>;
@@ -108,9 +114,9 @@ export interface IStorage {
   getStudentsByCounselingRound(counselingRoundId: string): Promise<Student[]>;
 
   // Vacancy operations
-  getVacancies(academicYear?: string, roundName?: string): Promise<Vacancy[]>;
-  getVacancyByDistrict(district: string, academicYear?: string, roundName?: string): Promise<Vacancy | undefined>;
-  getVacanciesByUdiseCode(udiseCode: string, academicYear?: string, roundName?: string): Promise<Vacancy[]>;
+  getVacancies(academicYear?: string, roundName?: string, counselingTitleId?: string): Promise<Vacancy[]>;
+  getVacancyByDistrict(district: string, academicYear?: string, roundName?: string, counselingTitleId?: string): Promise<Vacancy | undefined>;
+  getVacanciesByUdiseCode(udiseCode: string, academicYear?: string, roundName?: string, counselingTitleId?: string): Promise<Vacancy[]>;
   getVacanciesByYear(academicYear: string, roundName?: string): Promise<Vacancy[]>;
   createVacancy(vacancy: InsertVacancy): Promise<Vacancy>;
   checkIfAllSeatsFilled(academicYear: string, roundName: string): Promise<boolean>;
@@ -133,6 +139,13 @@ export interface IStorage {
   updateVacancy(id: string, vacancy: Partial<InsertVacancy>): Promise<Vacancy>;
   bulkUpsertVacancies(vacancies: InsertVacancy[], onProgress?: (processed: number, total: number) => void): Promise<Vacancy[]>;
   deleteAllVacancies(): Promise<void>;
+
+  // Counseling titles operations
+  getCounselingTitles(academicYear?: string): Promise<CounselingTitle[]>;
+  getCounselingTitle(id: string): Promise<CounselingTitle | undefined>;
+  getCounselingTitleByName(academicYear: string, titleName: string): Promise<CounselingTitle | undefined>;
+  createCounselingTitle(title: InsertCounselingTitle): Promise<CounselingTitle>;
+  updateCounselingTitle(id: string, updates: Partial<InsertCounselingTitle>): Promise<CounselingTitle>;
 
   // Settings operations
   getSetting(key: string): Promise<Setting | undefined>;
@@ -186,7 +199,7 @@ export interface IStorage {
   getPendingUnfinalizeRequests(): Promise<UnfinalizeRequest[]>;
 
   // Statistics
-  getDashboardStats(user?: User, academicYear?: string): Promise<{
+  getDashboardStats(user?: User, academicYear?: string, counselingTitleId?: string): Promise<{
     totalStudents: number;
     totalVacancies: number;
     pendingAllocations: number;
@@ -204,6 +217,10 @@ export interface IStorage {
 
   // Database Health
   pingDatabase(): Promise<void>;
+
+  // Vacated Seats operations
+  insertVacatedSeat(seat: InsertVacatedSeat): Promise<VacatedSeat>;
+  getVacatedSeats(academicYear?: string): Promise<VacatedSeat[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -254,9 +271,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Student operations
-  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned: boolean = false, allocationStatus?: string): Promise<Student[]> {
+  async getStudents(limit?: number, offset?: number, academicYear?: string, roundNumber?: number, districtAdminUsername?: string, excludeUnassigned: boolean = false, allocationStatus?: string, counselingTitleId?: string): Promise<Student[]> {
     const conditions = [];
-    if (academicYear) {
+    if (counselingTitleId) {
+      conditions.push(eq(students.counselingTitleId, counselingTitleId));
+    } else if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
     }
     if (roundNumber !== undefined) {
@@ -300,6 +319,12 @@ export class DatabaseStorage implements IStorage {
         eq(students.academicYear, academicYear),
         eq(students.counselingRoundNumber, roundNumber)
       ))
+      .orderBy(asc(students.meritNumber));
+  }
+
+  async getStudentsByTitleId(counselingTitleId: string): Promise<Student[]> {
+    return db.select().from(students)
+      .where(eq(students.counselingTitleId, counselingTitleId))
       .orderBy(asc(students.meritNumber));
   }
 
@@ -382,9 +407,11 @@ export class DatabaseStorage implements IStorage {
     await db.delete(students);
   }
 
-  async getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned: boolean = false, allocationStatus?: string): Promise<number> {
+  async getStudentsCount(academicYear?: string, districtAdminUsername?: string, excludeUnassigned: boolean = false, allocationStatus?: string, counselingTitleId?: string): Promise<number> {
     const conditions = [];
-    if (academicYear) {
+    if (counselingTitleId) {
+      conditions.push(eq(students.counselingTitleId, counselingTitleId));
+    } else if (academicYear) {
       conditions.push(eq(students.academicYear, academicYear));
     }
     if (allocationStatus) {
@@ -428,9 +455,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Students entrance result operations
-  async getStudentsEntranceResults(limit = 50, offset = 0): Promise<StudentsEntranceResult[]> {
-    return db.select().from(studentsEntranceResult)
-      .orderBy(asc(studentsEntranceResult.meritNo))
+  async getStudentsEntranceResults(limit = 50, offset = 0, counselingTitleId?: string): Promise<StudentsEntranceResult[]> {
+    let query = db.select().from(studentsEntranceResult);
+    if (counselingTitleId) {
+      query.where(eq(studentsEntranceResult.counselingTitleId, counselingTitleId)) as any;
+    }
+    return query.orderBy(asc(studentsEntranceResult.meritNo))
       .limit(limit)
       .offset(offset);
   }
@@ -445,19 +475,26 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getStudentsEntranceResultsCount(): Promise<number> {
-    const [result] = await db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
+  async getStudentsEntranceResultsCount(counselingTitleId?: string): Promise<number> {
+    let query = db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
+    if (counselingTitleId) {
+      query.where(eq(studentsEntranceResult.counselingTitleId, counselingTitleId)) as any;
+    }
+    const [result] = await query;
     return Number(result.count);
   }
 
-  async getStudentsEntranceResultsByRound(academicYear: string, roundName: string): Promise<StudentsEntranceResult[]> {
+  async getStudentsEntranceResultsByRound(academicYear: string, roundName: string, counselingTitleId?: string): Promise<StudentsEntranceResult[]> {
+    const conditions = [];
+    if (counselingTitleId) {
+      conditions.push(eq(studentsEntranceResult.counselingTitleId, counselingTitleId));
+    } else {
+      conditions.push(eq(studentsEntranceResult.academicYear, academicYear));
+      conditions.push(eq(studentsEntranceResult.roundName, roundName));
+    }
+    
     return db.select().from(studentsEntranceResult)
-      .where(
-        and(
-          eq(studentsEntranceResult.academicYear, academicYear),
-          eq(studentsEntranceResult.roundName, roundName)
-        )
-      )
+      .where(and(...conditions))
       .orderBy(asc(studentsEntranceResult.meritNo));
   }
 
@@ -582,10 +619,54 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Counseling round operations
-  async getCounselingRounds(academicYear?: string): Promise<CounselingRound[]> {
-    let rounds: CounselingRound[];
+  // Counseling titles operations
+  async getCounselingTitles(academicYear?: string): Promise<CounselingTitle[]> {
     if (academicYear) {
+      return await db.select().from(counselingTitles)
+        .where(eq(counselingTitles.academicYear, academicYear))
+        .orderBy(desc(counselingTitles.isActive), asc(counselingTitles.titleName));
+    }
+    return await db.select().from(counselingTitles)
+      .orderBy(desc(counselingTitles.academicYear), asc(counselingTitles.titleName));
+  }
+
+  async getCounselingTitle(id: string): Promise<CounselingTitle | undefined> {
+    const [title] = await db.select().from(counselingTitles).where(eq(counselingTitles.id, id));
+    return title;
+  }
+
+  async getCounselingTitleByName(academicYear: string, titleName: string): Promise<CounselingTitle | undefined> {
+    const [title] = await db.select().from(counselingTitles)
+      .where(and(
+        eq(counselingTitles.academicYear, academicYear),
+        eq(counselingTitles.titleName, titleName)
+      ));
+    return title;
+  }
+
+  async createCounselingTitle(title: InsertCounselingTitle): Promise<CounselingTitle> {
+    const [created] = await db.insert(counselingTitles)
+      .values(title)
+      .returning();
+    return created;
+  }
+
+  async updateCounselingTitle(id: string, updates: Partial<InsertCounselingTitle>): Promise<CounselingTitle> {
+    const [updated] = await db.update(counselingTitles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(counselingTitles.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Counseling round operations
+  async getCounselingRounds(academicYear?: string, counselingTitleId?: string): Promise<CounselingRound[]> {
+    let rounds: CounselingRound[];
+    if (counselingTitleId) {
+      rounds = await db.select().from(counselingRounds)
+        .where(eq(counselingRounds.counselingTitleId, counselingTitleId))
+        .orderBy(asc(counselingRounds.roundName), asc(counselingRounds.roundNumber));
+    } else if (academicYear) {
       rounds = await db.select().from(counselingRounds)
         .where(eq(counselingRounds.academicYear, academicYear))
         .orderBy(asc(counselingRounds.roundName), asc(counselingRounds.roundNumber));
@@ -899,13 +980,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Vacancy operations
-  async getVacancies(academicYear?: string, roundName?: string): Promise<Vacancy[]> {
+  async getVacancies(academicYear?: string, roundName?: string, counselingTitleId?: string): Promise<Vacancy[]> {
     const conditions = [];
-    if (academicYear) {
-      conditions.push(eq(vacancies.academicYear, academicYear));
-    }
-    if (roundName) {
-      conditions.push(eq(vacancies.roundName, roundName));
+    if (counselingTitleId) {
+      conditions.push(eq(vacancies.counselingTitleId, counselingTitleId));
+    } else {
+      if (academicYear) {
+        conditions.push(eq(vacancies.academicYear, academicYear));
+      }
+      if (roundName) {
+        conditions.push(eq(vacancies.roundName, roundName));
+      }
     }
 
     if (conditions.length > 0) {
@@ -916,13 +1001,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(vacancies).orderBy(asc(vacancies.district));
   }
 
-  async getVacancyByDistrict(district: string, academicYear?: string, roundName?: string): Promise<Vacancy | undefined> {
+  async getVacancyByDistrict(district: string, academicYear?: string, roundName?: string, counselingTitleId?: string): Promise<Vacancy | undefined> {
     const conditions = [eq(vacancies.district, district)];
-    if (academicYear) {
-      conditions.push(eq(vacancies.academicYear, academicYear));
-    }
-    if (roundName) {
-      conditions.push(eq(vacancies.roundName, roundName));
+    if (counselingTitleId) {
+      conditions.push(eq(vacancies.counselingTitleId, counselingTitleId));
+    } else {
+      if (academicYear) {
+        conditions.push(eq(vacancies.academicYear, academicYear));
+      }
+      if (roundName) {
+        conditions.push(eq(vacancies.roundName, roundName));
+      }
     }
     const [vacancy] = await db.select().from(vacancies)
       .where(and(...conditions));
@@ -1222,13 +1311,17 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getVacanciesByUdiseCode(udiseCode: string, academicYear?: string, roundName?: string): Promise<Vacancy[]> {
+  async getVacanciesByUdiseCode(udiseCode: string, academicYear?: string, roundName?: string, counselingTitleId?: string): Promise<Vacancy[]> {
     const conditions = [eq(vacancies.udiseCode, udiseCode)];
-    if (academicYear) {
-      conditions.push(eq(vacancies.academicYear, academicYear));
-    }
-    if (roundName) {
-      conditions.push(eq(vacancies.roundName, roundName));
+    if (counselingTitleId) {
+      conditions.push(eq(vacancies.counselingTitleId, counselingTitleId));
+    } else {
+      if (academicYear) {
+        conditions.push(eq(vacancies.academicYear, academicYear));
+      }
+      if (roundName) {
+        conditions.push(eq(vacancies.roundName, roundName));
+      }
     }
     if (conditions.length > 0) {
       return db.select().from(vacancies)
@@ -1322,7 +1415,7 @@ export class DatabaseStorage implements IStorage {
 
   // Statistics
   // Statistics
-  async getDashboardStats(user?: import("@shared/schema").User, academicYear?: string): Promise<{
+  async getDashboardStats(user?: import("@shared/schema").User, academicYear?: string, counselingTitleId?: string): Promise<{
     totalStudents: number;
     totalVacancies: number;
     pendingAllocations: number;
@@ -1350,13 +1443,16 @@ export class DatabaseStorage implements IStorage {
       let q = db.select({ count: sql<number>`count(*)` }).from(students);
       const conditions = [];
       if (districtFilter) conditions.push(eq(students.counselingDistrict, districtFilter));
-      if (academicYear) conditions.push(eq(students.academicYear, academicYear));
+      if (counselingTitleId) conditions.push(eq(students.counselingTitleId, counselingTitleId));
+      else if (academicYear) conditions.push(eq(students.academicYear, academicYear));
       
       const [res] = conditions.length > 0 ? await q.where(and(...conditions)) : await q;
       totalStudents = Number(res.count);
     } else {
       let q = db.select({ count: sql<number>`count(*)` }).from(studentsEntranceResult);
-      if (academicYear) {
+      if (counselingTitleId) {
+        q = q.where(eq(studentsEntranceResult.counselingTitleId, counselingTitleId)) as any;
+      } else if (academicYear) {
         q = q.where(eq(studentsEntranceResult.academicYear, academicYear)) as any;
       }
       const [res] = await q;
@@ -1368,7 +1464,8 @@ export class DatabaseStorage implements IStorage {
       let q = db.select({ count: sql<number>`count(*)` }).from(students);
       const conditions = [];
       if (isDistrictAdmin && districtFilter) conditions.push(eq(students.counselingDistrict, districtFilter));
-      if (academicYear) conditions.push(eq(students.academicYear, academicYear));
+      if (counselingTitleId) conditions.push(eq(students.counselingTitleId, counselingTitleId));
+      else if (academicYear) conditions.push(eq(students.academicYear, academicYear));
       if (extraCondition) conditions.push(extraCondition);
       
       const [res] = conditions.length > 0 ? await q.where(and(...conditions)) : await q;
@@ -1390,7 +1487,8 @@ export class DatabaseStorage implements IStorage {
     let qV = db.select({ total: sql<number>`sum(total_seats)` }).from(vacancies);
     const vConditions = [];
     if (isDistrictAdmin && districtFilter) vConditions.push(eq(vacancies.district, districtFilter));
-    if (academicYear) vConditions.push(eq(vacancies.academicYear, academicYear));
+    if (counselingTitleId) vConditions.push(eq(vacancies.counselingTitleId, counselingTitleId));
+    else if (academicYear) vConditions.push(eq(vacancies.academicYear, academicYear));
     
     const vacancyResults = vConditions.length > 0 ? await qV.where(and(...vConditions)) : await qV;
     const totalVacancies = Number(vacancyResults[0]?.total || 0);
@@ -1407,7 +1505,8 @@ export class DatabaseStorage implements IStorage {
     let qS = db.select({ stream: students.stream, count: sql<number>`count(*)` }).from(students);
     const sConditions = [isNotNull(students.stream)];
     if (isDistrictAdmin && districtFilter) sConditions.push(eq(students.counselingDistrict, districtFilter));
-    if (academicYear) sConditions.push(eq(students.academicYear, academicYear));
+    if (counselingTitleId) sConditions.push(eq(students.counselingTitleId, counselingTitleId));
+    else if (academicYear) sConditions.push(eq(students.academicYear, academicYear));
     
     const streamGroups = await qS.where(and(...sConditions)).groupBy(students.stream);
     
@@ -1426,7 +1525,8 @@ export class DatabaseStorage implements IStorage {
     }).from(students);
     
     const dConditions = [isNotNull(students.counselingDistrict)];
-    if (academicYear) dConditions.push(eq(students.academicYear, academicYear));
+    if (counselingTitleId) dConditions.push(eq(students.counselingTitleId, counselingTitleId));
+    else if (academicYear) dConditions.push(eq(students.academicYear, academicYear));
     
     const districtGroups = await qD.where(and(...dConditions)).groupBy(students.counselingDistrict, students.isLocked);
 
@@ -1925,6 +2025,19 @@ export class DatabaseStorage implements IStorage {
       .values(doc)
       .returning();
     return created;
+  }
+
+  // Vacated Seats Operations
+  async insertVacatedSeat(seat: InsertVacatedSeat): Promise<VacatedSeat> {
+    const [result] = await db.insert(vacatedSeats).values(seat).returning();
+    return result;
+  }
+
+  async getVacatedSeats(academicYear?: string): Promise<VacatedSeat[]> {
+    if (academicYear) {
+      return await db.select().from(vacatedSeats).where(eq(vacatedSeats.academicYear, academicYear));
+    }
+    return await db.select().from(vacatedSeats);
   }
 }
 

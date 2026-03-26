@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
-import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
+import { useGlobalLoading } from "@/hooks/useGlobalLoading";
+import { useCounseling } from "@/hooks/useCounseling";
 import AllocationModal from "@/components/modals/allocation-modal";
 import ResetModal from "@/components/modals/reset-modal";
 import {
@@ -36,7 +37,8 @@ import {
   FileSpreadsheet,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Camera
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -206,13 +208,14 @@ export default function CounselingRounds() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>("");
+  const { activeSession: selectedAcademicYear, activeTitle } = useCounseling();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingRound, setEditingRound] = useState<CounselingRound | null>(null);
   const [editStartDate, setEditStartDate] = useState<string>("");
   const [allocationModalOpen, setAllocationModalOpen] = useState(false);
   const [allocationRoundId, setAllocationRoundId] = useState<string | null>(null);
   const [resetRoundId, setResetRoundId] = useState<string | null>(null);
+  const { setLoading } = useGlobalLoading();
   const [selectedRoundIds, setSelectedRoundIds] = useState<string[]>([]);
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
 
@@ -224,19 +227,6 @@ export default function CounselingRounds() {
       return next;
     });
   };
-  // Fetch current session
-  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-    queryKey: ["/api/session/current"],
-    enabled: true,
-  });
-  const currentSession = currentSessionData?.currentSession || "";
-
-  // Set selected academic year to current session when loaded
-  useEffect(() => {
-    if (currentSession && !selectedAcademicYear) {
-      setSelectedAcademicYear(currentSession);
-    }
-  }, [currentSession, selectedAcademicYear]);
 
   const form = useForm<CreateTitleForm>({
     resolver: zodResolver(createTitleSchema),
@@ -255,10 +245,10 @@ export default function CounselingRounds() {
 
   // Fetch counseling rounds
   const { data: rounds, isLoading, error, refetch } = useQuery<CounselingRound[]>({
-    queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }],
+    queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear, counselingTitleId: activeTitle?.id }],
     queryFn: async ({ queryKey }) => {
-      if (!selectedAcademicYear) return [];
-      const url = `/api/counseling-rounds?academicYear=${encodeURIComponent(selectedAcademicYear)}`;
+      if (!selectedAcademicYear || !activeTitle?.id) return [];
+      const url = `/api/counseling-rounds?academicYear=${encodeURIComponent(selectedAcademicYear)}&counselingTitleId=${encodeURIComponent(activeTitle.id)}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) {
         const errorText = await res.text();
@@ -384,12 +374,12 @@ export default function CounselingRounds() {
 
   const spawnNextRoundMutation = useMutation({
     mutationFn: async (roundName: string) => {
-      if (!selectedAcademicYear) throw new Error("Academic year not selected");
-      const res = await apiRequest("POST", `/api/counseling-titles/${encodeURIComponent(selectedAcademicYear)}/${encodeURIComponent(roundName)}/next`, {});
+      if (!selectedAcademicYear || !activeTitle?.id) throw new Error("Academic year or title not selected");
+      const res = await apiRequest("POST", `/api/counseling-titles/${encodeURIComponent(activeTitle.id)}/next`, {});
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear }] });
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-rounds", { academicYear: selectedAcademicYear, counselingTitleId: activeTitle?.id }] });
       refetch();
       toast({
         title: "Next Round Created",
@@ -614,10 +604,21 @@ export default function CounselingRounds() {
     }
   };
 
-  const exportSelectedRounds = (format: 'csv' | 'pdf') => {
+  const exportSelectedRounds = async (format: 'csv' | 'pdf') => {
     if (selectedRoundIds.length === 0) return;
-    const idsParams = selectedRoundIds.join(',');
-    window.open(`/api/export/counseling/${format}?roundIds=${idsParams}`, '_blank');
+    try {
+      setLoading(true, `Generating ${format.toUpperCase()} Export...`);
+      const idsParams = selectedRoundIds.join(',');
+      const resp = await fetch(`/api/export/counseling/${format}?roundIds=${idsParams}`);
+      const blob = await resp.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch(e) {
+      console.error(e);
+      toast({ title: "Error", description: "Failed to export selected rounds", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Removed restrictive central admin block to allow read-only access for district admins
@@ -636,36 +637,7 @@ export default function CounselingRounds() {
       <main className="flex-1 p-6 overflow-auto">
         <div className="space-y-6">
           {/* Academic Year Selector */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Calendar className="w-5 h-5 mr-2" />
-                Select Academic Year
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <AcademicYearSelector
-                  value={selectedAcademicYear}
-                  onValueChange={setSelectedAcademicYear}
-                  className="max-w-xs"
-                />
-                {currentSession && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>
-                      <strong>Note:</strong> You can only create counseling rounds and run allocations for the current session ({currentSession}).
-                      {selectedAcademicYear && selectedAcademicYear !== currentSession && (
-                        <span className="text-destructive ml-1">
-                          Selected year is not the current session.
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+
 
           {/* Rounds List */}
           {selectedAcademicYear && (
@@ -812,6 +784,26 @@ export default function CounselingRounds() {
                                         }} disabled={finalizeRoundMutation.isPending}
                                       >
                                         <ShieldCheck className="w-3 h-3 mr-1" /> Finalize
+                                      </Button>
+                                    )}
+
+                                    {/* Snapshot Download for finalized rounds */}
+                                    {round.isAllocationFinalized && (
+                                      <Button
+                                        size="sm" variant="outline" className="h-7 text-xs border-emerald-200 text-emerald-700"
+                                        onClick={async () => {
+                                          setLoading(true, 'Generating Snapshot PDF...');
+                                          try {
+                                            const resp = await fetch(`/api/counseling-rounds/${round.id}/snapshot?format=pdf`);
+                                            const blob = await resp.blob();
+                                            const url = window.URL.createObjectURL(blob);
+                                            window.open(url, '_blank');
+                                          } catch (e) { console.error(e); }
+                                          finally { setLoading(false); }
+                                        }}
+                                        title="Download Snapshot Report"
+                                      >
+                                        <Camera className="w-3 h-3 mr-1" /> Snapshot
                                       </Button>
                                     )}
 
@@ -978,9 +970,31 @@ export default function CounselingRounds() {
                                     >
                                       <ShieldCheck className="w-4 h-4" />
                                     </Button>
-                                  )}
-                                  
-                                  {/* Check if latest round for this title and finalized to spawn next */}
+                                   )}
+                                   
+                                   {/* Snapshot Download for finalized rounds (Desktop) */}
+                                   {round.isAllocationFinalized && (
+                                     <Button
+                                       size="icon"
+                                       variant="outline"
+                                       onClick={async () => {
+                                         setLoading(true, 'Generating Snapshot PDF...');
+                                         try {
+                                           const resp = await fetch(`/api/counseling-rounds/${round.id}/snapshot?format=pdf`);
+                                           const blob = await resp.blob();
+                                           const url = window.URL.createObjectURL(blob);
+                                           window.open(url, '_blank');
+                                         } catch (e) { console.error(e); }
+                                         finally { setLoading(false); }
+                                       }}
+                                       className="border-emerald-300 text-emerald-600 hover:bg-emerald-50 h-8 w-8"
+                                       title="Download Snapshot Report"
+                                     >
+                                       <Camera className="w-4 h-4" />
+                                     </Button>
+                                   )}
+
+                                   {/* Check if latest round for this title and finalized to spawn next */}
                                   {(round.isCompleted || round.isAllocationFinalized) && 
                                    rounds.filter(r => r.roundName === round.roundName).every(r => r.roundNumber <= round.roundNumber) && (
                                    <Button
@@ -1061,11 +1075,7 @@ export default function CounselingRounds() {
                     <FormItem>
                       <FormLabel>Academic Year</FormLabel>
                       <FormControl>
-                        <AcademicYearSelector
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          showLabel={false}
-                        />
+                        <Input {...field} disabled />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

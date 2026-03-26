@@ -942,6 +942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const allocated = req.query.allocated === 'true';
       const allocationStatus = req.query.allocationStatus as string | undefined;
       const academicYear = req.query.academicYear as string | undefined;
+      const counselingTitleId = req.query.counselingTitleId as string | undefined;
       const roundNumber = req.query.roundNumber ? parseInt(req.query.roundNumber as string) : undefined;
       const user = await storage.getUser(req.session.userId);
 
@@ -962,8 +963,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const districtAdminUsername = user?.role === 'district_admin' ? user.username : undefined;
-      students = await storage.getStudents(limit, offset, academicYear, roundNumber, districtAdminUsername, isFinalized, allocationStatus);
-      total = await storage.getStudentsCount(academicYear, districtAdminUsername, isFinalized, allocationStatus);
+      students = await storage.getStudents(limit, offset, academicYear, roundNumber, districtAdminUsername, isFinalized, allocationStatus, counselingTitleId);
+      total = await storage.getStudentsCount(academicYear, districtAdminUsername, isFinalized, allocationStatus, counselingTitleId);
 
       // Map database fields to frontend expected fields
       // gender and category are already native columns on the students table
@@ -1153,6 +1154,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user?.role === 'central_admin') {
         preferences.counselingDistrict = 'SAS Nagar (Mohali)';
         preferences.districtAdmin = 'Central_admin';
+      }
+
+      const existingStudent = await storage.getStudent(id);
+      if (existingStudent && (existingStudent.allocationStatus === 'not_allotted' || existingStudent.allocationStatus === 'vacated')) {
+        preferences.allocationStatus = 'pending';
+        preferences.counselingRoundId = null;
+        preferences.counselingRoundNumber = null;
       }
 
       const student = await storage.updateStudent(id, preferences);
@@ -1446,6 +1454,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk unlock choices
+  app.post('/api/students/bulk-unlock-choices', isAuthenticated, async (req: any, res) => {
+    try {
+      const { studentIds } = req.body;
+      const user = await storage.getUser(req.session.userId);
+
+      if (user?.role !== 'central_admin') return res.status(403).json({ message: "Only central admin can unlock students" });
+      if (!Array.isArray(studentIds) || studentIds.length === 0) return res.status(400).json({ message: "No students provided" });
+
+      for (const id of studentIds) {
+        await storage.updateStudent(id, { isLocked: false, lockedBy: null });
+      }
+
+      await auditService.log(req.session.userId, 'bulk_student_unlock', 'students', 'multiple', {
+        unlockedBy: req.session.userId,
+        count: studentIds.length
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: `${studentIds.length} students unlocked successfully` });
+    } catch (error) {
+      console.error("Bulk student unlock error:", error);
+      res.status(500).json({ message: "Failed to unlock students" });
+    }
+  });
+
+  // Vacate Seat
+  app.post('/api/students/:id/vacate', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reason, comment } = req.body;
+      const user = await storage.getUser(req.session.userId);
+
+      const student = await storage.getStudent(id);
+      if (!student || student.allocationStatus !== 'allotted') {
+        return res.status(400).json({ message: "Student is not currently allotted a seat" });
+      }
+
+      await storage.insertVacatedSeat({
+        studentId: student.id,
+        appNo: student.appNo || '',
+        meritNumber: student.meritNumber,
+        studentName: student.name,
+        gender: student.gender || '',
+        category: student.category || '',
+        stream: student.stream,
+        vacatedDistrict: student.allottedDistrict || '',
+        vacatedStream: student.allottedStream || '',
+        reason: reason || 'Unknown',
+        comment: comment || '',
+        academicYear: student.academicYear || '',
+        counselingRoundId: student.counselingRoundId
+      });
+
+      const updatedStudent = await storage.updateStudent(id, { 
+        allocationStatus: 'vacated',
+        allottedDistrict: null,
+        allottedStream: null,
+        allottedSchoolUdise: null
+      });
+
+      await auditService.log(req.session.userId, 'student_vacated', 'students', id, {
+        reason,
+        vacatedDistrict: student.allottedDistrict
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student vacate error:", error);
+      res.status(500).json({ message: "Failed to vacate seat" });
+    }
+  });
+
+  // Bulk Vacate Seat
+  app.post('/api/students/bulk-vacate', isAuthenticated, async (req: any, res) => {
+    try {
+      const { studentIds, reason, comment } = req.body;
+      const user = await storage.getUser(req.session.userId);
+
+      if (!Array.isArray(studentIds) || studentIds.length === 0) return res.status(400).json({ message: "No students provided" });
+
+      for (const id of studentIds) {
+        const student = await storage.getStudent(id);
+        if (student && student.allocationStatus === 'allotted') {
+          await storage.insertVacatedSeat({
+            studentId: student.id,
+            appNo: student.appNo || '',
+            meritNumber: student.meritNumber,
+            studentName: student.name,
+            gender: student.gender || '',
+            category: student.category || '',
+            stream: student.stream,
+            vacatedDistrict: student.allottedDistrict || '',
+            vacatedStream: student.allottedStream || '',
+            reason: reason || 'Unknown',
+            comment: comment || '',
+            academicYear: student.academicYear || '',
+            counselingRoundId: student.counselingRoundId
+          });
+
+          await storage.updateStudent(id, { 
+            allocationStatus: 'vacated',
+            allottedDistrict: null,
+            allottedStream: null,
+            allottedSchoolUdise: null
+          });
+        }
+      }
+
+      await auditService.log(req.session.userId, 'bulk_student_vacated', 'students', 'multiple', {
+        reason,
+        count: studentIds.length
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: `${studentIds.length} seats vacated successfully` });
+    } catch (error) {
+      console.error("Bulk student vacate error:", error);
+      res.status(500).json({ message: "Failed to vacate seats" });
+    }
+  });
+
   // Finalize allocation process
   app.post('/api/allocation/finalize', isCentralAdmin, async (req: any, res) => {
     try {
@@ -1498,11 +1626,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const currentTime = new Date();
 
+      // Fetch exact current state of all students for snapshotting
+      const currentStudents = await storage.getStudents(10000, 0, academicYear);
+      // We take a full snapshot backup of all processed statuses
+      const snapshotStudents = currentStudents.filter(s => 
+        s.allocationStatus === 'allotted' || 
+        s.allocationStatus === 'vacated' || 
+        s.allocationStatus === 'not_allotted'
+      );
+
       // Set allocation as finalized on the active round
       await storage.updateCounselingRound(activeRound.id, {
         isAllocationFinalized: true,
         allocationFinalizedAt: currentTime,
-        allocationFinalizedBy: req.session.userId
+        allocationFinalizedBy: req.session.userId,
+        snapshotData: snapshotStudents
       });
 
       // Automatically finalize SAS Nagar (Mohali) district when allocation is finalized
@@ -1754,9 +1892,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
+      const counselingTitleId = req.query.counselingTitleId as string | undefined;
 
-      const results = await storage.getStudentsEntranceResults(limit, offset);
-      const total = await storage.getStudentsEntranceResultsCount();
+      const results = await storage.getStudentsEntranceResults(limit, offset, counselingTitleId);
+      const total = await storage.getStudentsEntranceResultsCount(counselingTitleId);
 
       res.json({ students: results, total });
     } catch (error) {
@@ -1912,42 +2051,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create next round for an existing title
-  app.post('/api/counseling-titles/:academicYear/:roundName/next', isCentralAdmin, async (req: any, res) => {
+  app.post('/api/counseling-titles/:id/next', isCentralAdmin, async (req: any, res) => {
     try {
-      const { academicYear, roundName } = req.params;
-      const decodedYear = decodeURIComponent(academicYear);
-      const decodedName = decodeURIComponent(roundName);
+      const titleId = req.params.id;
+
+      console.log(`[NextRound] Params: titleId="${titleId}"`);
 
       // Verify vacancies
-      const vacancies = await storage.getVacancies(decodedYear);
-      const titleVacancies = vacancies.filter(v => v.roundName === decodedName);
+      const titleVacancies = await storage.getVacancies(undefined, undefined, titleId);
+      console.log(`[NextRound] Found: ${titleVacancies.length} vacancies`);
       
-      let totalOriginalSeats = 0;
+      let totalAvailableSeats = 0;
       titleVacancies.forEach(v => {
-        totalOriginalSeats += (v.availableSeats || 0);
+        totalAvailableSeats += (v.availableSeats || 0);
       });
+      console.log(`[NextRound] Total available seats: ${totalAvailableSeats}`);
 
-      // Get allocated students for this title
-      const allRounds = await storage.getCounselingRounds(decodedYear);
-      const titleRounds = allRounds.filter((r: any) => r.roundName === decodedName);
+      const titleRounds = await storage.getCounselingRounds(undefined, titleId);
+      console.log(`[NextRound] Found ${titleRounds.length} rounds, statuses: ${titleRounds.map((r: any) => `R${r.roundNumber}:fin=${r.isAllocationFinalized},comp=${r.isCompleted}`).join(', ')}`);
       
       if (titleRounds.length === 0) {
+        console.log(`[NextRound] REJECTED: No rounds found`);
         return res.status(404).json({ message: "Counseling title not found" });
       }
 
-      const titleRoundIds = titleRounds.map((r: any) => r.id);
-      const allStudents = await storage.getStudents(10000, 0);
-      
-      let totalAllotted = 0;
-      allStudents.forEach(s => {
-        if (s.counselingRoundId && titleRoundIds.includes(s.counselingRoundId) && s.allocationStatus === 'allotted') {
-          totalAllotted++;
-        }
-      });
-
-      const remainingVacancies = totalOriginalSeats - totalAllotted;
-      
-      if (totalOriginalSeats > 0 && remainingVacancies <= 0) {
+      if (titleVacancies.length > 0 && totalAvailableSeats <= 0) {
+        console.log(`[NextRound] REJECTED: ${titleVacancies.length} vacancies but 0 available seats`);
         return res.status(400).json({ message: "Cannot create next round: All vacancies have been filled." });
       }
 
@@ -1964,11 +2093,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateCounselingRound(latestRound.id, { isActive: false });
       }
 
+      const title = await storage.getCounselingTitle(titleId);
+      if (!title) {
+        return res.status(404).json({ message: "Counseling title not found" });
+      }
+
       // Spawn new round
       const newRoundNumber = maxRoundNum + 1;
       const newRound = await storage.createCounselingRound({
-        academicYear: decodedYear,
-        roundName: decodedName,
+        academicYear: title.academicYear,
+        counselingTitleId: titleId,
+        roundName: title.titleName,
         roundNumber: newRoundNumber,
         startDate: new Date(),
         endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0],
@@ -2084,7 +2219,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Vacancies routes
   app.get('/api/vacancies', isAuthenticated, async (req, res) => {
     try {
-      const vacancies = await storage.getVacancies();
+      const counselingTitleId = req.query.counselingTitleId as string | undefined;
+      const vacancies = await storage.getVacancies(undefined, undefined, counselingTitleId);
       res.json(vacancies);
     } catch (error) {
       console.error("Get vacancies error:", error);
@@ -2095,8 +2231,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Counseling Rounds API
   app.get('/api/counseling-rounds', isAuthenticated, async (req: any, res) => {
     try {
-      const { academicYear } = req.query;
-      const rounds = await storage.getCounselingRounds(academicYear as string);
+      const { academicYear, counselingTitleId } = req.query;
+      const rounds = await storage.getCounselingRounds(academicYear as string, counselingTitleId as string);
       res.json(rounds);
     } catch (error) {
       console.error("Fetch counseling rounds error:", error);
@@ -2398,7 +2534,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/counseling-titles', isCentralAdmin, async (req: any, res) => {
+  // ─── Counseling Titles API ───
+  app.get('/api/counseling-titles', async (req, res) => {
+    try {
+      const { academicYear } = req.query;
+      const titles = await storage.getCounselingTitles(academicYear as string | undefined);
+      res.json(titles);
+    } catch (error) {
+      console.error("Get titles error:", error);
+      res.status(500).json({ message: "Failed to fetch counseling titles" });
+    }
+  });
+
+  app.get('/api/counseling-titles/active', async (req, res) => {
+    try {
+      const { academicYear } = req.query;
+      const titles = await storage.getCounselingTitles(academicYear as string | undefined);
+      // Only active ones
+      res.json(titles.filter(t => t.isActive));
+    } catch (error) {
+      console.error("Get active titles error:", error);
+      res.status(500).json({ message: "Failed to fetch active counseling titles" });
+    }
+  });
+
+  app.post('/api/counseling-titles/legacy', isCentralAdmin, async (req: any, res) => {
     try {
       const { academicYear, roundName } = req.body;
       if (!academicYear || !roundName) return res.status(400).json({ message: "Year and Title required" });
@@ -2716,11 +2876,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/allocation/stats', isAuthenticated, async (req, res) => {
     try {
+      const { counselingTitleId } = req.query;
       // Get total students from entrance results (all students)
-      const totalEntranceResults = await storage.getStudentsEntranceResultsCount();
+      const totalEntranceResults = await storage.getStudentsEntranceResultsCount(counselingTitleId as string);
 
       // Get students with allocation data (only those with preferences set)
-      const students = await storage.getStudents(10000, 0);
+      const students = await storage.getStudents(10000, 0, undefined, undefined, undefined, undefined, undefined, counselingTitleId as string);
       const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
       const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
       const pendingStudents = students.filter(s => s.allocationStatus === 'pending');
@@ -2748,6 +2909,277 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get allocation stats error:", error);
       res.status(500).json({ message: "Failed to fetch allocation stats" });
+    }
+  });
+
+  // Download snapshot report for a finalized counseling round
+  app.get('/api/counseling-rounds/:id/snapshot', isAuthenticated, async (req: any, res) => {
+    try {
+      const round = await storage.getCounselingRound(req.params.id);
+      if (!round) {
+        return res.status(404).json({ message: "Counseling round not found" });
+      }
+      if (!round.isAllocationFinalized) {
+        return res.status(400).json({ message: "Round is not finalized yet" });
+      }
+
+      // If snapshotData is null, regenerate from live data and backfill
+      let snapshotStudents: any[];
+      if (!round.snapshotData) {
+        console.log(`[Snapshot] No snapshot data for round ${round.id}, regenerating from live data...`);
+        const liveStudents = await storage.getStudents(10000, 0, round.academicYear);
+        snapshotStudents = liveStudents.filter(s => 
+          s.allocationStatus === 'allotted' || 
+          s.allocationStatus === 'vacated' || 
+          s.allocationStatus === 'not_allotted'
+        );
+        // Backfill the snapshot column so it's available next time
+        await storage.updateCounselingRound(round.id, { snapshotData: snapshotStudents });
+        console.log(`[Snapshot] Backfilled ${snapshotStudents.length} students into snapshotData for round ${round.id}`);
+      } else {
+        snapshotStudents = round.snapshotData as any[];
+      }
+
+      const format = (req.query.format as string) || 'csv';
+
+      if (format === 'csv') {
+        const headers = ['Merit No', 'App No', 'Name', 'Gender', 'Category', 'Stream',
+          'Choice 1', 'Choice 2', 'Choice 3', 'Choice 4', 'Choice 5',
+          'Choice 6', 'Choice 7', 'Choice 8', 'Choice 9', 'Choice 10',
+          'Allotted District', 'Allotted Stream', 'Status', 'Round'];
+
+        const rows = snapshotStudents.map(s => [
+          s.meritNumber, s.appNo || '', s.name, s.gender || '', s.category || '', s.stream || '',
+          s.choice1 || '', s.choice2 || '', s.choice3 || '', s.choice4 || '', s.choice5 || '',
+          s.choice6 || '', s.choice7 || '', s.choice8 || '', s.choice9 || '', s.choice10 || '',
+          s.allottedDistrict || '', s.allottedStream || '', s.allocationStatus || '', s.counselingRoundNumber || ''
+        ]);
+
+        const csvContent = [
+          headers.join(','),
+          ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="snapshot-${round.roundName}-R${round.roundNumber}.csv"`);
+        return res.send(csvContent);
+      }
+
+      // PDF format
+      const PDFDocument = (await import('pdfkit')).default;
+      const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="snapshot-${round.roundName}-R${round.roundNumber}.pdf"`);
+      doc.pipe(res);
+
+      // ─── FETCH VACANCY DATA FOR TOTAL SEATS ───
+      const vacancyData = await storage.getVacancies(round.academicYear, round.roundName || undefined);
+
+      // ─── PAGE 1: SUMMARY MATRIX ───
+      doc.fontSize(16).fillColor('#111827').text(`Snapshot Report: ${round.roundName} — Round ${round.roundNumber}`, { align: 'center' }).moveDown(0.3);
+      const dateStr = round.allocationFinalizedAt ? new Date(round.allocationFinalizedAt as any).toLocaleString('en-IN') : 'N/A';
+      doc.fontSize(9).fillColor('#64748b').text(`Finalized: ${dateStr}  |  Total Students Processed: ${snapshotStudents.length}`, { align: 'center' }).moveDown(0.8);
+
+      const allotted = snapshotStudents.filter((s: any) => s.allocationStatus === 'allotted');
+      const notAllotted = snapshotStudents.filter((s: any) => s.allocationStatus === 'not_allotted');
+      const vacated = snapshotStudents.filter((s: any) => s.allocationStatus === 'vacated');
+
+      // Build summary matrix: District → Stream → Gender → Category → { allotted, total }
+      const categories = ['Open', 'WHH', 'Disabled', 'Private'];
+      const genders = ['Male', 'Female'];
+      const streams = Array.from(new Set(snapshotStudents.map((s: any) => s.stream).filter(Boolean))) as string[];
+      const districts = Array.from(new Set(snapshotStudents.map((s: any) => s.allottedDistrict || s.counselingDistrict).filter(Boolean))) as string[];
+      districts.sort();
+
+      // Build total seats map from vacancies
+      const totalSeatsMap: Record<string, number> = {};
+      vacancyData.forEach((v: any) => {
+        const key = `${v.district}|${v.stream}|${v.gender}|${v.category}`;
+        totalSeatsMap[key] = (totalSeatsMap[key] || 0) + (v.totalSeats || 0);
+      });
+
+      // Build allotted counts map from snapshot
+      const allottedMap: Record<string, number> = {};
+      allotted.forEach((s: any) => {
+        const dist = s.allottedDistrict || '';
+        const key = `${dist}|${s.stream}|${s.gender}|${s.category}`;
+        allottedMap[key] = (allottedMap[key] || 0) + 1;
+      });
+
+      // ─── OVERALL SUMMARY BAR ───
+      doc.fontSize(11).fillColor('#1e293b');
+      const summaryY = doc.y;
+      const barHeight = 22;
+      const barWidth = 780;
+      const barX = 30;
+      doc.rect(barX, summaryY, barWidth, barHeight).fillAndStroke('#f0fdf4', '#bbf7d0');
+      doc.fontSize(10).fillColor('#166534').text(
+        `✓ Allotted: ${allotted.length}     ✗ Not Allotted: ${notAllotted.length}     ⊘ Vacated: ${vacated.length}     ═ Total: ${snapshotStudents.length}`,
+        barX + 10, summaryY + 6, { width: barWidth - 20, align: 'center' }
+      );
+      doc.y = summaryY + barHeight + 12;
+
+      // ─── MATRIX TABLE: Per-District, Gender × Category ───
+      // Column layout: District | Stream | M-Open | M-WHH | M-Dis | M-Pvt | F-Open | F-WHH | F-Dis | F-Pvt | Total
+      const mCols = [
+        { label: 'District', width: 90 },
+        { label: 'Stream', width: 65 },
+      ];
+      genders.forEach(g => {
+        categories.forEach(c => {
+          mCols.push({ label: `${g.charAt(0)}-${c.substring(0, 3)}`, width: 52 });
+        });
+      });
+      mCols.push({ label: 'Total', width: 50 });
+      
+      const totalTableWidth = mCols.reduce((s, c) => s + c.width, 0);
+      
+      // Draw matrix header
+      doc.fontSize(9).fillColor('#334155').text('Allotted / Total Seats Matrix by District, Stream, Gender & Category', 30, doc.y, { align: 'left' }).moveDown(0.3);
+
+      const drawMatrixHeader = (yPos: number) => {
+        let xPos = 30;
+        mCols.forEach(col => {
+          doc.rect(xPos, yPos, col.width, 16).fillAndStroke('#1e293b', '#0f172a');
+          doc.fontSize(6.5).fillColor('#ffffff').text(col.label, xPos + 2, yPos + 4, { width: col.width - 4, align: 'center' });
+          xPos += col.width;
+        });
+        return yPos + 16;
+      };
+
+      let my = drawMatrixHeader(doc.y);
+
+      // Grand totals
+      const grandTotals: Record<string, { allotted: number; total: number }> = {};
+      genders.forEach(g => categories.forEach(c => {
+        grandTotals[`${g}|${c}`] = { allotted: 0, total: 0 };
+      }));
+      let globalAllotted = 0;
+      let globalTotal = 0;
+
+      // Per-district rows
+      let rowIdx = 0;
+      districts.forEach(district => {
+        streams.forEach(stream => {
+          if (my > doc.page.height - 50) {
+            doc.addPage();
+            my = drawMatrixHeader(30);
+          }
+
+          let xPos = 30;
+          const bgColor = rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+          let rowAllotted = 0;
+          let rowTotal = 0;
+
+          // District cell
+          doc.rect(xPos, my, mCols[0].width, 14).fillAndStroke(bgColor, '#e2e8f0');
+          doc.fontSize(6).fillColor('#1e293b').text(district.length > 14 ? district.substring(0, 14) + '…' : district, xPos + 2, my + 4, { width: mCols[0].width - 4, align: 'left' });
+          xPos += mCols[0].width;
+
+          // Stream cell
+          doc.rect(xPos, my, mCols[1].width, 14).fillAndStroke(bgColor, '#e2e8f0');
+          doc.fontSize(6).fillColor('#475569').text(stream, xPos + 2, my + 4, { width: mCols[1].width - 4, align: 'center' });
+          xPos += mCols[1].width;
+
+          // Gender × Category cells
+          let colIdx = 2;
+          genders.forEach(g => {
+            categories.forEach(c => {
+              const key = `${district}|${stream}|${g}|${c}`;
+              const a = allottedMap[key] || 0;
+              const t = totalSeatsMap[key] || 0;
+              rowAllotted += a;
+              rowTotal += t;
+              grandTotals[`${g}|${c}`].allotted += a;
+              grandTotals[`${g}|${c}`].total += t;
+
+              const cellBg = a > 0 && a >= t ? '#dcfce7' : a > 0 ? '#fef9c3' : bgColor;
+              doc.rect(xPos, my, mCols[colIdx].width, 14).fillAndStroke(cellBg, '#e2e8f0');
+              doc.fontSize(6).fillColor(a > 0 ? '#166534' : '#94a3b8').text(`${a}/${t}`, xPos + 2, my + 4, { width: mCols[colIdx].width - 4, align: 'center' });
+              xPos += mCols[colIdx].width;
+              colIdx++;
+            });
+          });
+
+          globalAllotted += rowAllotted;
+          globalTotal += rowTotal;
+
+          // Total cell
+          const totalBg = rowAllotted > 0 ? '#dbeafe' : bgColor;
+          doc.rect(xPos, my, mCols[mCols.length - 1].width, 14).fillAndStroke(totalBg, '#e2e8f0');
+          doc.fontSize(6.5).fillColor('#1e40af').text(`${rowAllotted}/${rowTotal}`, xPos + 2, my + 4, { width: mCols[mCols.length - 1].width - 4, align: 'center' });
+
+          my += 14;
+          rowIdx++;
+        });
+      });
+
+      // Grand total row
+      if (my > doc.page.height - 50) { doc.addPage(); my = drawMatrixHeader(30); }
+      let xPos = 30;
+      doc.rect(xPos, my, mCols[0].width + mCols[1].width, 16).fillAndStroke('#1e293b', '#0f172a');
+      doc.fontSize(7).fillColor('#ffffff').text('GRAND TOTAL', xPos + 4, my + 4, { width: mCols[0].width + mCols[1].width - 8, align: 'center' });
+      xPos += mCols[0].width + mCols[1].width;
+
+      let colIdx = 2;
+      genders.forEach(g => {
+        categories.forEach(c => {
+          const gt = grandTotals[`${g}|${c}`];
+          doc.rect(xPos, my, mCols[colIdx].width, 16).fillAndStroke('#1e293b', '#0f172a');
+          doc.fontSize(6.5).fillColor('#fbbf24').text(`${gt.allotted}/${gt.total}`, xPos + 2, my + 5, { width: mCols[colIdx].width - 4, align: 'center' });
+          xPos += mCols[colIdx].width;
+          colIdx++;
+        });
+      });
+      doc.rect(xPos, my, mCols[mCols.length - 1].width, 16).fillAndStroke('#1e293b', '#0f172a');
+      doc.fontSize(7).fillColor('#fbbf24').text(`${globalAllotted}/${globalTotal}`, xPos + 2, my + 5, { width: mCols[mCols.length - 1].width - 4, align: 'center' });
+
+      // ─── PAGE 2+: DETAILED STUDENT LISTING ───
+      doc.addPage();
+      doc.fontSize(12).fillColor('#111827').text(`Student Detail — ${round.roundName} Round ${round.roundNumber}`, { align: 'center' }).moveDown(0.6);
+
+      const colWidths = [40, 60, 100, 35, 50, 60, 100, 80, 60, 30];
+      const detailHeaders = ['Merit', 'App No', 'Name', 'Gen', 'Cat', 'Stream', 'Allotted Dist', 'Allotted Stream', 'Status', 'Rnd'];
+
+      const drawDetailHeader = (yPos: number) => {
+        let x = 30;
+        detailHeaders.forEach((h, i) => {
+          doc.rect(x, yPos, colWidths[i], 18).fillAndStroke('#1f2937', '#111827');
+          doc.fontSize(8).fillColor('#ffffff').text(h, x + 2, yPos + 5, { width: colWidths[i] - 4, align: 'left' });
+          x += colWidths[i];
+        });
+        return yPos + 18;
+      };
+
+      let dy = drawDetailHeader(doc.y);
+
+      snapshotStudents.sort((a: any, b: any) => (a.meritNumber || 0) - (b.meritNumber || 0)).forEach((s: any, idx: number) => {
+        if (dy > doc.page.height - 40) {
+          doc.addPage();
+          dy = drawDetailHeader(30);
+        }
+        let x = 30;
+        const status = s.allocationStatus || 'pending';
+        const statusColor = status === 'allotted' ? '#10b981' : status === 'not_allotted' ? '#ef4444' : '#f59e0b';
+        const texts = [
+          s.meritNumber?.toString() || '', s.appNo || '', s.name || '', (s.gender || '').substring(0, 1),
+          s.category || '', s.stream || '', s.allottedDistrict || '-', s.allottedStream || '-',
+          status.replace('_', ' '), s.counselingRoundNumber?.toString() || ''
+        ];
+        texts.forEach((text, i) => {
+          const bg = idx % 2 === 0 ? '#fafafa' : '#ffffff';
+          doc.rect(x, dy, colWidths[i], 14).fillAndStroke(bg, '#e5e7eb');
+          doc.fontSize(7).fillColor(i === 8 ? statusColor : '#374151').text(text, x + 2, dy + 4, { width: colWidths[i] - 4, align: 'left' });
+          x += colWidths[i];
+        });
+        dy += 14;
+      });
+
+      doc.end();
+    } catch (error) {
+      console.error("Snapshot download error:", error);
+      res.status(500).json({ message: "Failed to generate snapshot" });
     }
   });
 
@@ -3532,8 +3964,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/dashboard/stats', isAuthenticated, async (req: any, res: any) => {
     try {
       const user = await storage.getUser(req.session.userId);
-      const { academicYear } = req.query;
-      const stats = await storage.getDashboardStats(user, academicYear as string);
+      const { academicYear, counselingTitleId } = req.query;
+      const stats = await storage.getDashboardStats(user, academicYear as string, counselingTitleId as string);
       res.json(stats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);

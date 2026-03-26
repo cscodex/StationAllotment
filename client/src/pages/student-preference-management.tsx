@@ -101,6 +101,12 @@ export default function StudentPreferenceManagement() {
   // Finalize dialog state
   const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
 
+  // Vacate dialog state
+  const [isVacateDialogOpen, setIsVacateDialogOpen] = useState(false);
+  const [vacateReason, setVacateReason] = useState("");
+  const [vacateComment, setVacateComment] = useState("");
+  const [vacateTargetId, setVacateTargetId] = useState<string | null>(null);
+
   // Bulk scanner state
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
@@ -405,6 +411,77 @@ export default function StudentPreferenceManagement() {
       toast({ title: "Error", description: error.message || "Bulk lock failed", variant: "destructive" });
     }
   });
+
+  const bulkUnlockMutation = useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      const response = await apiRequest('POST', `/api/students/bulk-unlock-choices`, { studentIds });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: data.message });
+      setSelectedStudentIds([]);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to unlock choices", variant: "destructive" });
+    }
+  });
+
+  const vacateSeatMutation = useMutation({
+    mutationFn: async ({ studentId, reason, comment }: { studentId: string, reason: string, comment: string }) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/vacate`, { reason, comment });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: "Seat vacated successfully" });
+      setIsVacateDialogOpen(false);
+      setVacateReason("");
+      setVacateComment("");
+      setVacateTargetId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to vacate seat", variant: "destructive" });
+    }
+  });
+
+  const bulkVacateMutation = useMutation({
+    mutationFn: async ({ studentIds, reason, comment }: { studentIds: string[], reason: string, comment: string }) => {
+      const response = await apiRequest('POST', `/api/students/bulk-vacate`, { studentIds, reason, comment });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: data.message });
+      setSelectedStudentIds([]);
+      setIsVacateDialogOpen(false);
+      setVacateReason("");
+      setVacateComment("");
+      setVacateTargetId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to bulk vacate seats", variant: "destructive" });
+    }
+  });
+
+  const handleOpenVacateDialog = (id: string | null = null) => {
+    setVacateTargetId(id);
+    setVacateReason("");
+    setVacateComment("");
+    setIsVacateDialogOpen(true);
+  };
+
+  const handleConfirmVacate = () => {
+    if (!vacateReason) {
+      toast({ title: "Error", description: "Reason is explicitly required.", variant: "destructive" });
+      return;
+    }
+    if (vacateTargetId) {
+      vacateSeatMutation.mutate({ studentId: vacateTargetId, reason: vacateReason, comment: vacateComment });
+    } else {
+      bulkVacateMutation.mutate({ studentIds: selectedStudentIds, reason: vacateReason, comment: vacateComment });
+    }
+  };
 
   // Confirmation functions for actions
   const confirmLockStudent = () => {
@@ -741,28 +818,50 @@ export default function StudentPreferenceManagement() {
                 <span>Students ({filteredStudents.length})</span>
                 {selectedStudentIds.length > 0 && (
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <Button onClick={handleTestScenariosDownload} variant="secondary" size="sm" className="flex items-center gap-2 border-primary/20 text-primary text-xs sm:text-sm">
+                    <Button onClick={handleTestScenariosDownload} variant="secondary" size="icon" title={`Mock OMRs (${selectedStudentIds.length})`} className="border-primary/20 text-primary">
                       <DownloadCloud className="w-4 h-4" />
-                      Mock OMRs ({selectedStudentIds.length})
                     </Button>
-                    <Button onClick={handleBulkDownloadOMR} size="sm" className="flex items-center gap-2 text-xs sm:text-sm">
+                    <Button onClick={handleBulkDownloadOMR} size="icon" title={`Blank OMRs (${selectedStudentIds.length})`} variant="outline" className="text-primary border-primary hover:bg-primary/10">
                       <DownloadCloud className="w-4 h-4" />
-                      Blank OMRs ({selectedStudentIds.length})
                     </Button>
                     {user?.role === 'central_admin' && (
-                      <Button 
-                        onClick={() => bulkLockMutation.mutate(selectedStudentIds)} 
-                        size="sm" 
-                        variant="default"
-                        className="flex items-center gap-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white"
-                        disabled={bulkLockMutation.isPending || selectedStudentIds.every(id => {
-                          const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
-                          return s?.lockedBy || !areAllPreferencesFilled(s as Student);
-                        })}
-                      >
-                        <Lock className="w-4 h-4" />
-                        {bulkLockMutation.isPending ? "Locking..." : `Lock Selected (${selectedStudentIds.length})`}
-                      </Button>
+                      <>
+                        <Button 
+                          onClick={() => bulkLockMutation.mutate(selectedStudentIds)} 
+                          size="icon" 
+                          variant="default"
+                          title={`Lock Selected (${selectedStudentIds.length})`}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                          disabled={bulkLockMutation.isPending || selectedStudentIds.every(id => {
+                            const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
+                            return s?.lockedBy || !areAllPreferencesFilled(s as Student);
+                          })}
+                        >
+                          <Lock className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={() => bulkUnlockMutation.mutate(selectedStudentIds)}
+                          size="icon"
+                          title={`Unlock Selected (${selectedStudentIds.length})`}
+                          variant="outline"
+                          className="text-orange-500 border-orange-500 hover:bg-orange-50"
+                          disabled={bulkUnlockMutation.isPending}
+                        >
+                          <Unlock className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={() => handleOpenVacateDialog(null)}
+                          size="icon"
+                          title={`Vacate Selected (${selectedStudentIds.length})`}
+                          variant="destructive"
+                          disabled={!selectedStudentIds.every(id => {
+                            const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
+                            return s?.allocationStatus === 'allotted';
+                          })}
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 )}
@@ -898,6 +997,11 @@ export default function StudentPreferenceManagement() {
                                     <XCircle className="w-3 h-3 mr-1" /> Release
                                   </Button>
                                 </>
+                              )}
+                              {user?.role === 'central_admin' && student.allocationStatus === 'allotted' && (
+                                <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600" onClick={() => handleOpenVacateDialog(student.id)}>
+                                  <XCircle className="w-3 h-3 mr-1" /> Vacate
+                                </Button>
                               )}
                             </div>
                           </div>
@@ -1123,6 +1227,19 @@ export default function StudentPreferenceManagement() {
                                         </div>
                                       )}
                                     </>
+                                  )}
+
+                                  {student.allocationStatus === 'allotted' && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleOpenVacateDialog(student.id)}
+                                      className="text-orange-600 border-orange-300 hover:bg-orange-50 ml-2"
+                                      title="Vacate Seat"
+                                    >
+                                      <XCircle className="w-4 h-4 mr-1" />
+                                      Vacate
+                                    </Button>
                                   )}
                                 </>
                               ) : (
@@ -1389,6 +1506,44 @@ export default function StudentPreferenceManagement() {
           )}
         </DialogContent>
       </Dialog >
+
+      {/* Vacate Confirmation Dialog */}
+      <Dialog open={isVacateDialogOpen} onOpenChange={setIsVacateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{vacateTargetId ? 'Confirm Vacate Seat' : `Bulk Vacate ${selectedStudentIds.length} Seats`}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Reason (Required)</label>
+              <Input
+                placeholder="e.g., Student rejected seat, Document verification failed"
+                value={vacateReason}
+                onChange={(e) => setVacateReason(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Additional Comments (Optional)</label>
+              <Input
+                placeholder="Any other details..."
+                value={vacateComment}
+                onChange={(e) => setVacateComment(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => setIsVacateDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={!vacateReason || vacateSeatMutation.isPending || bulkVacateMutation.isPending}
+              onClick={handleConfirmVacate}
+            >
+              {(vacateSeatMutation.isPending || bulkVacateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Vacate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Choices View Modal */}
       < Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen} >

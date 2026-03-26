@@ -3,6 +3,8 @@ import Sidebar from "./sidebar";
 import { cn } from "@/lib/utils";
 import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GlobalCounselingSelector } from "@/components/ui/global-counseling-selector";
+import { CounselingSelectionModal } from "@/components/modals/counseling-selection-modal";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -56,7 +58,29 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {children}
+          
+          {/* Global Header Topbar */}
+          <header className="h-16 flex items-center justify-between px-4 lg:px-6 bg-white border-b border-slate-200 z-10 shrink-0">
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setMobileSidebarOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <GlobalCounselingSelector />
+            </div>
+          </header>
+
+          <main className="flex-1 overflow-auto bg-slate-50 relative">
+            {children}
+            <CounselingSelectionModal />
+          </main>
         </div>
       </div>
     </SidebarContext.Provider>

@@ -16,11 +16,13 @@ import {
   BarChart3
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useGlobalLoading } from "@/hooks/useGlobalLoading";
 
 export default function ExportResults() {
   const [isExportingCSV, setIsExportingCSV] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const { toast } = useToast();
+  const { setLoading } = useGlobalLoading();
 
   const { data: allocationStatus } = useQuery<{ completed: boolean; deadline: string | null }>({
     queryKey: ["/api/allocation/status"],
@@ -44,6 +46,7 @@ export default function ExportResults() {
 
   const handleExportCSV = async () => {
     setIsExportingCSV(true);
+    setLoading(true, "Generating CSV File...");
     try {
       const response = await fetch('/api/export/csv', {
         method: 'GET',
@@ -76,11 +79,13 @@ export default function ExportResults() {
       });
     } finally {
       setIsExportingCSV(false);
+      setLoading(false);
     }
   };
 
   const handleExportPDF = async () => {
     setIsExportingPDF(true);
+    setLoading(true, "Generating PDF Report...");
     try {
       const response = await fetch('/api/export/pdf', {
         method: 'GET',
@@ -113,6 +118,7 @@ export default function ExportResults() {
       });
     } finally {
       setIsExportingPDF(false);
+      setLoading(false);
     }
   };
 

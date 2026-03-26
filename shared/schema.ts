@@ -43,10 +43,27 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Counseling titles table - master registry of all counseling programs
+export const counselingTitles = pgTable("counseling_titles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  academicYear: varchar("academic_year").notNull(), // '2025-2026'
+  titleName: varchar("title_name").notNull(), // 'MeritoriousSchoolLudhiana' (machine key)
+  displayName: varchar("display_name"), // 'Meritorious School, Ludhiana' (human readable)
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  unique().on(table.academicYear, table.titleName),
+  index("idx_counseling_titles_academic_year").on(table.academicYear),
+  index("idx_counseling_titles_active").on(table.isActive),
+]);
+
 // Counseling rounds table
 export const counselingRounds = pgTable("counseling_rounds", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year").notNull(), // '2024-2025'
+  counselingTitleId: varchar("counseling_title_id").references(() => counselingTitles.id, { onDelete: 'cascade', onUpdate: 'cascade' }), // FK to counseling_titles
   roundNumber: integer("round_number").notNull(), // 1, 2, 3, etc. (within each counseling)
   roundName: varchar("round_name").notNull(), // 'First Counseling', 'Second Counseling' - Counseling title
   startDate: timestamp("start_date").notNull(), // TIMESTAMP type - datetime with time component
@@ -58,6 +75,7 @@ export const counselingRounds = pgTable("counseling_rounds", {
   isAllocationFinalized: boolean("is_allocation_finalized").default(false), // Whether allocation has been finalized by admin
   allocationFinalizedAt: timestamp("allocation_finalized_at"), // When allocation was finalized
   allocationFinalizedBy: varchar("allocation_finalized_by").references(() => users.id), // Admin who finalized allocation
+  snapshotData: jsonb("snapshot_data"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -71,6 +89,7 @@ export const counselingRounds = pgTable("counseling_rounds", {
 export const studentsEntranceResult = pgTable("students_entrance_result", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year"), // Link to academic year
+  counselingTitleId: varchar("counseling_title_id").references(() => counselingTitles.id, { onDelete: 'set null', onUpdate: 'cascade' }), // FK to counseling_titles
   roundName: varchar("round_name"), // Link to counseling title (roundName) - shared across all rounds
   meritNo: integer("merit_no").notNull().unique(),
   applicationNo: varchar("application_no").notNull().unique(),
@@ -102,6 +121,7 @@ export const schools = pgTable("schools", {
 export const students = pgTable("students", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year"), // Which year the student belongs to
+  counselingTitleId: varchar("counseling_title_id").references(() => counselingTitles.id, { onDelete: 'set null', onUpdate: 'cascade' }), // FK to counseling_titles
   appNo: varchar("app_no").notNull().unique(), // Application number as first data column
   meritNumber: integer("merit_number").notNull().unique(),
   name: varchar("name").notNull(),
@@ -145,6 +165,7 @@ export const students = pgTable("students", {
 export const vacancies = pgTable("vacancies", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year"), // Academic year for this vacancy
+  counselingTitleId: varchar("counseling_title_id").references(() => counselingTitles.id, { onDelete: 'set null', onUpdate: 'cascade' }), // FK to counseling_titles
   roundName: varchar("round_name"), // Link to counseling title (roundName) - shared across all rounds
   udiseCode: varchar("udise_code").references(() => schools.udiseCode, { onDelete: 'restrict', onUpdate: 'cascade' }), // UDISE code of the school (nullable initially for migration)
   district: varchar("district").notNull(),
@@ -167,6 +188,7 @@ export const vacancies = pgTable("vacancies", {
 export const districtStatus = pgTable("district_status", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   district: varchar("district").notNull(),
+  counselingTitleId: varchar("counseling_title_id").references(() => counselingTitles.id, { onDelete: 'set null', onUpdate: 'cascade' }), // FK to counseling_titles
   counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id), // Bind to a specific round
   isFinalized: boolean("is_finalized").default(false),
   totalStudents: integer("total_students").default(0),
@@ -224,6 +246,7 @@ export const fileUploads = pgTable("file_uploads", {
   type: varchar("type").notNull(), // 'student_choices' | 'vacancies' | 'entrance_results'
   status: varchar("status").default('uploaded'), // 'uploaded' | 'validated' | 'processed' | 'failed'
   validationResults: jsonb("validation_results"),
+  counselingTitleId: varchar("counseling_title_id").references(() => counselingTitles.id, { onDelete: 'set null', onUpdate: 'cascade' }), // FK to counseling_titles
   academicYear: varchar("academic_year"), // Academic year this file is associated with
   counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id), // Active counseling round when file was uploaded
   uploadedBy: varchar("uploaded_by").references(() => users.id),
@@ -262,6 +285,24 @@ export const unfinalizeRequests = pgTable("unfinalize_requests", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Vacated Seats table for logging when students leave allotted seats
+export const vacatedSeats = pgTable("vacated_seats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").references(() => students.id).notNull(),
+  appNo: varchar("app_no").notNull(),
+  meritNumber: integer("merit_number").notNull(),
+  studentName: varchar("student_name").notNull(),
+  gender: varchar("gender").notNull(),
+  category: varchar("category").notNull(),
+  stream: varchar("stream").notNull(),
+  vacatedDistrict: varchar("vacated_district").notNull(),
+  vacatedStream: varchar("vacated_stream").notNull(),
+  reason: varchar("reason").notNull(),
+  comment: text("comment"),
+  academicYear: varchar("academic_year").notNull(),
+  counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id),
+  vacatedAt: timestamp("vacated_at").defaultNow().notNull(),
+});
 
 // Year Session table for tracking academic sessions
 export const yearSession = pgTable("year_session", {
@@ -320,15 +361,28 @@ export const vacanciesRelations = relations(vacancies, ({ one }) => ({
 
 export const counselingRoundsRelations = relations(counselingRounds, ({ many }) => ({
   allocatedStudents: many(students),
+  vacatedSeats: many(vacatedSeats),
 }));
 
-export const studentsRelations = relations(students, ({ one }) => ({
+export const studentsRelations = relations(students, ({ one, many }) => ({
   allottedSchool: one(schools, {
     fields: [students.allottedSchoolUdise],
     references: [schools.udiseCode],
   }),
   counselingRound: one(counselingRounds, {
     fields: [students.counselingRoundId],
+    references: [counselingRounds.id],
+  }),
+  vacatedSeatLogs: many(vacatedSeats),
+}));
+
+export const vacatedSeatsRelations = relations(vacatedSeats, ({ one }) => ({
+  student: one(students, {
+    fields: [vacatedSeats.studentId],
+    references: [students.id],
+  }),
+  counselingRound: one(counselingRounds, {
+    fields: [vacatedSeats.counselingRoundId],
     references: [counselingRounds.id],
   }),
 }));
@@ -409,6 +463,17 @@ export const insertYearSessionSchema = createInsertSchema(yearSession).omit({
   updatedAt: true,
 });
 
+export const insertVacatedSeatSchema = createInsertSchema(vacatedSeats).omit({
+  id: true,
+  vacatedAt: true,
+});
+
+export const insertCounselingTitleSchema = createInsertSchema(counselingTitles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -438,6 +503,10 @@ export type YearSession = typeof yearSession.$inferSelect;
 export type InsertYearSession = z.infer<typeof insertYearSessionSchema>;
 export type AppDocument = typeof appDocuments.$inferSelect;
 export type InsertAppDocument = typeof appDocuments.$inferInsert;
+export type VacatedSeat = typeof vacatedSeats.$inferSelect;
+export type InsertVacatedSeat = z.infer<typeof insertVacatedSeatSchema>;
+export type CounselingTitle = typeof counselingTitles.$inferSelect;
+export type InsertCounselingTitle = z.infer<typeof insertCounselingTitleSchema>;
 
 // Constants - All 23 districts of Punjab (Counseling Districts)
 export const DISTRICTS = [

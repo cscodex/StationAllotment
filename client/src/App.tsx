@@ -77,13 +77,20 @@ function Router() {
   );
 }
 
+import { LoadingProvider } from "@/hooks/useGlobalLoading";
+import { CounselingProvider } from "@/hooks/useCounseling";
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <CounselingProvider>
+        <LoadingProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </LoadingProvider>
+      </CounselingProvider>
     </QueryClientProvider>
   );
 }

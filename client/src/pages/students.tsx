@@ -12,10 +12,11 @@ import { DataPagination } from "@/components/ui/data-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
+import { useCounseling } from "@/hooks/useCounseling";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud, BarChart3, ShieldQuestion, ChevronDown, ChevronUp, Lock } from "lucide-react";
+import { Search, Users, Eye, FileText, UserCheck, Edit3, Save, X, Clock, DownloadCloud, BarChart3, ShieldQuestion, ChevronDown, ChevronUp, Lock, LogOut, Unlock } from "lucide-react";
 import InfographicsModal from "@/components/dashboard/infographics-modal";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -26,7 +27,8 @@ export default function Students() {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
   const [limit, setLimit] = useState(50);
-  const [academicYear, setAcademicYear] = useState<string>("");
+  const { activeSession, activeTitle } = useCounseling();
+  const academicYear = activeSession;
   const [roundNumber, setRoundNumber] = useState<number | undefined>(undefined);
   const [allocationFilter, setAllocationFilter] = useState<string>("all");
   const [selectedStudent, setSelectedStudent] = useState<StudentsEntranceResult | Student | null>(null);
@@ -37,6 +39,12 @@ export default function Students() {
   const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
   const [expandedEntranceIds, setExpandedEntranceIds] = useState<Set<string>>(new Set());
   const [expandedStudentRecordIds, setExpandedStudentRecordIds] = useState<Set<string>>(new Set());
+
+  // Vacate Seat Dialog State
+  const [vacateReason, setVacateReason] = useState("");
+  const [vacateComment, setVacateComment] = useState("");
+  const [isVacateDialogOpen, setIsVacateDialogOpen] = useState(false);
+  const [vacateTargetId, setVacateTargetId] = useState<string | null>(null);
 
   const toggleEntranceCard = (id: string) => {
     setExpandedEntranceIds(prev => {
@@ -65,30 +73,29 @@ export default function Students() {
 
   // Fetch entrance results for central admin first tab or district admin
   const { data: entranceResultsData, isLoading: isLoadingEntrance } = useQuery<{ students: StudentsEntranceResult[], total: number }>({
-    queryKey: ["/api/students-entrance-results", { limit, offset: page * limit }],
-    enabled: isDistrictAdmin || isCentralAdmin,
+    queryKey: ["/api/students-entrance-results", { limit, offset: page * limit, counselingTitleId: activeTitle?.id }],
+    enabled: (isDistrictAdmin || isCentralAdmin) && !!activeTitle?.id,
   });
 
   // Fetch student records for central admin second tab (with year/round filtering)
   const { data: studentsData, isLoading: isLoadingStudents } = useQuery<{ students: Student[], total: number }>({
-    queryKey: ["/api/students", { limit, offset: page * limit, academicYear, roundNumber, allocationStatus: allocationFilter === 'all' ? undefined : allocationFilter }],
-    enabled: isCentralAdmin,
+    queryKey: ["/api/students", { limit, offset: page * limit, academicYear, counselingTitleId: activeTitle?.id, roundNumber: undefined, allocationStatus: allocationFilter === 'all' ? undefined : allocationFilter }],
+    enabled: isCentralAdmin && !!activeTitle?.id,
   });
-
-  // Fetch current session (academic year) to pass to stats
-  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-    queryKey: ["/api/session/current"],
-  });
-  const selectedAcademicYear = currentSessionData?.currentSession || "";
 
   const { data: stats } = useQuery<any>({
-    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryKey: ["/api/dashboard/stats", { academicYear, counselingTitleId: activeTitle?.id }],
     queryFn: async () => {
-      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      let qs = "";
+      const params = new URLSearchParams();
+      if (academicYear) params.append("academicYear", academicYear);
+      if (activeTitle?.id) params.append("counselingTitleId", activeTitle.id);
+      if (params.toString()) qs = `?${params.toString()}`;
+      
       const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
       return res.json();
     },
-    enabled: !!selectedAcademicYear,
+    enabled: !!activeTitle?.id,
   });
 
   const filteredEntranceResults = entranceResultsData?.students?.filter((entranceResult: StudentsEntranceResult) => {
@@ -215,6 +222,77 @@ export default function Students() {
     }
   };
 
+  const bulkUnlockMutation = useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      const response = await apiRequest('POST', `/api/students/bulk-unlock-choices`, { studentIds });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: data.message });
+      setSelectedStudentIds([]);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to unlock choices", variant: "destructive" });
+    }
+  });
+
+  const vacateSeatMutation = useMutation({
+    mutationFn: async ({ studentId, reason, comment }: { studentId: string, reason: string, comment: string }) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/vacate`, { reason, comment });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: "Seat vacated successfully" });
+      setIsVacateDialogOpen(false);
+      setVacateReason("");
+      setVacateComment("");
+      setVacateTargetId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to vacate seat", variant: "destructive" });
+    }
+  });
+
+  const bulkVacateMutation = useMutation({
+    mutationFn: async ({ studentIds, reason, comment }: { studentIds: string[], reason: string, comment: string }) => {
+      const response = await apiRequest('POST', `/api/students/bulk-vacate`, { studentIds, reason, comment });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: data.message });
+      setSelectedStudentIds([]);
+      setIsVacateDialogOpen(false);
+      setVacateReason("");
+      setVacateComment("");
+      setVacateTargetId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to bulk vacate seats", variant: "destructive" });
+    }
+  });
+
+  const handleOpenVacateDialog = (id: string | null = null) => {
+    setVacateTargetId(id);
+    setVacateReason("");
+    setVacateComment("");
+    setIsVacateDialogOpen(true);
+  };
+
+  const handleConfirmVacate = () => {
+    if (!vacateReason) {
+      toast({ title: "Error", description: "Reason is explicitly required.", variant: "destructive" });
+      return;
+    }
+    if (vacateTargetId) {
+      vacateSeatMutation.mutate({ studentId: vacateTargetId, reason: vacateReason, comment: vacateComment });
+    } else {
+      bulkVacateMutation.mutate({ studentIds: selectedStudentIds, reason: vacateReason, comment: vacateComment });
+    }
+  };
+
   // Update entrance result mutation
   const updateEntranceResultMutation = useMutation({
     mutationFn: async ({ id, stream }: { id: string, stream: string }) => {
@@ -261,6 +339,8 @@ export default function Students() {
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Allotted</Badge>;
       case 'not_allotted':
         return <Badge variant="destructive">Not Allotted</Badge>;
+      case 'vacated':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-800 border-orange-200">Vacated</Badge>;
       case 'pending':
         return <Badge variant="outline">Pending</Badge>;
       default:
@@ -527,6 +607,7 @@ export default function Students() {
                   <SelectItem value="all">All Students</SelectItem>
                   <SelectItem value="allotted">Allotted Only</SelectItem>
                   <SelectItem value="not_allotted">Not Allotted Only</SelectItem>
+                  <SelectItem value="vacated">Vacated Only</SelectItem>
                   <SelectItem value="pending">Pending Only</SelectItem>
                 </SelectContent>
               </Select>
@@ -578,6 +659,48 @@ export default function Students() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+
+              {isCentralAdmin && (
+                <>
+                  <TooltipProvider>
+                    <Tooltip delayDuration={300}>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-100/50" 
+                          onClick={() => bulkUnlockMutation.mutate(selectedStudentIds)}
+                          disabled={bulkUnlockMutation.isPending}
+                        >
+                          <Unlock className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Bulk Unlock Choices ({selectedStudentIds.length})</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip delayDuration={300}>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-8 w-8 text-orange-600 hover:text-orange-700 hover:bg-orange-100/50" 
+                          onClick={() => handleOpenVacateDialog(null)}
+                          disabled={bulkVacateMutation.isPending}
+                        >
+                          <LogOut className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Bulk Vacate Seats ({selectedStudentIds.length})</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -641,6 +764,11 @@ export default function Students() {
                            <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-600" onClick={() => handleDownloadOMR(student)}>
                              <FileText className="w-3 h-3 mr-1" /> OMR
                            </Button>
+                           {isCentralAdmin && student.allocationStatus === 'allotted' && (
+                             <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600" onClick={() => handleOpenVacateDialog(student.id)}>
+                               <LogOut className="w-3 h-3 mr-1" /> Vacate
+                             </Button>
+                           )}
                          </div>
                       </div>
                     )}
@@ -744,6 +872,16 @@ export default function Students() {
                         >
                           <FileText className="w-4 h-4 text-blue-600" />
                         </Button>
+                        {isCentralAdmin && student.allocationStatus === 'allotted' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenVacateDialog(student.id)}
+                            title="Vacate Seat"
+                          >
+                            <LogOut className="w-4 h-4 text-orange-600" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1000,6 +1138,61 @@ export default function Students() {
             <div className="flex justify-end">
               <Button type="button" variant="outline" onClick={() => setIsViewDialogOpen(false)}>
                 Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Vacate Seat Dialog */}
+        <Dialog open={isVacateDialogOpen} onOpenChange={setIsVacateDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {vacateTargetId ? "Vacate Student Seat" : `Bulk Vacate Selected Seats (${selectedStudentIds.length})`}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Reason for Vacating (Required)</label>
+                <Select value={vacateReason} onValueChange={setVacateReason}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a reason..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Medical">Medical Grounds</SelectItem>
+                    <SelectItem value="Distance">Distance / Travel Issues</SelectItem>
+                    <SelectItem value="Home Sickness">Home Sickness</SelectItem>
+                    <SelectItem value="Transfer">Transfer / Migration</SelectItem>
+                    <SelectItem value="Course Disinterest">Course Disinterest</SelectItem>
+                    <SelectItem value="Fee Issue">Fee / Financial Issue</SelectItem>
+                    <SelectItem value="Other">Other Category Issue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Additional Comment (Optional)</label>
+                <Textarea 
+                  placeholder="Enter any additional details here..."
+                  className="resize-none"
+                  rows={3}
+                  value={vacateComment}
+                  onChange={(e) => setVacateComment(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsVacateDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                variant="destructive"
+                disabled={!vacateReason || vacateSeatMutation.isPending || bulkVacateMutation.isPending}
+                onClick={handleConfirmVacate}
+              >
+                {vacateSeatMutation.isPending || bulkVacateMutation.isPending ? "Processing..." : "Confirm Vacate"}
               </Button>
             </div>
           </DialogContent>

@@ -136,8 +136,10 @@ export class AllocationService {
     log('✅ Filtering eligible students...');
     const eligibleStudents = students
       .filter(student => {
-        // Must have app number and at least one choice
-        if (!student.appNo || !student.choice1) return false;
+        // Must have app number, assigned stream, and explicitly completely filled 10 choices
+        const hasAllChoices = student.choice1 && student.choice2 && student.choice3 && student.choice4 && student.choice5 && student.choice6 && student.choice7 && student.choice8 && student.choice9 && student.choice10;
+        
+        if (!student.appNo || !hasAllChoices || !student.stream) return false;
         
         // Must have corresponding entrance result
         const entranceResult = entranceResultMap.get(student.appNo);

@@ -53,6 +53,8 @@ export default function Login() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/year-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-titles/active"] });
       toast({
         title: "Login Successful",
         description: "Welcome to the Seat Allotment System",
@@ -73,6 +75,8 @@ export default function Login() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/year-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/counseling-titles/active"] });
       toast({
         title: "Demo Login Successful",
         description: "Welcome to the Seat Allotment System",

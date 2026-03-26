@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { AcademicYearSelector } from "@/components/ui/academic-year-selector";
-import { Download, FileText, Users, MapPin, TrendingUp } from "lucide-react";
+import { useCounseling } from "@/hooks/useCounseling";
+import { Download, FileText, Users, MapPin, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useAuth } from "@/hooks/useAuth";
 import type { Student, Vacancy } from "@shared/schema";
+import { useGlobalLoading } from "@/hooks/useGlobalLoading"; // Added this import
 
 interface AllocationStats {
   totalStudents: number;
@@ -23,40 +24,43 @@ interface AllocationStats {
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("station-allotments");
-  const [academicYear, setAcademicYear] = useState<string>("");
+  const { activeSession: academicYear, activeTitle } = useCounseling();
 
   const { data: students, isLoading: studentsLoading } = useQuery<Student[]>({
-    queryKey: ["/api/students", { allocated: true, academicYear }],
+    queryKey: ["/api/students", { allocated: true, academicYear, counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const { data: vacancies, isLoading: vacanciesLoading } = useQuery<Vacancy[]>({
-    queryKey: ["/api/vacancies", academicYear],
+    queryKey: ["/api/vacancies", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const { data: allocationStats, isLoading: statsLoading } = useQuery<AllocationStats>({
-    queryKey: ["/api/allocation/stats"],
+    queryKey: ["/api/allocation/stats", { academicYear, counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const { user } = useAuth();
   const isDistrictAdmin = user?.role === 'district_admin';
 
-  const allottedStudents = students?.filter(s => 
+  const allottedStudents = useMemo(() => students?.filter(s => 
     s.allocationStatus === 'allotted' && 
     (!isDistrictAdmin || s.allottedDistrict === user?.district)
-  ) || [];
+  ) || [], [students, isDistrictAdmin, user?.district]);
   
-  const notAllottedStudents = students?.filter(s => 
+  const notAllottedStudents = useMemo(() => students?.filter(s => 
     s.allocationStatus === 'not_allotted' && 
     (!isDistrictAdmin || s.counselingDistrict === user?.district)
-  ) || [];
+  ) || [], [students, isDistrictAdmin, user?.district]);
 
-  const districtStudentsList = students?.filter(s => 
+  const districtStudentsList = useMemo(() => students?.filter(s => 
     !isDistrictAdmin || s.counselingDistrict === user?.district || s.allottedDistrict === user?.district
-  ) || [];
+  ) || [], [students, isDistrictAdmin, user?.district]);
 
-  const filteredVacancies = vacancies?.filter(v => 
+  const filteredVacancies = useMemo(() => vacancies?.filter(v => 
     !isDistrictAdmin || v.district === user?.district
-  ) || [];
+  ) || [], [vacancies, isDistrictAdmin, user?.district]);
 
   // Group allotted students by district and stream
   const allotmentsByDistrict = allottedStudents.reduce((acc, student) => {
@@ -162,6 +166,8 @@ export default function Reports() {
   const uniqueCategories = useMemo(() => Array.from(new Set(allottedStudents.map(s => s.category).filter(Boolean))) as string[], [allottedStudents]);
   const uniqueGenders = useMemo(() => Array.from(new Set(allottedStudents.map(s => s.gender).filter(Boolean))) as string[], [allottedStudents]);
 
+  const { setLoading } = useGlobalLoading();
+
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [selectedStreams, setSelectedStreams] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -181,15 +187,21 @@ export default function Reports() {
     { id: 'allottedDistrict', label: 'Allotted District' }
   ], []);
 
+  const initialFiltersSet = useRef(false);
+
   useEffect(() => {
-    if (uniqueDistricts.length > 0) setSelectedDistricts(uniqueDistricts);
-    if (uniqueStreams.length > 0) setSelectedStreams(uniqueStreams);
-    if (uniqueCategories.length > 0) setSelectedCategories(uniqueCategories);
-    if (uniqueGenders.length > 0) setSelectedGenders(uniqueGenders);
+    if (uniqueDistricts.length > 0 && !initialFiltersSet.current) {
+      setSelectedDistricts(uniqueDistricts);
+      setSelectedStreams(uniqueStreams);
+      setSelectedCategories(uniqueCategories);
+      setSelectedGenders(uniqueGenders);
+      initialFiltersSet.current = true;
+    }
   }, [uniqueDistricts, uniqueStreams, uniqueCategories, uniqueGenders]);
 
   const handleCustomExport = async (format: 'pdf' | 'csv') => {
     try {
+      setLoading(true, `Generating Custom ${format.toUpperCase()} Report...`);
       const payload = {
         academicYear,
         filters: {
@@ -219,36 +231,46 @@ export default function Reports() {
     } catch (error) {
       console.error(error);
       alert("Failed to generate custom export");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const exportToCSV = () => {
-    if (activeTab === 'station-allotments') {
-      const csvData = allottedStudents.map(student => ({
-        'App No': student.appNo,
-        'Merit Number': student.meritNumber,
-        'Student Name': student.name,
-        'Stream': student.stream,
-        'Allotted District': student.allottedDistrict,
-        'Allotted Stream': student.allottedStream
-      }));
-      downloadCSV(csvData, 'station-allotments.csv');
-    } else {
-      const csvData = remainingVacancies.map(vacancy => ({
-        'District': vacancy.district,
-        'Medical Vacancies': vacancy.medicalVacancies,
-        'Medical Allocated': vacancy.medicalVacancies - vacancy.remainingMedical,
-        'Medical Remaining': vacancy.remainingMedical,
-        'Commerce Vacancies': vacancy.commerceVacancies,
-        'Commerce Allocated': vacancy.commerceVacancies - vacancy.remainingCommerce,
-        'Commerce Remaining': vacancy.remainingCommerce,
-        'NonMedical Vacancies': vacancy.nonMedicalVacancies,
-        'NonMedical Allocated': vacancy.nonMedicalVacancies - vacancy.remainingNonMedical,
-        'NonMedical Remaining': vacancy.remainingNonMedical,
-        'Total Allocated': vacancy.totalAllocated,
-        'Total Remaining': vacancy.totalVacancies - vacancy.totalAllocated
-      }));
-      downloadCSV(csvData, 'remaining-vacancies.csv');
+  const exportToCSV = async () => { // Made async to use setLoading
+    try {
+      setLoading(true, "Generating CSV Report...");
+      if (activeTab === 'station-allotments') {
+        const csvData = allottedStudents.map(student => ({
+          'App No': student.appNo,
+          'Merit Number': student.meritNumber,
+          'Student Name': student.name,
+          'Stream': student.stream,
+          'Allotted District': student.allottedDistrict,
+          'Allotted Stream': student.allottedStream
+        }));
+        downloadCSV(csvData, 'station-allotments.csv');
+      } else {
+        const csvData = remainingVacancies.map(vacancy => ({
+          'District': vacancy.district,
+          'Medical Vacancies': vacancy.medicalVacancies,
+          'Medical Allocated': vacancy.medicalVacancies - vacancy.remainingMedical,
+          'Medical Remaining': vacancy.remainingMedical,
+          'Commerce Vacancies': vacancy.commerceVacancies,
+          'Commerce Allocated': vacancy.commerceVacancies - vacancy.remainingCommerce,
+          'Commerce Remaining': vacancy.remainingCommerce,
+          'NonMedical Vacancies': vacancy.nonMedicalVacancies,
+          'NonMedical Allocated': vacancy.nonMedicalVacancies - vacancy.remainingNonMedical,
+          'NonMedical Remaining': vacancy.remainingNonMedical,
+          'Total Allocated': vacancy.totalAllocated,
+          'Total Remaining': vacancy.totalVacancies - vacancy.totalAllocated
+        }));
+        downloadCSV(csvData, 'remaining-vacancies.csv');
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Failed to generate CSV export");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -308,18 +330,6 @@ export default function Reports() {
       />
       <main className="flex-1 p-6 overflow-auto">
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Filters</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AcademicYearSelector
-                value={academicYear}
-                onValueChange={setAcademicYear}
-                className="max-w-xs"
-              />
-            </CardContent>
-          </Card>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Reports</h1>
@@ -350,36 +360,52 @@ export default function Reports() {
                     <h3 className="font-semibold text-lg border-b pb-2">Filters</h3>
 
                     <div className="space-y-2">
-                      <Label className="font-medium text-muted-foreground">Districts</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="font-medium text-muted-foreground">Districts</Label>
+                        <div className="text-xs space-x-2">
+                          <button className="text-primary hover:underline" onClick={() => setSelectedDistricts(uniqueDistricts)}>All</button>
+                          <span className="text-muted-foreground">|</span>
+                          <button className="text-muted-foreground hover:underline" onClick={() => setSelectedDistricts([])}>None</button>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border rounded">
                         {uniqueDistricts.map(d => (
                           <div key={d} className="flex items-center space-x-2">
                             <Checkbox 
+                              id={`filter-district-${d}`}
                               checked={selectedDistricts.includes(d)} 
                               onCheckedChange={(checked) => {
                                 if (checked) setSelectedDistricts([...selectedDistricts, d]);
                                 else setSelectedDistricts(selectedDistricts.filter(x => x !== d));
                               }} 
                             />
-                            <Label className="font-normal">{d}</Label>
+                            <Label htmlFor={`filter-district-${d}`} className="font-normal cursor-pointer">{d}</Label>
                           </div>
                         ))}
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="font-medium text-muted-foreground">Streams</Label>
+                      <div className="flex items-center justify-between">
+                        <Label className="font-medium text-muted-foreground">Streams</Label>
+                        <div className="text-xs space-x-2">
+                          <button className="text-primary hover:underline" onClick={() => setSelectedStreams(uniqueStreams)}>All</button>
+                          <span className="text-muted-foreground">|</span>
+                          <button className="text-muted-foreground hover:underline" onClick={() => setSelectedStreams([])}>None</button>
+                        </div>
+                      </div>
                       <div className="flex flex-wrap gap-4">
                         {uniqueStreams.map(s => (
                           <div key={s} className="flex items-center space-x-2">
                             <Checkbox 
+                              id={`filter-stream-${s}`}
                               checked={selectedStreams.includes(s)} 
                               onCheckedChange={(checked) => {
                                 if (checked) setSelectedStreams([...selectedStreams, s]);
                                 else setSelectedStreams(selectedStreams.filter(x => x !== s));
                               }} 
                             />
-                            <Label className="font-normal">{s}</Label>
+                            <Label htmlFor={`filter-stream-${s}`} className="font-normal cursor-pointer">{s}</Label>
                           </div>
                         ))}
                       </div>
@@ -387,66 +413,101 @@ export default function Reports() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="font-medium text-muted-foreground">Categories</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="font-medium text-muted-foreground">Categories</Label>
+                          <div className="text-xs space-x-1">
+                            <button className="text-primary hover:underline" onClick={() => setSelectedCategories(uniqueCategories)}>All</button>
+                            <span className="text-muted-foreground">|</span>
+                            <button className="text-muted-foreground hover:underline" onClick={() => setSelectedCategories([])}>None</button>
+                          </div>
+                        </div>
                         <div className="space-y-2">
                           {uniqueCategories.map(c => (
                             <div key={c} className="flex items-center space-x-2">
                               <Checkbox 
+                                id={`filter-cat-${c}`}
                                 checked={selectedCategories.includes(c)} 
                                 onCheckedChange={(checked) => {
                                   if (checked) setSelectedCategories([...selectedCategories, c]);
                                   else setSelectedCategories(selectedCategories.filter(x => x !== c));
                                 }} 
                               />
-                              <Label className="font-normal">{c}</Label>
+                              <Label htmlFor={`filter-cat-${c}`} className="font-normal cursor-pointer">{c}</Label>
                             </div>
                           ))}
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label className="font-medium text-muted-foreground">Genders</Label>
+                        <div className="flex items-center justify-between">
+                          <Label className="font-medium text-muted-foreground">Genders</Label>
+                          <div className="text-xs space-x-1">
+                            <button className="text-primary hover:underline" onClick={() => setSelectedGenders(uniqueGenders)}>All</button>
+                            <span className="text-muted-foreground">|</span>
+                            <button className="text-muted-foreground hover:underline" onClick={() => setSelectedGenders([])}>None</button>
+                          </div>
+                        </div>
                         <div className="space-y-2">
                           {uniqueGenders.map(g => (
                             <div key={g} className="flex items-center space-x-2">
                               <Checkbox 
+                                id={`filter-gender-${g}`}
                                 checked={selectedGenders.includes(g)} 
                                 onCheckedChange={(checked) => {
                                   if (checked) setSelectedGenders([...selectedGenders, g]);
                                   else setSelectedGenders(selectedGenders.filter(x => x !== g));
                                 }} 
                               />
-                              <Label className="font-normal">{g}</Label>
+                              <Label htmlFor={`filter-gender-${g}`} className="font-normal cursor-pointer">{g}</Label>
                             </div>
                           ))}
                         </div>
                       </div>
                     </div>
+                    {(!selectedDistricts.length || !selectedStreams.length || !selectedCategories.length || !selectedGenders.length) && (
+                      <p className="text-xs text-destructive font-semibold">Please select at least one option from each filter category.</p>
+                    )}
                   </div>
 
                   {/* Columns Section */}
                   <div className="space-y-4">
                     <h3 className="font-semibold text-lg border-b pb-2">Fields to Include</h3>
                     <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
-                      {AVAILABLE_COLUMNS.map(col => (
-                        <div key={col.id} className="flex items-center space-x-3">
-                          <Checkbox 
-                            id={`col-${col.id}`}
-                            checked={selectedColumns.includes(col.id)} 
-                            onCheckedChange={(checked) => {
-                              if (checked) setSelectedColumns([...selectedColumns, col.id]);
-                              else setSelectedColumns(selectedColumns.filter(x => x !== col.id));
-                            }} 
-                          />
-                          <Label htmlFor={`col-${col.id}`} className="font-medium cursor-pointer">{col.label}</Label>
-                        </div>
-                      ))}
+                      {AVAILABLE_COLUMNS.map(col => {
+                        const isRequired = col.id === 'meritNumber' || col.id === 'appNo';
+                        return (
+                          <div key={col.id} className="flex items-center space-x-3">
+                            <Checkbox 
+                              id={`col-${col.id}`}
+                              disabled={isRequired}
+                              checked={isRequired || selectedColumns.includes(col.id)} 
+                              onCheckedChange={(checked) => {
+                                if (isRequired) return;
+                                if (checked) setSelectedColumns([...selectedColumns, col.id]);
+                                else setSelectedColumns(selectedColumns.filter(x => x !== col.id));
+                              }} 
+                            />
+                            <Label htmlFor={`col-${col.id}`} className={`font-medium cursor-pointer ${isRequired ? 'opacity-70' : ''}`}>
+                              {col.label} {isRequired && <span className="text-xs text-muted-foreground">(Required)</span>}
+                            </Label>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <div className="flex gap-4 pt-4 mt-6">
-                      <Button className="flex-1" onClick={() => handleCustomExport('pdf')}>
+                      <Button 
+                        className="flex-1" 
+                        disabled={!selectedDistricts.length || !selectedStreams.length || !selectedCategories.length || !selectedGenders.length}
+                        onClick={() => handleCustomExport('pdf')}
+                      >
                         <Download className="w-4 h-4 mr-2" /> PDF List
                       </Button>
-                      <Button className="flex-1" variant="secondary" onClick={() => handleCustomExport('csv')}>
+                      <Button 
+                        className="flex-1" 
+                        variant="secondary"
+                        disabled={!selectedDistricts.length || !selectedStreams.length || !selectedCategories.length || !selectedGenders.length} 
+                        onClick={() => handleCustomExport('csv')}
+                      >
                         <Download className="w-4 h-4 mr-2" /> CSV List
                       </Button>
                     </div>
@@ -456,9 +517,63 @@ export default function Reports() {
             </DialogContent>
           </Dialog>
 
-          <Button variant="outline" onClick={() => window.open(`/api/export/reports/pdf?academicYear=${academicYear || ''}`, '_blank')}>
-            <Download className="w-4 h-4 mr-2" />
-            General PDF Report
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" data-testid="button-view-graph">
+                <PieChartIcon className="w-4 h-4 mr-2" />
+                View Graph
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Allocation Status Summary</DialogTitle>
+                <DialogDescription>
+                  Visual representation of allotted vs not allotted students.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="h-[400px] flex justify-center items-center py-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Allotted', value: isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length) },
+                        { name: 'Not Allotted', value: isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length) },
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={140}
+                      dataKey="value"
+                    >
+                      {[{ name: 'Allotted', value: isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length) },
+                        { name: 'Not Allotted', value: isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length) }].map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={['#22c55e', '#ef4444'][index % 2]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value, "Students"]} />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          <Button variant="outline" onClick={async () => {
+             try {
+                setLoading(true, "Generating PDF Report...");
+                const resp = await fetch(`/api/export/reports/pdf?academicYear=${academicYear || ''}`);
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+             } catch(e) {
+                console.error(e);
+                alert("Failed to generate PDF report");
+             } finally {
+                setLoading(false);
+             }
+          }}>
+            <Download className="w-4 h-4 mr-2" /> PDF Report
           </Button>
           <Button variant="outline" onClick={exportToCSV} data-testid="button-export-csv">
             <Download className="w-4 h-4 mr-2" />
@@ -522,40 +637,6 @@ export default function Reports() {
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Infographics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Allocation Status</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px] flex justify-center items-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Allotted', value: isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length) },
-                    { name: 'Not Allotted', value: isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length) },
-                  ]}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={100}
-                  dataKey="value"
-                >
-                  {[{ name: 'Allotted', value: isDistrictAdmin ? allottedStudents.length : (allocationStats?.allottedStudents || allottedStudents.length) },
-                    { name: 'Not Allotted', value: isDistrictAdmin ? notAllottedStudents.length : (allocationStats?.notAllottedStudents || notAllottedStudents.length) }].map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={['#22c55e', '#ef4444'][index % 2]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [value, "Students"]} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
