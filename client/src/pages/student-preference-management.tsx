@@ -43,7 +43,9 @@ import {
   UserCheck,
   UserX,
   UserMinus,
-  MoreVertical
+  MoreVertical,
+  HelpCircle,
+  Info
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Student } from "@shared/schema";
@@ -116,6 +118,7 @@ export default function StudentPreferenceManagement() {
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
   const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
+  const [isHelpFlowOpen, setIsHelpFlowOpen] = useState(false);
 
   const handleBulkSave = async (pages: ScannedPageInfo[]) => {
     let successCount = 0;
@@ -857,7 +860,12 @@ export default function StudentPreferenceManagement() {
           <Card>
             <CardHeader className="flex flex-col items-start gap-4 pb-2 p-4 md:p-6 text-base sm:text-lg font-semibold">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center w-full gap-4">
-                <span>Students ({filteredStudents.length})</span>
+                <span className="flex items-center gap-2">
+                  Students ({filteredStudents.length})
+                  <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-muted-foreground hover:bg-muted" onClick={() => setIsHelpFlowOpen(true)} title="View Lifecycle Help Flow">
+                    <HelpCircle className="w-4 h-4" />
+                  </Button>
+                </span>
                 {selectedStudentIds.length > 0 && (
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                     <Button onClick={handleTestScenariosDownload} variant="secondary" size="icon" title={`Mock OMRs (${selectedStudentIds.length})`} className="border-primary/20 text-primary">
@@ -1056,32 +1064,32 @@ export default function StudentPreferenceManagement() {
                                 </a>
                               </Button>
                               {user?.role === 'central_admin' && student.lockedBy && (
-                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedStudentForUnlock(student); setIsUnlockConfirmDialogOpen(true); }}>
-                                  <Unlock className="w-3 h-3 mr-1" /> Unlock
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" title="Unlock" onClick={() => { setSelectedStudentForUnlock(student); setIsUnlockConfirmDialogOpen(true); }}>
+                                  <Unlock className="w-4 h-4" />
                                 </Button>
                               )}
                               {user?.role === 'central_admin' && !student.lockedBy && areAllPreferencesFilled(student) && (
                                 <>
-                                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSelectedStudentForLock(student); setIsLockConfirmDialogOpen(true); }}>
-                                    <Lock className="w-3 h-3 mr-1" /> Lock
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs" title="Lock" onClick={() => { setSelectedStudentForLock(student); setIsLockConfirmDialogOpen(true); }}>
+                                    <Lock className="w-4 h-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-red-600" onClick={() => { setSelectedStudentForRelease(student); setIsReleaseConfirmDialogOpen(true); }}>
-                                    <XCircle className="w-3 h-3 mr-1" /> Release
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-red-600" title="Release" onClick={() => { setSelectedStudentForRelease(student); setIsReleaseConfirmDialogOpen(true); }}>
+                                    <XCircle className="w-4 h-4" />
                                   </Button>
                                 </>
                               )}
                               {user?.role === 'central_admin' && student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
-                                <Button variant="ghost" size="sm" className="h-7 text-xs text-amber-600" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}>
-                                  <RefreshCw className="w-3 h-3 mr-1" /> Reset
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-amber-600" title="Reset to Pending" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}>
+                                  <RefreshCw className="w-4 h-4" />
                                 </Button>
                               )}
                               {user?.role === 'central_admin' && student.allocationStatus === 'allotted' && (
                                 <>
-                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600" onClick={() => handleOpenVacateDialog(student.id)}>
-                                    <XCircle className="w-3 h-3 mr-1" /> Vacate
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-orange-600" title="Vacate" onClick={() => handleOpenVacateDialog(student.id)}>
+                                    <XCircle className="w-4 h-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-emerald-600" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}>
-                                    <UserCheck className="w-3 h-3 mr-1" /> Admit
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-emerald-600" title="Admit" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}>
+                                    <UserCheck className="w-4 h-4" />
                                   </Button>
                                 </>
                               )}
@@ -1216,97 +1224,97 @@ export default function StudentPreferenceManagement() {
                                   {student.lockedBy ? (
                                     <Button
                                       variant="outline"
-                                      size="sm"
+                                      size="icon"
                                       onClick={() => {
                                         setSelectedStudentForUnlock(student);
                                         setIsUnlockConfirmDialogOpen(true);
                                       }}
                                       disabled={unlockEditMutation.isPending}
                                       data-testid={`button-unlock-${student.id}`}
+                                      className="h-8 w-8"
+                                      title="Unlock Form"
                                     >
-                                      <Unlock className="w-4 h-4 mr-1" />
-                                      Unlock
+                                      <Unlock className="w-4 h-4" />
                                     </Button>
                                   ) : (
                                     <>
                                       <Button
                                         variant="outline"
-                                        size="sm"
+                                        size="icon"
                                         onClick={() => openEditModal(student)}
                                         data-testid={`button-edit-${student.id}`}
+                                        className="h-8 w-8"
+                                        title="Edit Document"
                                       >
-                                        <Edit className="w-4 h-4 mr-1" />
-                                        Edit
+                                        <Edit className="w-4 h-4" />
                                       </Button>
 
                                       <Button
                                         variant="outline"
-                                        size="sm"
+                                        size="icon"
                                         onClick={() => {
                                           setPerStudentLiveScanStudent(student);
                                         }}
-                                        className="text-emerald-600 border-emerald-300 hover:bg-emerald-50 ml-2"
+                                        className="h-8 w-8 text-emerald-600 border-emerald-300 hover:bg-emerald-50 ml-2"
                                         title="Scan OMR Form"
                                       >
-                                        <Camera className="w-4 h-4 mr-1" />
-                                        Scan
+                                        <Camera className="w-4 h-4" />
                                       </Button>
 
                                       <Button
                                         variant="outline"
-                                        size="sm"
+                                        size="icon"
                                         onClick={() => { setScannerStudent(student); setIsScannerOpen(true); }}
-                                        className="text-violet-600 border-violet-300 hover:bg-violet-50 ml-2"
+                                        className="h-8 w-8 text-violet-600 border-violet-300 hover:bg-violet-50 ml-2"
                                         title="Upload OMR Image"
                                       >
-                                        <UploadCloud className="w-4 h-4 mr-1" />
-                                        Upload
+                                        <UploadCloud className="w-4 h-4" />
                                       </Button>
                                       <Button
                                         asChild
                                         variant="outline"
-                                        size="sm"
-                                        className="ml-2"
+                                        size="icon"
+                                        className="h-8 w-8 ml-2"
                                         title="Download Unfilled OMR"
                                       >
                                         <a href={`/api/students/${student.id}/omr-form?t=${new Date().getTime()}`} target="_blank" rel="noopener noreferrer">
-                                          <FileText className="w-4 h-4 mr-1" />
-                                          OMR
+                                          <FileText className="w-4 h-4" />
                                         </a>
                                       </Button>
 
                                       {/* Release Assignment button for fully filled forms */}
                                       {areAllPreferencesFilled(student) && (
-                                        <div className="flex flex-col ml-2 space-y-1">
+                                        <>
                                           <Button
                                             variant="outline"
-                                            size="sm"
+                                            size="icon"
                                             onClick={() => {
                                               setSelectedStudentForLock(student);
                                               setIsLockConfirmDialogOpen(true);
                                             }}
                                             disabled={lockForEditMutation.isPending}
                                             data-testid={`button-lock-${student.id}`}
+                                            className="h-8 w-8 ml-2"
+                                            title="Lock Form"
                                           >
-                                            <Lock className="w-4 h-4 mr-1" />
-                                            Lock
+                                            <Lock className="w-4 h-4" />
                                           </Button>
 
                                           <Button
                                             variant="outline"
-                                            size="sm"
+                                            size="icon"
                                             onClick={() => {
                                               setSelectedStudentForRelease(student);
                                               setIsReleaseConfirmDialogOpen(true);
                                             }}
                                             disabled={releaseAssignmentMutation.isPending}
                                             data-testid={`button-release-${student.id}`}
-                                            className="text-red-600 border-red-300 hover:bg-red-50"
+                                            className="h-8 w-8 text-red-600 border-red-300 hover:bg-red-50 ml-2"
+                                            title="Release Assignment"
                                           >
-                                            <XCircle className="w-4 h-4 mr-1" />
-                                            Release
+                                            <XCircle className="w-4 h-4" />
                                           </Button>
-                                        </div>
+                                        </>
                                       )}
                                     </>
                                   )}
@@ -1314,49 +1322,45 @@ export default function StudentPreferenceManagement() {
                                   {student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
                                     <Button
                                       variant="outline"
-                                      size="sm"
+                                      size="icon"
                                       onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}
-                                      className="text-amber-600 border-amber-300 hover:bg-amber-50 ml-2"
+                                      className="h-8 w-8 text-amber-600 border-amber-300 hover:bg-amber-50 ml-2"
                                       title="Reset to Pending"
                                       disabled={forceStatusMutation.isPending}
                                     >
-                                      <RefreshCw className="w-4 h-4 mr-1" />
-                                      Reset
+                                      <RefreshCw className="w-4 h-4" />
                                     </Button>
                                   )}
                                   {student.allocationStatus === 'allotted' && (
                                     <>
                                       <Button
                                         variant="outline"
-                                        size="sm"
+                                        size="icon"
                                         onClick={() => handleOpenVacateDialog(student.id)}
-                                        className="text-orange-600 border-orange-300 hover:bg-orange-50 ml-2"
+                                        className="h-8 w-8 text-orange-600 border-orange-300 hover:bg-orange-50 ml-2"
                                         title="Vacate Seat"
                                       >
-                                        <XCircle className="w-4 h-4 mr-1" />
-                                        Vacate
+                                        <XCircle className="w-4 h-4" />
                                       </Button>
                                       <Button
                                         variant="default"
-                                        size="sm"
+                                        size="icon"
                                         onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}
-                                        className="bg-emerald-600 hover:bg-emerald-700 ml-2"
+                                        className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 ml-2"
                                         title="Mark Admitted"
                                         disabled={forceStatusMutation.isPending}
                                       >
-                                        <UserCheck className="w-4 h-4 mr-1" />
-                                        Admit
+                                        <UserCheck className="w-4 h-4" />
                                       </Button>
                                       <Button
                                         variant="destructive"
-                                        size="sm"
+                                        size="icon"
                                         onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'not_admitted' })}
-                                        className="bg-red-700 hover:bg-red-800 ml-2"
+                                        className="h-8 w-8 bg-red-700 hover:bg-red-800 ml-2"
                                         title="Mark Not Admitted"
                                         disabled={forceStatusMutation.isPending}
                                       >
-                                        <UserX className="w-4 h-4 mr-1" />
-                                        No Show
+                                        <UserX className="w-4 h-4" />
                                       </Button>
                                     </>
                                   )}
@@ -2106,6 +2110,83 @@ export default function StudentPreferenceManagement() {
         </AlertDialogContent>
       </AlertDialog>
 
-    </div >
+      {/* Help Flow Dialog */}
+      <Dialog open={isHelpFlowOpen} onOpenChange={setIsHelpFlowOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Info className="w-5 h-5 text-blue-500" />
+              Student Status Lifecycle & Actions
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm mt-4">
+            <p className="text-muted-foreground">This diagram explains the 7 states a student can be in and which actions are available over their lifecycle.</p>
+            
+            <div className="space-y-3 bg-muted/30 p-4 rounded-md border">
+              <div className="flex items-start gap-3">
+                <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50 w-28 shrink-0 justify-center">Registered</Badge>
+                <div className="flex-1">Newly imported students. They haven't filled their preferences yet. Once they fill all 10 choices, they move to <strong>Pending</strong>.</div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <Badge variant="outline" className="text-amber-600 border-amber-300 w-28 shrink-0 justify-center">Pending</Badge>
+                <div className="flex-1">Preferences are filled and locked. The allocation algorithm <em>only</em> processes students in this state.</div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Badge variant="secondary" className="bg-green-100 text-green-800 w-28 shrink-0 justify-center">Allotted</Badge>
+                <div className="flex-1">Seat has been allocated by the engine. The Central Admin can then update their final outcome: <br/>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <span className="px-1.5 py-1 bg-background border rounded text-xs inline-flex items-center text-emerald-600"><UserCheck className="w-3.5 h-3.5 mr-1"/> Admit</span>
+                    <span className="px-1.5 py-1 bg-background border rounded text-xs inline-flex items-center text-orange-600"><XCircle className="w-3.5 h-3.5 mr-1"/> Vacate</span>
+                    <span className="px-1.5 py-1 bg-background border rounded text-xs inline-flex items-center text-red-600"><UserX className="w-3.5 h-3.5 mr-1"/> No Show</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Badge variant="destructive" className="w-28 shrink-0 justify-center">Not Allotted</Badge>
+                <div className="flex-1">Run through algorithm but no seat was available based on preferences and merit.</div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <Badge variant="default" className="bg-emerald-600 w-28 shrink-0 justify-center">Admitted</Badge>
+                <div className="flex-1">Student has successfully reported and taken the seat. Final state.</div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Badge variant="destructive" className="bg-red-700 w-28 shrink-0 justify-center">Not Admitted</Badge>
+                <div className="flex-1">Student was allotted a seat but failed to show up (No Show).</div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Badge variant="secondary" className="bg-gray-200 text-gray-700 w-28 shrink-0 justify-center">Vacated</Badge>
+                <div className="flex-1">Student was allotted but subsequently surrendered their seat explicitly.</div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-md text-amber-800 mt-4 flex gap-3">
+              <RefreshCw className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p><strong>Reset to Pending</strong></p>
+                <p className="text-xs opacity-90 mt-1">Available for Not Allotted, Vacated, and Not Admitted students. This action "re-enters" them into the pool so they can be processed in the next allocation round.</p>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 p-3 rounded-md text-blue-800 flex gap-3">
+              <Unlock className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p><strong>Unlock Action</strong></p>
+                <p className="text-xs opacity-90 mt-1">Allows district admins to fix errors on a student's preferences. It pulls them out of the <em>Pending</em> state temporarily until re-locked.</p>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
+              Tip: You can use the buttons at the top of the table to perform these actions in bulk for multiple selected students.
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
