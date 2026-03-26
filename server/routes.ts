@@ -1573,6 +1573,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to vacate seats" });
     }
   });
+  // Bulk status update
+  app.put('/api/students/bulk-status', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { studentIds, status } = req.body;
+      
+      if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ message: "Student IDs are required" });
+      }
+
+      const validStatuses = ['registered', 'pending', 'allotted', 'not_allotted', 'admitted', 'not_admitted', 'vacated'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      await Promise.all(studentIds.map(id => storage.updateStudent(id, { 
+        allocationStatus: status,
+        ...(status === 'pending' || status === 'registered' ? {
+          counselingRoundId: null,
+          counselingRoundNumber: null
+        } : {})
+      })));
+
+      await auditService.log(req.session.userId, 'bulk_status_update', 'students', 'multiple', {
+        status,
+        count: studentIds.length
+      }, req.ip, req.get('User-Agent'));
+
+      res.json({ message: `Status updated to ${status} for ${studentIds.length} students` });
+    } catch (error) {
+      console.error("Bulk status update error:", error);
+      res.status(500).json({ message: "Failed to update statuses" });
+    }
+  });
+
+  // Per-record status update
+  app.put('/api/students/:id/status', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      const validStatuses = ['registered', 'pending', 'allotted', 'not_allotted', 'admitted', 'not_admitted', 'vacated'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      const updatedStudent = await storage.updateStudent(id, { 
+        allocationStatus: status,
+        ...(status === 'pending' || status === 'registered' ? {
+          counselingRoundId: null,
+          counselingRoundNumber: null
+        } : {})
+      });
+
+      await auditService.log(req.session.userId, 'status_update', 'students', id, {
+        status,
+        previousStatus: student.allocationStatus
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Status update error:", error);
+      res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
 
   // Finalize allocation process
   app.post('/api/allocation/finalize', isCentralAdmin, async (req: any, res) => {

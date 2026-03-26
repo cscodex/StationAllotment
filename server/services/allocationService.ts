@@ -74,8 +74,9 @@ export class AllocationService {
     // Get students for this academic year
     log('📊 Fetching students data...');
     const allStudents = existingStudentsWithAllocations;
-    // Since we just checked, all students should be eligible ('pending' or 'not_allotted' from previous rounds). 
-    const students = allStudents.filter(s => s.allocationStatus !== 'allotted');
+    // Strictly evaluate only 'pending' students. 
+    // Students who are 'not_allotted', 'vacated', 'not_admitted', etc require manual reset to 'pending' by an Admin. 
+    const students = allStudents.filter(s => s.allocationStatus === 'pending');
     log(`   Found ${allStudents.length} total students for ${academicYear}`);
     log(`   Processing ${students.length} eligible students`);
     

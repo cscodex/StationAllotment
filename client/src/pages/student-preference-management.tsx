@@ -38,7 +38,12 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  Filter
+  Filter,
+  RefreshCw,
+  UserCheck,
+  UserX,
+  UserMinus,
+  MoreVertical
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Student } from "@shared/schema";
@@ -464,6 +469,35 @@ export default function StudentPreferenceManagement() {
     }
   });
 
+  const forceStatusMutation = useMutation({
+    mutationFn: async ({ studentId, status }: { studentId: string, status: string }) => {
+      const response = await apiRequest('PUT', `/api/students/${studentId}/status`, { status });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: "Status updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update status", variant: "destructive" });
+    }
+  });
+
+  const bulkForceStatusMutation = useMutation({
+    mutationFn: async ({ studentIds, status }: { studentIds: string[], status: string }) => {
+      const response = await apiRequest('PUT', `/api/students/bulk-status`, { studentIds, status });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: data.message });
+      setSelectedStudentIds([]);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update bulk status", variant: "destructive" });
+    }
+  });
+
   const handleOpenVacateDialog = (id: string | null = null) => {
     setVacateTargetId(id);
     setVacateReason("");
@@ -630,14 +664,22 @@ export default function StudentPreferenceManagement() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'registered':
+        return <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Registered</Badge>;
       case 'allotted':
         return <Badge variant="secondary" className="bg-green-100 text-green-800">Allotted</Badge>;
       case 'not_allotted':
         return <Badge variant="destructive">Not Allotted</Badge>;
       case 'pending':
-        return <Badge variant="outline">Pending</Badge>;
+        return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>;
+      case 'admitted':
+        return <Badge variant="default" className="bg-emerald-600">Admitted</Badge>;
+      case 'not_admitted':
+        return <Badge variant="destructive" className="bg-red-700">Not Admitted</Badge>;
+      case 'vacated':
+        return <Badge variant="secondary" className="bg-gray-200 text-gray-700">Vacated</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{status || 'registered'}</Badge>;
     }
   };
 
@@ -861,6 +903,36 @@ export default function StudentPreferenceManagement() {
                         >
                           <XCircle className="w-4 h-4" />
                         </Button>
+                        <div className="w-px h-6 bg-border mx-1 my-auto" />
+                        <Button
+                          onClick={() => bulkForceStatusMutation.mutate({ studentIds: selectedStudentIds, status: 'admitted' })}
+                          size="icon"
+                          title={`Mark Selected as Admitted (${selectedStudentIds.length})`}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          disabled={bulkForceStatusMutation.isPending}
+                        >
+                          <UserCheck className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={() => bulkForceStatusMutation.mutate({ studentIds: selectedStudentIds, status: 'not_admitted' })}
+                          size="icon"
+                          title={`Mark Selected as Not Admitted (${selectedStudentIds.length})`}
+                          variant="destructive"
+                          className="bg-red-700 hover:bg-red-800"
+                          disabled={bulkForceStatusMutation.isPending}
+                        >
+                          <UserX className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={() => bulkForceStatusMutation.mutate({ studentIds: selectedStudentIds, status: 'pending' })}
+                          size="icon"
+                          title={`Reset Selected to Pending (${selectedStudentIds.length})`}
+                          variant="outline"
+                          className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                          disabled={bulkForceStatusMutation.isPending}
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
                       </>
                     )}
                   </div>
@@ -998,10 +1070,20 @@ export default function StudentPreferenceManagement() {
                                   </Button>
                                 </>
                               )}
-                              {user?.role === 'central_admin' && student.allocationStatus === 'allotted' && (
-                                <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600" onClick={() => handleOpenVacateDialog(student.id)}>
-                                  <XCircle className="w-3 h-3 mr-1" /> Vacate
+                              {user?.role === 'central_admin' && student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
+                                <Button variant="ghost" size="sm" className="h-7 text-xs text-amber-600" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}>
+                                  <RefreshCw className="w-3 h-3 mr-1" /> Reset
                                 </Button>
+                              )}
+                              {user?.role === 'central_admin' && student.allocationStatus === 'allotted' && (
+                                <>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-orange-600" onClick={() => handleOpenVacateDialog(student.id)}>
+                                    <XCircle className="w-3 h-3 mr-1" /> Vacate
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="h-7 text-xs text-emerald-600" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}>
+                                    <UserCheck className="w-3 h-3 mr-1" /> Admit
+                                  </Button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -1229,17 +1311,54 @@ export default function StudentPreferenceManagement() {
                                     </>
                                   )}
 
-                                  {student.allocationStatus === 'allotted' && (
+                                  {student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => handleOpenVacateDialog(student.id)}
-                                      className="text-orange-600 border-orange-300 hover:bg-orange-50 ml-2"
-                                      title="Vacate Seat"
+                                      onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}
+                                      className="text-amber-600 border-amber-300 hover:bg-amber-50 ml-2"
+                                      title="Reset to Pending"
+                                      disabled={forceStatusMutation.isPending}
                                     >
-                                      <XCircle className="w-4 h-4 mr-1" />
-                                      Vacate
+                                      <RefreshCw className="w-4 h-4 mr-1" />
+                                      Reset
                                     </Button>
+                                  )}
+                                  {student.allocationStatus === 'allotted' && (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleOpenVacateDialog(student.id)}
+                                        className="text-orange-600 border-orange-300 hover:bg-orange-50 ml-2"
+                                        title="Vacate Seat"
+                                      >
+                                        <XCircle className="w-4 h-4 mr-1" />
+                                        Vacate
+                                      </Button>
+                                      <Button
+                                        variant="default"
+                                        size="sm"
+                                        onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}
+                                        className="bg-emerald-600 hover:bg-emerald-700 ml-2"
+                                        title="Mark Admitted"
+                                        disabled={forceStatusMutation.isPending}
+                                      >
+                                        <UserCheck className="w-4 h-4 mr-1" />
+                                        Admit
+                                      </Button>
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'not_admitted' })}
+                                        className="bg-red-700 hover:bg-red-800 ml-2"
+                                        title="Mark Not Admitted"
+                                        disabled={forceStatusMutation.isPending}
+                                      >
+                                        <UserX className="w-4 h-4 mr-1" />
+                                        No Show
+                                      </Button>
+                                    </>
                                   )}
                                 </>
                               ) : (

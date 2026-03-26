@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 
 interface InfographicsModalProps {
   isOpen: boolean;
@@ -41,7 +41,7 @@ export default function InfographicsModal({ isOpen, onClose, stats, title = "Sta
                 <CardContent className="h-[200px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={[{name: 'Locked', value: lockedStudents}, {name: 'Unlocked', value: unlockedStudents}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name, value}) => `${name}: ${value}`} labelLine={false}>
+                      <Pie data={[{name: 'Locked', value: lockedStudents}, {name: 'Unlocked', value: unlockedStudents}]} cx="50%" cy="50%" outerRadius={70} dataKey="value">
                         <Cell fill="#6366f1" />
                         <Cell fill="#e2e8f0" />
                       </Pie>
@@ -58,7 +58,7 @@ export default function InfographicsModal({ isOpen, onClose, stats, title = "Sta
                 <CardContent className="h-[200px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={[{name: 'Filled', value: studentsWithPreferences}, {name: 'Pending', value: studentsWithoutPreferences}]} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={({name, value}) => `${name}: ${value}`} labelLine={false}>
+                      <Pie data={[{name: 'Filled', value: studentsWithPreferences}, {name: 'Pending', value: studentsWithoutPreferences}]} cx="50%" cy="50%" outerRadius={70} dataKey="value">
                         <Cell fill="#22c55e" />
                         <Cell fill="#f59e0b" />
                       </Pie>
@@ -79,7 +79,9 @@ export default function InfographicsModal({ isOpen, onClose, stats, title = "Sta
                       <XAxis dataKey="name" tick={{fontSize: 11}} />
                       <YAxis allowDecimals={false} />
                       <Tooltip />
-                      <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} name="Students" />
+                      <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} name="Students">
+                        <LabelList dataKey="value" position="top" style={{ fontSize: '10px' }} />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -88,22 +90,30 @@ export default function InfographicsModal({ isOpen, onClose, stats, title = "Sta
             
             {districtBreakdown && districtBreakdown.length > 0 && (
               <Card className="mt-4 mx-2">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">District-wise Lock Status</CardTitle>
-                </CardHeader>
-                <CardContent className="h-[300px]">
+                <CardContent className="h-[350px] pt-6">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={districtBreakdown} margin={{top: 5, right: 10, left: 0, bottom: 35}}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="district" tick={{fontSize: 10}} angle={-45} textAnchor="end" />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Legend verticalAlign="top" height={36} />
-                      <Bar dataKey="locked" name="Locked" fill="#16a34a" radius={[2, 2, 0, 0]} />
-                      <Bar dataKey="unlocked" name="Unlocked" fill="#facc15" radius={[2, 2, 0, 0]} />
-                    </BarChart>
+                    <PieChart>
+                      <Pie
+                        data={districtBreakdown.filter((d: any) => d.locked > 0 || d.unlocked > 0).map((d: any) => ({ name: d.district, value: d.locked + d.unlocked, locked: d.locked, unlocked: d.unlocked }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {districtBreakdown.filter((d: any) => d.locked > 0 || d.unlocked > 0).map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={`hsl(${(index * 360) / districtBreakdown.length}, 70%, 50%)`} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value, name, props) => [`Total: ${value} (Locked: ${props.payload.locked}, Unlocked: ${props.payload.unlocked})`, name]} />
+                      <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
+                    </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
+                <CardHeader className="pt-0 pb-4 text-center">
+                  <CardTitle className="text-sm">District-wise Total Students (Donut)</CardTitle>
+                </CardHeader>
               </Card>
             )}
           </div>

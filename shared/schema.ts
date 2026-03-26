@@ -146,7 +146,7 @@ export const students = pgTable("students", {
   counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id, { onDelete: 'set null', onUpdate: 'cascade' }), // Round when allocated
   counselingRoundNumber: integer("counseling_round_number"), // Round number for quick lookup
   preferencesUpdatedAt: timestamp("preferences_updated_at"), // When preferences were last updated
-  allocationStatus: varchar("allocation_status").default('pending'), // 'pending' | 'allotted' | 'not_allotted'
+  allocationStatus: varchar("allocation_status").default('registered'), // 'registered' | 'pending' | 'allotted' | 'not_allotted' | 'admitted' | 'not_admitted' | 'vacated'
   isLocked: boolean("is_locked").default(false), // Whether preferences are locked for editing
   lockedBy: varchar("locked_by"), // User ID of the admin who has exclusive edit lock
   lockedAt: timestamp("locked_at"), // When the student was locked for editing
