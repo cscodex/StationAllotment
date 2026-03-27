@@ -43,7 +43,7 @@ import {
 import { format } from "date-fns";
 
 const createTitleSchema = z.object({
-  academicYear: z.string().regex(/^\d{4}-\d{4}$/, "Format: YYYY-YYYY (e.g., 2024-2025)"),
+  yearSessionId: z.string().min(1, "Please select a session"),
   roundName: z.string().min(1, "Counseling title is required"),
 });
 
@@ -241,17 +241,18 @@ export default function CounselingRounds() {
   const form = useForm<CreateTitleForm>({
     resolver: zodResolver(createTitleSchema),
     defaultValues: {
-      academicYear: selectedAcademicYear || "",
+      yearSessionId: "",
       roundName: "",
     },
   });
 
-  // Sync form when selectedAcademicYear changes
+  // Sync form when selectedAcademicYear changes — pre-select matching session if available
   useEffect(() => {
-    if (selectedAcademicYear) {
-      form.setValue("academicYear", selectedAcademicYear);
+    if (selectedAcademicYear && yearSessions) {
+      const match = yearSessions.find(ys => ys.sessionName === selectedAcademicYear && ys.isCurrent);
+      if (match) form.setValue("yearSessionId", match.id);
     }
-  }, [selectedAcademicYear, form]);
+  }, [selectedAcademicYear, yearSessions, form]);
 
   // Fetch counseling rounds
   const { data: rounds, isLoading, error, refetch } = useQuery<CounselingRound[]>({
@@ -286,8 +287,12 @@ export default function CounselingRounds() {
   // Create counseling title mutation (auto-creates first round)
   const createTitleMutation = useMutation({
     mutationFn: async (data: CreateTitleForm) => {
+      // Resolve academicYear from the selected session
+      const session = yearSessions?.find(ys => ys.id === data.yearSessionId);
+      if (!session) throw new Error("Selected session not found");
       const res = await apiRequest("POST", "/api/counseling-titles", {
-        academicYear: data.academicYear,
+        yearSessionId: data.yearSessionId,
+        academicYear: session.sessionName,
         roundName: data.roundName,
       });
       return await res.json();
@@ -1078,13 +1083,13 @@ export default function CounselingRounds() {
               <form onSubmit={form.handleSubmit(handleCreateTitle)} className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="academicYear"
+                  name="yearSessionId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Session (Academic Year) *</FormLabel>
                       <Select
                         value={field.value}
-                        onValueChange={(val) => form.setValue("academicYear", val, { shouldValidate: true })}
+                        onValueChange={(val) => form.setValue("yearSessionId", val, { shouldValidate: true })}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -1095,7 +1100,7 @@ export default function CounselingRounds() {
                           {(yearSessions ?? [])
                             .sort((a, b) => b.sessionName.localeCompare(a.sessionName))
                             .map((ys) => (
-                              <SelectItem key={ys.id} value={ys.sessionName}>
+                              <SelectItem key={ys.id} value={ys.id}>
                                 <div className="flex flex-col">
                                   <span className="font-medium">
                                     {ys.sessionName}{ys.isCurrent ? " (Current)" : ""}

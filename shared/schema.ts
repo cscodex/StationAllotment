@@ -47,6 +47,7 @@ export const users = pgTable("users", {
 export const counselingTitles = pgTable("counseling_titles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   academicYear: varchar("academic_year").notNull(), // '2025-2026'
+  yearSessionId: varchar("year_session_id"), // FK to year_session.id (specific variant)
   titleName: varchar("title_name").notNull(), // 'MeritoriousSchoolLudhiana' (machine key)
   displayName: varchar("display_name"), // 'Meritorious School, Ludhiana' (human readable)
   description: text("description"),
@@ -307,7 +308,7 @@ export const vacatedSeats = pgTable("vacated_seats", {
 // Year Session table for tracking academic sessions
 export const yearSession = pgTable("year_session", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  sessionName: varchar("session_name").notNull().unique(), // e.g., "2025-2026"
+  sessionName: varchar("session_name").notNull(), // e.g., "2025-2026" — NOT unique; multiple variants allowed
   startDate: date("start_date").notNull(), // e.g., April 1, 2025
   endDate: date("end_date").notNull(), // e.g., March 31, 2026
   isCurrent: boolean("is_current").default(false), // Only one session can be current

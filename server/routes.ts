@@ -2616,6 +2616,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/counseling-titles', isCentralAdmin, async (req: any, res) => {
+    try {
+      const { academicYear, roundName, yearSessionId } = req.body;
+      if (!academicYear || !roundName || !yearSessionId) {
+        return res.status(400).json({ message: "Year, Title, and Session ID required" });
+      }
+
+      // Check if counseling title (roundName) already exists for this year
+      const existing = await storage.getCounselingTitleByName(academicYear, roundName);
+      if (existing) {
+        return res.status(400).json({ message: "Counseling title already exists for this academic year" });
+      }
+
+      // Get the session to get the start date
+      const sessions = await storage.getYearSessions();
+      const session = sessions.find(s => s.id === yearSessionId);
+
+      // Create the counseling title registry entry
+      const newTitle = await storage.createCounselingTitle({
+        academicYear,
+        yearSessionId,
+        titleName: roundName, // Using roundName as the machine key titleName
+        displayName: roundName,
+        isActive: true
+      });
+
+      // Auto-create Round 1 for this title
+      const newRound = await storage.createCounselingRound({
+        academicYear,
+        counselingTitleId: newTitle.id,
+        roundName,
+        roundNumber: 1,
+        startDate: session ? new Date(session.startDate) : new Date(),
+        isActive: false,
+        isCompleted: false,
+        isAllocationCompleted: false,
+        isAllocationFinalized: false
+      });
+
+      res.status(201).json({ 
+        message: "Counseling title created successfully. Round 1 auto-created.", 
+        title: newTitle,
+        round: newRound 
+      });
+    } catch (error: any) {
+      console.error("Create title error:", error);
+      res.status(500).json({ message: error.message || "Failed to create title" });
+    }
+  });
+
   app.get('/api/counseling-titles/active', async (req, res) => {
     try {
       const { academicYear } = req.query;
