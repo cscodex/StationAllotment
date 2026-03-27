@@ -219,6 +219,16 @@ export default function CounselingRounds() {
   const [selectedRoundIds, setSelectedRoundIds] = useState<string[]>([]);
   const [expandedRoundIds, setExpandedRoundIds] = useState<Set<string>>(new Set());
 
+  // Fetch all year sessions for the session selector in Create dialog
+  const { data: yearSessions } = useQuery<{ id: string; sessionName: string; startDate: string; endDate: string; isCurrent: boolean }[]>({
+    queryKey: ["/api/year-sessions"],
+    queryFn: async () => {
+      const res = await fetch("/api/year-sessions", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch sessions");
+      return res.json();
+    },
+  });
+
   const toggleRoundExpansion = (id: string) => {
     setExpandedRoundIds(prev => {
       const next = new Set(prev);
@@ -1071,10 +1081,33 @@ export default function CounselingRounds() {
                   name="academicYear"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Academic Year</FormLabel>
-                      <FormControl>
-                        <Input {...field} disabled />
-                      </FormControl>
+                      <FormLabel>Session (Academic Year) *</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={(val) => form.setValue("academicYear", val, { shouldValidate: true })}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select session…" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {(yearSessions ?? [])
+                            .sort((a, b) => b.sessionName.localeCompare(a.sessionName))
+                            .map((ys) => (
+                              <SelectItem key={ys.id} value={ys.sessionName}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">
+                                    {ys.sessionName}{ys.isCurrent ? " (Current)" : ""}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {format(new Date(ys.startDate), "MMM d, yyyy")} – {format(new Date(ys.endDate), "MMM d, yyyy")}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
