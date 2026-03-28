@@ -1317,7 +1317,7 @@ export default function StudentPreferenceManagement() {
                                     </>
                                   )}
 
-                                  {student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
+                                  {(student.allocationStatus === 'vacated' || student.allocationStatus === 'not_admitted') && (
                                     <Button
                                       variant="outline"
                                       size="icon"

@@ -2405,6 +2405,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Vacated Seats / Attrition Tracking API
+  app.get('/api/vacated-seats', isAuthenticated, async (req, res) => {
+    try {
+      const academicYear = req.query.academicYear as string | undefined;
+      const vacatedSeats = await storage.getVacatedSeats(academicYear);
+      res.json(vacatedSeats);
+    } catch (error) {
+      console.error("Get vacated seats error:", error);
+      res.status(500).json({ message: "Failed to fetch vacated seats history" });
+    }
+  });
+
   // Counseling Rounds API
   app.get('/api/counseling-rounds', isAuthenticated, async (req: any, res) => {
     try {

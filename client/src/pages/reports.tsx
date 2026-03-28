@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useCounseling } from "@/hooks/useCounseling";
 import { Download, FileText, Users, MapPin, TrendingUp, PieChart as PieChartIcon } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useAuth } from "@/hooks/useAuth";
-import type { Student, Vacancy } from "@shared/schema";
+import type { Student, Vacancy, VacatedSeat } from "@shared/schema";
 import { useGlobalLoading } from "@/hooks/useGlobalLoading"; // Added this import
 
 interface AllocationStats {
@@ -39,6 +40,11 @@ export default function Reports() {
   const { data: allocationStats, isLoading: statsLoading } = useQuery<AllocationStats>({
     queryKey: ["/api/allocation/stats", { academicYear, counselingTitleId: activeTitle?.id }],
     enabled: !!activeTitle?.id,
+  });
+
+  const { data: vacatedSeats, isLoading: vacatedLoading } = useQuery<VacatedSeat[]>({
+    queryKey: ["/api/vacated-seats", { academicYear }],
+    enabled: !!academicYear,
   });
 
   const { user } = useAuth();
@@ -188,6 +194,90 @@ export default function Reports() {
   ], []);
 
   const initialFiltersSet = useRef(false);
+
+  // Date filters for Attrition chart
+  const [fromDate, setFromDate] = useState<string>("");
+  const [toDate, setToDate] = useState<string>("");
+
+  const attritionData = useMemo(() => {
+    // 1. Filter vacated seats strictly by date range
+    let validVacated = vacatedSeats || [];
+    
+    if (fromDate) {
+      const from = new Date(fromDate);
+      from.setHours(0, 0, 0, 0);
+      validVacated = validVacated.filter(v => new Date(v.vacatedAt) >= from);
+    }
+    if (toDate) {
+      const to = new Date(toDate);
+      to.setHours(23, 59, 59, 999);
+      validVacated = validVacated.filter(v => new Date(v.vacatedAt) <= to);
+    }
+
+    // 2. We also should filter admitted students similarly if we want dynamic admitted over time. 
+    // Wait, admitted students don't have an `admittedAt` field, they only have `updatedAt`.
+    // Let's filter students by updatedAt just for the graph logic
+    let validAdmitted = allottedStudents.filter(s => s.allocationStatus === 'admitted');
+    
+    if (fromDate) {
+      const from = new Date(fromDate);
+      from.setHours(0, 0, 0, 0);
+      validAdmitted = validAdmitted.filter(s => s.updatedAt && new Date(s.updatedAt) >= from);
+    }
+    if (toDate) {
+      const to = new Date(toDate);
+      to.setHours(23, 59, 59, 999);
+      validAdmitted = validAdmitted.filter(s => s.updatedAt && new Date(s.updatedAt) <= to);
+    }
+
+    // Combine by district
+    const map: Record<string, { district: string, admitted: number, vacated: number, notAdmitted: number }> = {};
+    
+    // Initialize map with all active districts from allocations
+    uniqueDistricts.forEach(d => {
+      map[d] = { district: d, admitted: 0, vacated: 0, notAdmitted: 0 };
+    });
+
+    validAdmitted.forEach(s => {
+      if (!s.allottedDistrict) return;
+      if (!map[s.allottedDistrict]) map[s.allottedDistrict] = { district: s.allottedDistrict, admitted: 0, vacated: 0, notAdmitted: 0 };
+      map[s.allottedDistrict].admitted += 1;
+    });
+
+    validVacated.forEach(v => {
+      if (!v.vacatedDistrict) return;
+      if (!map[v.vacatedDistrict]) map[v.vacatedDistrict] = { district: v.vacatedDistrict, admitted: 0, vacated: 0, notAdmitted: 0 };
+      if (v.actionType === 'not_admitted') {
+        map[v.vacatedDistrict].notAdmitted += 1;
+      } else {
+        map[v.vacatedDistrict].vacated += 1;
+      }
+    });
+
+    return Object.values(map).sort((a, b) => a.district.localeCompare(b.district));
+  }, [vacatedSeats, allottedStudents, uniqueDistricts, fromDate, toDate]);
+
+  const CustomAttritionTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-popover border border-border text-popover-foreground p-3 rounded-lg shadow-md max-w-sm">
+          <p className="font-semibold text-sm mb-2 text-primary">{label} District</p>
+          <div className="space-y-1">
+            {payload.map((entry: any, index: number) => (
+              <p key={`item-${index}`} className="text-sm flex justify-between gap-4">
+                <span style={{ color: entry.color }} className="font-medium">{entry.name}:</span>
+                <span className="font-bold">{entry.value}</span>
+              </p>
+            ))}
+          </div>
+          <div className="mt-3 pt-2 border-t border-border/50 text-xs text-muted-foreground italic">
+            Time Filter: {fromDate || "Beginning"} to {toDate || "Present"}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (uniqueDistricts.length > 0 && !initialFiltersSet.current) {
@@ -642,18 +732,26 @@ export default function Reports() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="station-allotments" data-testid="tab-station-allotments">
-            <FileText className="w-4 h-4 mr-2" />
-            Station Allotments
+            <FileText className="w-4 h-4 mr-2 hidden sm:block" />
+            <span className="hidden sm:inline">Station Allotments</span>
+            <span className="sm:hidden">Stations</span>
           </TabsTrigger>
           <TabsTrigger value="remaining-vacancies" data-testid="tab-remaining-vacancies">
-            <MapPin className="w-4 h-4 mr-2" />
-            Remaining Vacancies
+            <MapPin className="w-4 h-4 mr-2 hidden sm:block" />
+            <span className="hidden sm:inline">Remaining Vacancies</span>
+            <span className="sm:hidden">Vacancies</span>
           </TabsTrigger>
           <TabsTrigger value="detailed-breakdown">
-            <FileText className="w-4 h-4 mr-2" />
-            Detailed Breakdown
+            <FileText className="w-4 h-4 mr-2 hidden sm:block" />
+            <span className="hidden sm:inline">Detailed Breakdown</span>
+            <span className="sm:hidden">Detailed</span>
+          </TabsTrigger>
+          <TabsTrigger value="attrition">
+            <TrendingUp className="w-4 h-4 mr-2 hidden sm:block" />
+            <span className="hidden sm:inline">Attrition Analysis</span>
+            <span className="sm:hidden">Attrition</span>
           </TabsTrigger>
         </TabsList>
 
@@ -799,42 +897,103 @@ export default function Reports() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {detailedBreakdown.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">No vacancy data available for detailed breakdown.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-border whitespace-nowrap">
+                  <thead>
+                    <tr className="bg-muted text-left">
+                      <th className="border border-border p-2">District</th>
+                      <th className="border border-border p-2">Stream</th>
+                      <th className="border border-border p-2">Category</th>
+                      <th className="border border-border p-2">Gender</th>
+                      <th className="border border-border p-2 text-center">Allocated</th>
+                      <th className="border border-border p-2 text-center">Total Seats</th>
+                      <th className="border border-border p-2 text-center">Remaining</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailedBreakdown.map((row) => (
+                      <tr key={`${row.district}-${row.stream}-${row.category}-${row.gender}`} className="text-sm">
+                        <td className="border border-border p-2 font-medium">{row.district}</td>
+                        <td className="border border-border p-2">{row.stream}</td>
+                        <td className="border border-border p-2">{row.category}</td>
+                        <td className="border border-border p-2">{row.gender}</td>
+                        <td className="border border-border p-2 text-center">{row.allocated}</td>
+                        <td className="border border-border p-2 text-center">{row.total}</td>
+                        <td className="border border-border p-2 text-center">
+                          <span className={(row.total - row.allocated) > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                            {row.total - row.allocated}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="attrition" className="space-y-6">
+          <Card className="border-t-4 border-t-purple-500">
+            <CardHeader className="bg-gray-50/50">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Attrition & Admissions Graph</CardTitle>
+                  <CardDescription>
+                    Compare successful admissions against vacated or declined seats by District.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col">
+                    <Label className="text-xs mb-1">From Date</Label>
+                    <Input 
+                      type="date"
+                      className="h-9 w-[140px]"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <Label className="text-xs mb-1">To Date</Label>
+                    <Input 
+                      type="date"
+                      className="h-9 w-[140px]"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {attritionData.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No attrition data found for the selected time range.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-border">
-                    <thead>
-                      <tr className="bg-muted">
-                        <th className="border border-border p-3 text-left">District</th>
-                        <th className="border border-border p-3 text-left">Stream</th>
-                        <th className="border border-border p-3 text-left">Category</th>
-                        <th className="border border-border p-3 text-left">Gender</th>
-                        <th className="border border-border p-3 text-center">Total Seats</th>
-                        <th className="border border-border p-3 text-center">Filled</th>
-                        <th className="border border-border p-3 text-center">Remaining</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailedBreakdown.map((row: any, index: number) => (
-                        <tr key={`detail-${index}`}>
-                          <td className="border border-border p-3">{row.district}</td>
-                          <td className="border border-border p-3">{row.stream}</td>
-                          <td className="border border-border p-3">{row.category}</td>
-                          <td className="border border-border p-3">{row.gender}</td>
-                          <td className="border border-border p-3 text-center">{row.total}</td>
-                          <td className="border border-border p-3 text-center text-blue-600 font-medium">{row.allocated}</td>
-                          <td className="border border-border p-3 text-center">
-                            <span className={(row.total - row.allocated) > 0 ? "text-green-600 font-medium" : "text-muted-foreground"}>
-                              {row.total - row.allocated}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="overflow-x-auto pb-4">
+                  <div className="h-[400px]" style={{ minWidth: `${Math.max(800, attritionData.length * 60)}px` }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={attritionData} margin={{ top: 20, right: 30, left: 0, bottom: 25 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
+                        <XAxis 
+                          dataKey="district" 
+                          tick={{ fontSize: 11 }} 
+                          interval={0} 
+                          angle={-35} 
+                          textAnchor="end"
+                          height={60}
+                        />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip content={<CustomAttritionTooltip />} cursor={{ fill: 'transparent' }} />
+                        <Legend verticalAlign="top" height={36}/>
+                        <Bar dataKey="admitted" name="Admitted" fill="#10b981" radius={[2, 2, 0, 0]} maxBarSize={45} />
+                        <Bar dataKey="vacated" name="Vacated by Admin" fill="#ef4444" radius={[2, 2, 0, 0]} maxBarSize={45} />
+                        <Bar dataKey="notAdmitted" name="Declined Seat" fill="#f59e0b" radius={[2, 2, 0, 0]} maxBarSize={45} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               )}
             </CardContent>
