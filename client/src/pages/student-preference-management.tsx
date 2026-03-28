@@ -18,6 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useCounseling } from "@/hooks/useCounseling";
 import {
   Search,
   UserCog,
@@ -170,6 +171,7 @@ export default function StudentPreferenceManagement() {
 
   const { toggleMobile: toggleSidebar } = useSidebarToggle();
   const { user } = useAuth();
+  const { activeTitle } = useCounseling();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -248,8 +250,9 @@ export default function StudentPreferenceManagement() {
   });
 
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ["/api/students", { limit: 50000 }],
+    queryKey: ["/api/students", { counselingTitleId: activeTitle?.id, limit: 50000 }],
     staleTime: 60000,
+    enabled: !!activeTitle?.id,
   });
 
   const { data: roundsData } = useQuery<any[]>({
@@ -435,40 +438,49 @@ export default function StudentPreferenceManagement() {
     }
   });
 
-  const vacateSeatMutation = useMutation({
-    mutationFn: async ({ studentId, reason, comment }: { studentId: string, reason: string, comment: string }) => {
-      const response = await apiRequest('POST', `/api/students/${studentId}/vacate`, { reason, comment });
+  const markAdmittedMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/mark-admitted`);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      toast({ title: "Success", description: "Seat vacated successfully" });
-      setIsVacateDialogOpen(false);
-      setVacateReason("");
-      setVacateComment("");
-      setVacateTargetId(null);
+      toast({ title: "Success", description: "Student admitted successfully" });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to vacate seat", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to mark admitted", variant: "destructive" });
     }
   });
 
-  const bulkVacateMutation = useMutation({
-    mutationFn: async ({ studentIds, reason, comment }: { studentIds: string[], reason: string, comment: string }) => {
-      const response = await apiRequest('POST', `/api/students/bulk-vacate`, { studentIds, reason, comment });
+  const markNotAdmittedMutation = useMutation({
+    mutationFn: async ({ studentId, reason, comment }: { studentId: string, reason: string, comment: string }) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/mark-not-admitted`, { reason, comment });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/students"] });
-      toast({ title: "Success", description: data.message });
-      setSelectedStudentIds([]);
+      toast({ title: "Success", description: "Student marked as not admitted and seat vacated." });
       setIsVacateDialogOpen(false);
       setVacateReason("");
       setVacateComment("");
       setVacateTargetId(null);
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to bulk vacate seats", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to mark not admitted", variant: "destructive" });
+    }
+  });
+
+  const resetStatusMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const response = await apiRequest('POST', `/api/students/${studentId}/reset-status`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      toast({ title: "Success", description: "Student status reset to pending." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reset status", variant: "destructive" });
     }
   });
 
@@ -501,22 +513,20 @@ export default function StudentPreferenceManagement() {
     }
   });
 
-  const handleOpenVacateDialog = (id: string | null = null) => {
+  const handleOpenNotAdmittedDialog = (id: string | null = null) => {
     setVacateTargetId(id);
     setVacateReason("");
     setVacateComment("");
     setIsVacateDialogOpen(true);
   };
 
-  const handleConfirmVacate = () => {
+  const handleConfirmNotAdmitted = () => {
     if (!vacateReason) {
       toast({ title: "Error", description: "Reason is explicitly required.", variant: "destructive" });
       return;
     }
     if (vacateTargetId) {
-      vacateSeatMutation.mutate({ studentId: vacateTargetId, reason: vacateReason, comment: vacateComment });
-    } else {
-      bulkVacateMutation.mutate({ studentIds: selectedStudentIds, reason: vacateReason, comment: vacateComment });
+      markNotAdmittedMutation.mutate({ studentId: vacateTargetId, reason: vacateReason, comment: vacateComment });
     }
   };
 
@@ -899,18 +909,6 @@ export default function StudentPreferenceManagement() {
                         >
                           <Unlock className="w-4 h-4" />
                         </Button>
-                        <Button
-                          onClick={() => handleOpenVacateDialog(null)}
-                          size="icon"
-                          title={`Vacate Selected (${selectedStudentIds.length})`}
-                          variant="destructive"
-                          disabled={!selectedStudentIds.every(id => {
-                            const s = (studentsData as any)?.students?.find((s: Student) => s.id === id);
-                            return s?.allocationStatus === 'allotted';
-                          })}
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </Button>
                         <div className="w-px h-6 bg-border mx-1 my-auto" />
                         <Button
                           onClick={() => bulkForceStatusMutation.mutate({ studentIds: selectedStudentIds, status: 'admitted' })}
@@ -1079,17 +1077,17 @@ export default function StudentPreferenceManagement() {
                                 </>
                               )}
                               {user?.role === 'central_admin' && student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-amber-600" title="Reset to Pending" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-amber-600" title="Reset to Pending" onClick={() => resetStatusMutation.mutate(student.id)}>
                                   <RefreshCw className="w-4 h-4" />
                                 </Button>
                               )}
                               {user?.role === 'central_admin' && student.allocationStatus === 'allotted' && (
                                 <>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-orange-600" title="Vacate" onClick={() => handleOpenVacateDialog(student.id)}>
-                                    <XCircle className="w-4 h-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-emerald-600" title="Admit" onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-emerald-600" title="Mark Admitted" onClick={() => markAdmittedMutation.mutate(student.id)}>
                                     <UserCheck className="w-4 h-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-red-600" title="Mark Not Admitted" onClick={() => handleOpenNotAdmittedDialog(student.id)}>
+                                    <UserX className="w-4 h-4" />
                                   </Button>
                                 </>
                               )}
@@ -1323,10 +1321,10 @@ export default function StudentPreferenceManagement() {
                                     <Button
                                       variant="outline"
                                       size="icon"
-                                      onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'pending' })}
+                                      onClick={() => resetStatusMutation.mutate(student.id)}
                                       className="h-8 w-8 text-amber-600 border-amber-300 hover:bg-amber-50 ml-2"
                                       title="Reset to Pending"
-                                      disabled={forceStatusMutation.isPending}
+                                      disabled={resetStatusMutation.isPending}
                                     >
                                       <RefreshCw className="w-4 h-4" />
                                     </Button>
@@ -1334,31 +1332,21 @@ export default function StudentPreferenceManagement() {
                                   {student.allocationStatus === 'allotted' && (
                                     <>
                                       <Button
-                                        variant="outline"
-                                        size="icon"
-                                        onClick={() => handleOpenVacateDialog(student.id)}
-                                        className="h-8 w-8 text-orange-600 border-orange-300 hover:bg-orange-50 ml-2"
-                                        title="Vacate Seat"
-                                      >
-                                        <XCircle className="w-4 h-4" />
-                                      </Button>
-                                      <Button
                                         variant="default"
                                         size="icon"
-                                        onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'admitted' })}
+                                        onClick={() => markAdmittedMutation.mutate(student.id)}
                                         className="h-8 w-8 bg-emerald-600 hover:bg-emerald-700 ml-2"
                                         title="Mark Admitted"
-                                        disabled={forceStatusMutation.isPending}
+                                        disabled={markAdmittedMutation.isPending}
                                       >
                                         <UserCheck className="w-4 h-4" />
                                       </Button>
                                       <Button
                                         variant="destructive"
                                         size="icon"
-                                        onClick={() => forceStatusMutation.mutate({ studentId: student.id, status: 'not_admitted' })}
-                                        className="h-8 w-8 bg-red-700 hover:bg-red-800 ml-2"
+                                        onClick={() => handleOpenNotAdmittedDialog(student.id)}
+                                        className="h-8 w-8 bg-red-700 hover:bg-red-800 ml-2 text-white"
                                         title="Mark Not Admitted"
-                                        disabled={forceStatusMutation.isPending}
                                       >
                                         <UserX className="w-4 h-4" />
                                       </Button>
@@ -1493,7 +1481,7 @@ export default function StudentPreferenceManagement() {
       </main >
 
       {/* Edit Modal */}
-      < Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen} >
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen} >
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Student Preferences</DialogTitle>
@@ -1628,13 +1616,13 @@ export default function StudentPreferenceManagement() {
             </div>
           )}
         </DialogContent>
-      </Dialog >
+      </Dialog>
 
       {/* Vacate Confirmation Dialog */}
       <Dialog open={isVacateDialogOpen} onOpenChange={setIsVacateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{vacateTargetId ? 'Confirm Vacate Seat' : `Bulk Vacate ${selectedStudentIds.length} Seats`}</DialogTitle>
+            <DialogTitle>Mark Not Admitted</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
@@ -1658,18 +1646,18 @@ export default function StudentPreferenceManagement() {
             <Button variant="outline" onClick={() => setIsVacateDialogOpen(false)}>Cancel</Button>
             <Button
               variant="destructive"
-              disabled={!vacateReason || vacateSeatMutation.isPending || bulkVacateMutation.isPending}
-              onClick={handleConfirmVacate}
+              disabled={!vacateReason || markNotAdmittedMutation.isPending}
+              onClick={handleConfirmNotAdmitted}
             >
-              {(vacateSeatMutation.isPending || bulkVacateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirm Vacate
+              {markNotAdmittedMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Not Admitted
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Choices View Modal */}
-      < Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen} >
+      <Dialog open={isChoicesModalOpen} onOpenChange={setIsChoicesModalOpen} >
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>District Choices - {selectedStudentForChoices?.name}</DialogTitle>
@@ -1760,10 +1748,10 @@ export default function StudentPreferenceManagement() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog >
+      </Dialog>
 
       {/* Lock Confirmation Dialog */}
-      < AlertDialog open={isLockConfirmDialogOpen} onOpenChange={setIsLockConfirmDialogOpen} >
+      <AlertDialog open={isLockConfirmDialogOpen} onOpenChange={setIsLockConfirmDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Lock Student Preferences</AlertDialogTitle>
@@ -1826,10 +1814,10 @@ export default function StudentPreferenceManagement() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog >
+      </AlertDialog>
 
       {/* Unlock Confirmation Dialog */}
-      < AlertDialog open={isUnlockConfirmDialogOpen} onOpenChange={setIsUnlockConfirmDialogOpen} >
+      <AlertDialog open={isUnlockConfirmDialogOpen} onOpenChange={setIsUnlockConfirmDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Unlock Student Preferences</AlertDialogTitle>
@@ -1889,10 +1877,10 @@ export default function StudentPreferenceManagement() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog >
+      </AlertDialog>
 
       {/* Release Assignment Confirmation Dialog */}
-      < AlertDialog open={isReleaseConfirmDialogOpen} onOpenChange={setIsReleaseConfirmDialogOpen} >
+      <AlertDialog open={isReleaseConfirmDialogOpen} onOpenChange={setIsReleaseConfirmDialogOpen} >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Release Student Assignment</AlertDialogTitle>
@@ -1952,7 +1940,7 @@ export default function StudentPreferenceManagement() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog >
+      </AlertDialog>
 
       {/* OMR Scanner Modal (Student-Level) */}
       < OMRScannerModal

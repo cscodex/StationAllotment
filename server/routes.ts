@@ -1487,8 +1487,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await storage.getUser(req.session.userId);
 
       const student = await storage.getStudent(id);
-      if (!student || student.allocationStatus !== 'allotted') {
-        return res.status(400).json({ message: "Student is not currently allotted a seat" });
+      if (!student || student.allocationStatus !== 'admitted') {
+        return res.status(400).json({ message: "Student is not currently admitted" });
       }
 
       await storage.insertVacatedSeat({
@@ -1504,7 +1504,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reason: reason || 'Unknown',
         comment: comment || '',
         academicYear: student.academicYear || '',
-        counselingRoundId: student.counselingRoundId
+        counselingRoundId: student.counselingRoundId,
+        actionBy: user?.id,
+        actionType: 'vacated'
       });
 
       const updatedStudent = await storage.updateStudent(id, { 
@@ -1536,7 +1538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const id of studentIds) {
         const student = await storage.getStudent(id);
-        if (student && student.allocationStatus === 'allotted') {
+        if (student && student.allocationStatus === 'admitted') {
           await storage.insertVacatedSeat({
             studentId: student.id,
             appNo: student.appNo || '',
@@ -1550,7 +1552,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             reason: reason || 'Unknown',
             comment: comment || '',
             academicYear: student.academicYear || '',
-            counselingRoundId: student.counselingRoundId
+            counselingRoundId: student.counselingRoundId,
+            actionBy: user?.id,
+            actionType: 'vacated'
           });
 
           await storage.updateStudent(id, { 
@@ -1573,6 +1577,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to vacate seats" });
     }
   });
+
+  // Mark Admitted
+  app.post('/api/students/:id/mark-admitted', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const student = await storage.getStudent(id);
+      if (!student || student.allocationStatus !== 'allotted') {
+        return res.status(400).json({ message: "Student is not currently allotted to a seat" });
+      }
+
+      const updatedStudent = await storage.updateStudent(id, { 
+        allocationStatus: 'admitted',
+      });
+
+      await auditService.log(req.session.userId, 'student_admitted', 'students', id, {
+        admittedDistrict: student.allottedDistrict
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student mark admitted error:", error);
+      res.status(500).json({ message: "Failed to mark student as admitted" });
+    }
+  });
+
+  // Mark Not Admitted
+  app.post('/api/students/:id/mark-not-admitted', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { reason, comment } = req.body;
+      const user = await storage.getUser(req.session.userId);
+
+      const student = await storage.getStudent(id);
+      if (!student || student.allocationStatus !== 'allotted') {
+        return res.status(400).json({ message: "Student is not currently allotted a seat" });
+      }
+
+      await storage.insertVacatedSeat({
+        studentId: student.id,
+        appNo: student.appNo || '',
+        meritNumber: student.meritNumber,
+        studentName: student.name,
+        gender: student.gender || '',
+        category: student.category || '',
+        stream: student.stream,
+        vacatedDistrict: student.allottedDistrict || '',
+        vacatedStream: student.allottedStream || '',
+        reason: reason || 'Declined/Not Admitted',
+        comment: comment || '',
+        academicYear: student.academicYear || '',
+        counselingRoundId: student.counselingRoundId,
+        actionBy: user?.id,
+        actionType: 'not_admitted'
+      });
+
+      const updatedStudent = await storage.updateStudent(id, { 
+        allocationStatus: 'not_admitted',
+        allottedDistrict: null,
+        allottedStream: null,
+        allottedSchoolUdise: null
+      });
+
+      await auditService.log(req.session.userId, 'student_not_admitted', 'students', id, {
+        reason,
+        vacatedDistrict: student.allottedDistrict
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student mark not admitted error:", error);
+      res.status(500).json({ message: "Failed to mark student as not admitted" });
+    }
+  });
+
+  // Reset Status
+  app.post('/api/students/:id/reset-status', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const student = await storage.getStudent(id);
+      if (!student) {
+        return res.status(404).json({ message: "Student not found" });
+      }
+
+      const updatedStudent = await storage.updateStudent(id, { 
+        allocationStatus: 'pending',
+      });
+
+      await auditService.log(req.session.userId, 'student_status_reset', 'students', id, {
+        previousStatus: student.allocationStatus
+      }, req.ip, req.get('User-Agent'));
+
+      res.json(updatedStudent);
+    } catch (error) {
+      console.error("Student reset status error:", error);
+      res.status(500).json({ message: "Failed to reset student status" });
+    }
+  });
+
   // Bulk status update
   app.put('/api/students/bulk-status', isCentralAdmin, async (req: any, res) => {
     try {

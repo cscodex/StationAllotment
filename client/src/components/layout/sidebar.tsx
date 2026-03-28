@@ -42,6 +42,7 @@ const navigation = [
     items: [
       { name: "Student Preferences", href: "/district-admin", icon: UserCog, roles: ["district_admin"] },
       { name: "Student Preference Management", href: "/student-preference-management", icon: UserCog, roles: ["central_admin"] },
+      { name: "Admitted Students", href: "/admitted-students", icon: ClipboardCheck, roles: ["central_admin", "district_admin"] },
       { name: "Year Sessions", href: "/year-sessions", icon: Calendar, roles: ["central_admin"] },
       { name: "Counseling Rounds", href: "/counseling-rounds", icon: Calendar, roles: ["central_admin", "district_admin"] },
       { name: "Run Allocation", href: "/allocation", icon: Settings, roles: ["central_admin"] },

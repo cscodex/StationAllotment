@@ -302,6 +302,8 @@ export const vacatedSeats = pgTable("vacated_seats", {
   comment: text("comment"),
   academicYear: varchar("academic_year").notNull(),
   counselingRoundId: varchar("counseling_round_id").references(() => counselingRounds.id),
+  actionBy: varchar("action_by").references(() => users.id), // Admin who processed this
+  actionType: varchar("action_type").default('vacated'), // 'vacated', 'not_admitted'
   vacatedAt: timestamp("vacated_at").defaultNow().notNull(),
 });
 
@@ -381,6 +383,10 @@ export const vacatedSeatsRelations = relations(vacatedSeats, ({ one }) => ({
   student: one(students, {
     fields: [vacatedSeats.studentId],
     references: [students.id],
+  }),
+  actionByUser: one(users, {
+    fields: [vacatedSeats.actionBy],
+    references: [users.id],
   }),
   counselingRound: one(counselingRounds, {
     fields: [vacatedSeats.counselingRoundId],
