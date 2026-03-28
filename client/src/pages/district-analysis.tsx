@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import Header from "@/components/layout/header";
+import { useCounseling } from "@/hooks/useCounseling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,10 +36,12 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 export default function DistrictAnalysis() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeTitle } = useCounseling();
 
   // Fetch district statuses
   const { data: districtStatuses, isLoading: loadingStatuses } = useQuery<DistrictStatus[]>({
-    queryKey: ["/api/district-status"],
+    queryKey: ["/api/district-status", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const unfinalizeMutation = useMutation({
@@ -83,17 +86,20 @@ export default function DistrictAnalysis() {
   });
 
   const { data: unfinalizeRequests } = useQuery<UnfinalizeRequest[]>({
-    queryKey: ["/api/unfinalize-requests"],
+    queryKey: ["/api/unfinalize-requests", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   // Fetch students data
   const { data: studentsResponse } = useQuery<{ students: Student[] } | Student[]>({
-    queryKey: ["/api/students?limit=50000"],
+    queryKey: ["/api/students", { limit: 50000, counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   // Fetch vacancies data
   const { data: vacancies } = useQuery<any[]>({
-    queryKey: ["/api/vacancies"],
+    queryKey: ["/api/vacancies", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   // Handle different API response formats

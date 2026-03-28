@@ -4,6 +4,7 @@ import StatsCards from "@/components/dashboard/stats-cards";
 import AuditLogPreview from "@/components/dashboard/audit-log-preview";
 import DistrictSummary from "@/components/dashboard/district-summary";
 import { useAuth } from "@/hooks/useAuth";
+import { useCounseling } from "@/hooks/useCounseling";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -24,24 +25,26 @@ export default function Dashboard() {
   const [isFlowModalOpen, setIsFlowModalOpen] = useState(false);
   const [isInfographicsOpen, setIsInfographicsOpen] = useState(false);
   
-  // Fetch current session (academic year) to pass to stats
-  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-    queryKey: ["/api/session/current"],
-  });
-  const selectedAcademicYear = currentSessionData?.currentSession || "";
-
+  const { activeSession, activeTitle } = useCounseling();
+  const selectedAcademicYear = activeSession;
+  
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
-    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear, counselingTitleId: activeTitle?.id }],
     queryFn: async () => {
-      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      const params = new URLSearchParams();
+      if (selectedAcademicYear) params.append("academicYear", selectedAcademicYear);
+      if (activeTitle?.id) params.append("counselingTitleId", activeTitle.id);
+      
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
       return res.json();
     },
-    enabled: !!selectedAcademicYear,
+    enabled: !!activeTitle?.id,
   });
 
   const { data: activeRound } = useQuery({
-    queryKey: ["/api/counseling/active-round"],
+    queryKey: ["/api/counseling/active-round", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   return (

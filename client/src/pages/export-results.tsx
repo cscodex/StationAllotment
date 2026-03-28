@@ -17,38 +17,39 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useGlobalLoading } from "@/hooks/useGlobalLoading";
+import { useCounseling } from "@/hooks/useCounseling";
 
 export default function ExportResults() {
   const [isExportingCSV, setIsExportingCSV] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const { toast } = useToast();
   const { setLoading } = useGlobalLoading();
+  const { activeSession, activeTitle } = useCounseling();
+  const selectedAcademicYear = activeSession;
 
   const { data: allocationStatus } = useQuery<{ completed: boolean; deadline: string | null }>({
-    queryKey: ["/api/allocation/status"],
+    queryKey: ["/api/allocation/status", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
-
-  // Fetch current session (academic year) to pass to stats
-  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-    queryKey: ["/api/session/current"],
-  });
-  const selectedAcademicYear = currentSessionData?.currentSession || "";
 
   const { data: stats } = useQuery<{ totalStudents: number; pendingAllocations: number; completedAllocations: number; totalVacancies: number; completionRate: number }>({
-    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear, counselingTitleId: activeTitle?.id }],
     queryFn: async () => {
-      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      const params = new URLSearchParams();
+      if (selectedAcademicYear) params.append("academicYear", selectedAcademicYear);
+      if (activeTitle?.id) params.append("counselingTitleId", activeTitle.id);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
       return res.json();
     },
-    enabled: !!selectedAcademicYear,
+    enabled: !!activeTitle?.id,
   });
 
   const handleExportCSV = async () => {
     setIsExportingCSV(true);
     setLoading(true, "Generating CSV File...");
     try {
-      const response = await fetch('/api/export/csv', {
+      const response = await fetch(`/api/export/csv?counselingTitleId=${activeTitle?.id || ''}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -87,7 +88,7 @@ export default function ExportResults() {
     setIsExportingPDF(true);
     setLoading(true, "Generating PDF Report...");
     try {
-      const response = await fetch('/api/export/pdf', {
+      const response = await fetch(`/api/export/pdf?counselingTitleId=${activeTitle?.id || ''}`, {
         method: 'GET',
         credentials: 'include',
       });

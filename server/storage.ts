@@ -105,6 +105,7 @@ export interface IStorage {
   getCounselingRounds(academicYear?: string, counselingTitleId?: string): Promise<CounselingRound[]>;
   getCounselingRound(id: string): Promise<CounselingRound | undefined>;
   getActiveCounselingRound(academicYear?: string): Promise<CounselingRound | undefined>;
+  getActiveCounselingRoundForTitle(counselingTitleId: string): Promise<CounselingRound | undefined>;
   createCounselingRound(round: InsertCounselingRound): Promise<CounselingRound>;
   bulkCreateCounselingRounds(rounds: InsertCounselingRound[]): Promise<CounselingRound[]>;
   updateCounselingRound(id: string, updates: Partial<CounselingRound>): Promise<CounselingRound>;
@@ -769,6 +770,18 @@ export class DatabaseStorage implements IStorage {
         .limit(1);
        round = anyRound;
     }
+
+    return round;
+  }
+
+  async getActiveCounselingRoundForTitle(counselingTitleId: string): Promise<CounselingRound | undefined> {
+    const [round] = await db.select().from(counselingRounds)
+      .where(and(
+        eq(counselingRounds.isActive, true),
+        eq(counselingRounds.counselingTitleId, counselingTitleId)
+      ))
+      .orderBy(desc(counselingRounds.createdAt))
+      .limit(1);
 
     return round;
   }

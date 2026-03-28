@@ -8,6 +8,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import AllocationModal from "@/components/modals/allocation-modal";
+import { useCounseling } from "@/hooks/useCounseling";
 import {
   Settings,
   Play,
@@ -27,52 +28,57 @@ export default function Allocation() {
   const [showAllocationModal, setShowAllocationModal] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeSession, activeTitle } = useCounseling();
+  const selectedAcademicYear = activeSession;
 
   const { data: allocationStatus } = useQuery<any>({
-    queryKey: ["/api/allocation/status"],
+    queryKey: ["/api/allocation/status", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
-
-  // Fetch current session (academic year) to pass to stats
-  const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-    queryKey: ["/api/session/current"],
-  });
-  const selectedAcademicYear = currentSessionData?.currentSession || "";
 
   const { data: stats } = useQuery<any>({
-    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+    queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear, counselingTitleId: activeTitle?.id }],
     queryFn: async () => {
-      const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+      const params = new URLSearchParams();
+      if (selectedAcademicYear) params.append("academicYear", selectedAcademicYear);
+      if (activeTitle?.id) params.append("counselingTitleId", activeTitle.id);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
       return res.json();
     },
-    enabled: !!selectedAcademicYear,
+    enabled: !!activeTitle?.id,
   });
 
   const { data: files } = useQuery<any[]>({
-    queryKey: ["/api/files"],
+    queryKey: ["/api/files", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const { data: studentsResponse } = useQuery<any>({
-    queryKey: ["/api/students?limit=100000"],
+    queryKey: ["/api/students", { limit: 100000, counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const { data: vacancies } = useQuery<any[]>({
-    queryKey: ["/api/vacancies"],
+    queryKey: ["/api/vacancies", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   const { data: entranceResultsResponse } = useQuery<any>({
-    queryKey: ["/api/students-entrance-results?limit=100000"],
+    queryKey: ["/api/students-entrance-results", { limit: 100000, counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   // Fetch district statuses for finalization check
   const { data: districtStatuses } = useQuery<DistrictStatus[]>({
-    queryKey: ["/api/district-status"],
+    queryKey: ["/api/district-status", { counselingTitleId: activeTitle?.id }],
+    enabled: !!activeTitle?.id,
   });
 
   // Finalize allocation mutation
   const finalizeAllocationMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/allocation/finalize");
+      return await apiRequest("POST", "/api/allocation/finalize", { counselingTitleId: activeTitle?.id });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
@@ -95,7 +101,7 @@ export default function Allocation() {
 
   const nextRoundMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/counseling-rounds/next");
+      return await apiRequest("POST", "/api/counseling-rounds/next", { counselingTitleId: activeTitle?.id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });
@@ -113,7 +119,7 @@ export default function Allocation() {
 
   const closeSessionMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/sessions/close");
+      return await apiRequest("POST", "/api/sessions/close", { counselingTitleId: activeTitle?.id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/allocation/status"] });

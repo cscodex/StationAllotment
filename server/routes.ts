@@ -1648,10 +1648,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/allocation/finalize', isCentralAdmin, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.session.userId);
+      const { counselingTitleId } = req.body;
 
       const currentSessionSetting = await storage.getSetting('current_session');
       const academicYear = currentSessionSetting?.value || '2024-2025';
-      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      const activeRound = counselingTitleId
+        ? await storage.getActiveCounselingRoundForTitle(counselingTitleId as string)
+        : await storage.getActiveCounselingRound(academicYear);
 
       if (!activeRound) {
         return res.status(400).json({ message: "No active counseling round found" });
@@ -2975,11 +2978,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/allocation/status', isAuthenticated, async (req, res) => {
     try {
+      const { counselingTitleId } = req.query;
       const yearSessions = await storage.getYearSessions();
       const currentYS = yearSessions.find(y => y.isCurrent);
       const currentSessionSetting = await storage.getSetting('current_session');
       const academicYear = currentYS?.sessionName || currentSessionSetting?.value || '2024-2025';
-      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      const activeRound = counselingTitleId
+        ? await storage.getActiveCounselingRoundForTitle(counselingTitleId as string)
+        : await storage.getActiveCounselingRound(academicYear);
 
       res.json({
         completed: activeRound ? activeRound.isAllocationCompleted : false,
@@ -3474,9 +3480,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/district-status', isDistrictAdmin, async (req: any, res) => {
     try {
       const user = req.user;
+      const { counselingTitleId } = req.query;
       const currentSessionSetting = await storage.getSetting('current_session');
       const academicYear = currentSessionSetting?.value || '2024-2025';
-      const activeRound = await storage.getActiveCounselingRound(academicYear);
+      const activeRound = counselingTitleId
+        ? await storage.getActiveCounselingRoundForTitle(counselingTitleId as string)
+        : await storage.getActiveCounselingRound(academicYear);
 
       if (user.role === 'central_admin') {
         // Central admin can see all district statuses

@@ -2,30 +2,43 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useCounseling } from "@/hooks/useCounseling";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function CounselingProgress() {
-    // Fetch current session (academic year) to pass to stats
-    const { data: currentSessionData } = useQuery<{ currentSession: string }>({
-        queryKey: ["/api/session/current"],
-    });
-    const selectedAcademicYear = currentSessionData?.currentSession || "";
+    const { activeTitle, activeSession } = useCounseling();
+    const selectedAcademicYear = activeSession;
 
     const { data: stats } = useQuery<any>({
-        queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear }],
+        queryKey: ["/api/dashboard/stats", { academicYear: selectedAcademicYear, counselingTitleId: activeTitle?.id }],
         queryFn: async () => {
-            const qs = selectedAcademicYear ? `?academicYear=${encodeURIComponent(selectedAcademicYear)}` : '';
+            const params = new URLSearchParams();
+            if (selectedAcademicYear) params.append("academicYear", selectedAcademicYear);
+            if (activeTitle?.id) params.append("counselingTitleId", activeTitle.id);
+            const qs = params.toString() ? `?${params.toString()}` : '';
             const res = await apiRequest("GET", `/api/dashboard/stats${qs}`);
             return res.json();
         },
-        enabled: !!selectedAcademicYear,
+        enabled: !!activeTitle?.id,
     });
-    const { data: allocationStatus } = useQuery<any>({ queryKey: ["/api/allocation/status"] });
-    const { data: files } = useQuery<any[]>({ queryKey: ["/api/files"] });
-    const { data: districtStatuses } = useQuery<any[]>({ queryKey: ["/api/district-status"] });
-    const { data: studentsResponse } = useQuery<any>({ queryKey: ["/api/students", { limit: 50000 }] });
+    const { data: allocationStatus } = useQuery<any>({ 
+        queryKey: ["/api/allocation/status", { counselingTitleId: activeTitle?.id }],
+        enabled: !!activeTitle?.id
+    });
+    const { data: files } = useQuery<any[]>({ 
+        queryKey: ["/api/files", { counselingTitleId: activeTitle?.id }],
+        enabled: !!activeTitle?.id
+    });
+    const { data: districtStatuses } = useQuery<any[]>({ 
+        queryKey: ["/api/district-status", { counselingTitleId: activeTitle?.id }],
+        enabled: !!activeTitle?.id
+    });
+    const { data: studentsResponse } = useQuery<any>({ 
+        queryKey: ["/api/students", { limit: 50000, counselingTitleId: activeTitle?.id }],
+        enabled: !!activeTitle?.id
+    });
 
     const { user } = useAuth();
     const { toast } = useToast();
