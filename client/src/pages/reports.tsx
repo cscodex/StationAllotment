@@ -51,7 +51,7 @@ export default function Reports() {
   const isDistrictAdmin = user?.role === 'district_admin';
 
   const allottedStudents = useMemo(() => students?.filter(s => 
-    s.allocationStatus === 'allotted' && 
+    (s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted') && 
     (!isDistrictAdmin || s.allottedDistrict === user?.district)
   ) || [], [students, isDistrictAdmin, user?.district]);
   

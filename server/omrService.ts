@@ -327,22 +327,42 @@ export class OMRService {
         return await doc.save();
     }
 
-    async generateBulkOMRForms(studentIds: string[], testFillMode = false): Promise<Uint8Array> {
+    async generateBulkOMRForms(studentIds: string[], testFillMode = false, jobId?: string): Promise<Uint8Array> {
         const mainDoc = await PDFDocument.create();
 
-        for (const studentId of studentIds) {
-            // Generate the standalone 2-page doc for each student
-            const singleStudentBytes = await this.generateStudentOMRForm(studentId, testFillMode);
-            const studentDoc = await PDFDocument.load(singleStudentBytes);
-
-            // Copy the 2 pages from the student doc into the main doc
-            const copiedPages = await mainDoc.copyPages(studentDoc, [0, 1]);
-            mainDoc.addPage(copiedPages[0]);
-            mainDoc.addPage(copiedPages[1]);
+        if (jobId) {
+            pdfProgressMap.set(jobId, { current: 0, total: studentIds.length });
         }
 
-        return await mainDoc.save();
+        try {
+            for (let i = 0; i < studentIds.length; i++) {
+                const studentId = studentIds[i];
+                // Generate the standalone 2-page doc for each student
+                const singleStudentBytes = await this.generateStudentOMRForm(studentId, testFillMode);
+                const studentDoc = await PDFDocument.load(singleStudentBytes);
+
+                // Copy the 2 pages from the student doc into the main doc
+                const copiedPages = await mainDoc.copyPages(studentDoc, [0, 1]);
+                mainDoc.addPage(copiedPages[0]);
+                mainDoc.addPage(copiedPages[1]);
+
+                if (jobId) {
+                    // Slight delay tracking to allow the event loop to breathe occasionally if making massive PDFs 
+                    // Not strictly needed, but nice semantics
+                    pdfProgressMap.set(jobId, { current: i + 1, total: studentIds.length });
+                }
+            }
+
+            return await mainDoc.save();
+        } finally {
+            if (jobId) {
+                // Keep the completion state briefly so the last poll from UI succeeds
+                pdfProgressMap.set(jobId, { current: studentIds.length, total: studentIds.length, completed: true });
+                setTimeout(() => pdfProgressMap.delete(jobId), 60000); // clear after 1 minute
+            }
+        }
     }
 }
 
+export const pdfProgressMap = new Map<string, { current: number, total: number, completed?: boolean }>();
 export const omrService = new OMRService();

@@ -13,7 +13,7 @@ import { AllocationService } from "./services/allocationService";
 import { setProgress, getProgress, clearProgress } from "./services/allocationProgress";
 import { ExportService } from "./services/exportService";
 import { AuditService } from "./services/auditService";
-import { omrService } from "./omrService";
+import { omrService, pdfProgressMap } from "./omrService";
 import fs from "fs/promises";
 
 // Cache for demo credentials (only load once at startup in development)
@@ -1509,6 +1509,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actionType: 'vacated'
       });
 
+      // Restore the vacated seat back to available vacancies
+      const vacancies = await storage.getVacancies(student.academicYear || '2024-2025');
+      const targetVacancy = vacancies.find(v =>
+        (student.allottedSchoolUdise ? v.udiseCode === student.allottedSchoolUdise : v.district === student.allottedDistrict) &&
+        v.stream === student.allottedStream &&
+        v.gender === student.gender &&
+        v.category === student.category
+      );
+      if (targetVacancy) {
+        const newAvailable = Math.min((targetVacancy.availableSeats || 0) + 1, targetVacancy.totalSeats || 1);
+        await storage.updateVacancy(targetVacancy.id, { availableSeats: newAvailable });
+      }
+
       const updatedStudent = await storage.updateStudent(id, { 
         allocationStatus: 'vacated',
         allottedDistrict: null,
@@ -1536,6 +1549,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!Array.isArray(studentIds) || studentIds.length === 0) return res.status(400).json({ message: "No students provided" });
 
+      const currentSessionSetting = await storage.getSetting('current_session');
+      const academicYear = currentSessionSetting?.value || '2024-2025';
+      const vacancies = await storage.getVacancies(academicYear);
+
       for (const id of studentIds) {
         const student = await storage.getStudent(id);
         if (student && student.allocationStatus === 'admitted') {
@@ -1556,6 +1573,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             actionBy: user?.id,
             actionType: 'vacated'
           });
+
+          // Restore the vacated seat
+          const targetVacancy = vacancies.find(v =>
+            (student.allottedSchoolUdise ? v.udiseCode === student.allottedSchoolUdise : v.district === student.allottedDistrict) &&
+            v.stream === student.allottedStream &&
+            v.gender === student.gender &&
+            v.category === student.category
+          );
+          if (targetVacancy) {
+            targetVacancy.availableSeats = Math.min((targetVacancy.availableSeats || 0) + 1, targetVacancy.totalSeats || 1);
+            await storage.updateVacancy(targetVacancy.id, { availableSeats: targetVacancy.availableSeats });
+          }
 
           await storage.updateStudent(id, { 
             allocationStatus: 'vacated',
@@ -1632,6 +1661,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         actionBy: user?.id,
         actionType: 'not_admitted'
       });
+
+      // Restore the vacated seat back to available vacancies
+      const vacancies = await storage.getVacancies(student.academicYear || '2024-2025');
+      const targetVacancy = vacancies.find(v =>
+        (student.allottedSchoolUdise ? v.udiseCode === student.allottedSchoolUdise : v.district === student.allottedDistrict) &&
+        v.stream === student.allottedStream &&
+        v.gender === student.gender &&
+        v.category === student.category
+      );
+      if (targetVacancy) {
+        const newAvailable = Math.min((targetVacancy.availableSeats || 0) + 1, targetVacancy.totalSeats || 1);
+        await storage.updateVacancy(targetVacancy.id, { availableSeats: newAvailable });
+      }
 
       const updatedStudent = await storage.updateStudent(id, { 
         allocationStatus: 'not_admitted',
@@ -1808,6 +1850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // We take a full snapshot backup of all processed statuses
       const snapshotStudents = currentStudents.filter(s => 
         s.allocationStatus === 'allotted' || 
+        s.allocationStatus === 'admitted' || 
         s.allocationStatus === 'vacated' || 
         s.allocationStatus === 'not_allotted'
       );
@@ -1865,8 +1908,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!Array.isArray(studentIds) || studentIds.length === 0) {
         return res.status(400).json({ message: "No students provided for bulk generation" });
       }
-
-      const pdfBytes = await omrService.generateBulkOMRForms(studentIds);
+      const jobId = req.query.jobId as string | undefined;
+      const pdfBytes = await omrService.generateBulkOMRForms(studentIds, false, jobId);
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="bulk_omr_forms_${Date.now()}.pdf"`);
@@ -1885,8 +1928,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No students provided for testing mock generation" });
       }
 
-      console.log(`[TESTING] Generating Mock Bubbled OMR forms for ${studentIds.length} students...`);
-      const pdfBytes = await omrService.generateBulkOMRForms(studentIds, true); // testFillMode = true
+      const jobId = req.query.jobId as string | undefined;
+      const pdfBytes = await omrService.generateBulkOMRForms(studentIds, true, jobId); // testFillMode = true
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="mock_scenarios_${studentIds.length}_students.pdf"`);
@@ -1895,6 +1938,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Test Scenarios OMR Generation error:", error);
       res.status(500).json({ message: error.message || "Failed to generate Mock OMR testing forms" });
     }
+  });
+
+  app.get('/api/omr/progress/:jobId', isAuthenticated, (req, res) => {
+    const { jobId } = req.params;
+    const progress = pdfProgressMap.get(jobId);
+    if (!progress) {
+      return res.status(404).json({ message: "Job not found or already completed" });
+    }
+    res.json(progress);
   });
 
   app.get('/api/students/:id/omr-form', isAuthenticated, async (req, res) => {
@@ -2452,7 +2504,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Fetch all students allocated in this round
       const allStudents = await storage.getStudents(10000, 0);
       const allottedStudents = allStudents.filter(s =>
-        s.allocationStatus === 'allotted' && s.counselingRoundId === roundId
+        (s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted') && s.counselingRoundId === roundId
       );
 
       // Build cutoff table: track per district|stream|gender|category the max merit number (worst rank admitted = cutoff)
@@ -2565,7 +2617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const categoryProgress = categoryOrder.map(cat => {
         const inCat = eligibleStudents.filter((s: any) => erMap.get(s.appNo || '')?.category === cat);
-        const filled = inCat.filter((s: any) => s.allocationStatus === 'allotted').length;
+        const filled = inCat.filter((s: any) => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted').length;
         return { category: cat, filled, total: inCat.length };
       });
 
@@ -3124,7 +3176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get students with allocation data (only those with preferences set)
       const students = await storage.getStudents(10000, 0, undefined, undefined, undefined, undefined, undefined, counselingTitleId as string);
-      const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
+      const allottedStudents = students.filter(s => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted');
       const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
       const pendingStudents = students.filter(s => s.allocationStatus === 'pending');
 
@@ -3172,6 +3224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const liveStudents = await storage.getStudents(10000, 0, round.academicYear);
         snapshotStudents = liveStudents.filter(s => 
           s.allocationStatus === 'allotted' || 
+          s.allocationStatus === 'admitted' || 
           s.allocationStatus === 'vacated' || 
           s.allocationStatus === 'not_allotted'
         );
@@ -3223,7 +3276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dateStr = round.allocationFinalizedAt ? new Date(round.allocationFinalizedAt as any).toLocaleString('en-IN') : 'N/A';
       doc.fontSize(9).fillColor('#64748b').text(`Finalized: ${dateStr}  |  Total Students Processed: ${snapshotStudents.length}`, { align: 'center' }).moveDown(0.8);
 
-      const allotted = snapshotStudents.filter((s: any) => s.allocationStatus === 'allotted');
+      const allotted = snapshotStudents.filter((s: any) => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted');
       const notAllotted = snapshotStudents.filter((s: any) => s.allocationStatus === 'not_allotted');
       const vacated = snapshotStudents.filter((s: any) => s.allocationStatus === 'vacated');
 

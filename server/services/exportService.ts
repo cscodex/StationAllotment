@@ -6,7 +6,7 @@ export class ExportService {
 
   private getClosingRanks(students: any[]): Record<string, number> {
     const closingRanks: Record<string, number> = {};
-    students.filter(s => s.allocationStatus === 'allotted').forEach(s => {
+    students.filter(s => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted').forEach(s => {
       const key = `${s.gender}_${s.category}_${s.stream}`;
       if (!closingRanks[key] || (s.meritNumber || 0) > closingRanks[key]) {
         closingRanks[key] = s.meritNumber || 0;
@@ -79,7 +79,7 @@ export class ExportService {
     const filteredStudents = students.filter(s => 
       s.counselingRoundId && 
       roundIds.includes(s.counselingRoundId) &&
-      (s.allocationStatus === 'allotted' || s.allocationStatus === 'not_allotted')
+      (s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted' || s.allocationStatus === 'not_allotted')
     );
 
     const headers = [
@@ -105,7 +105,7 @@ export class ExportService {
       let districtText = student.allottedDistrict || '-';
       if (student.allocationStatus === 'not_allotted') {
          districtText = this.getNotAllottedReason(student, closingRanks);
-      } else if (student.allocationStatus === 'allotted') {
+      } else if (student.allocationStatus === 'allotted' || student.allocationStatus === 'admitted') {
          const choices = [student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
            student.choice6, student.choice7, student.choice8, student.choice9, student.choice10];
          const choiceIdx = choices.findIndex(c => c === student.allottedDistrict);
@@ -177,7 +177,7 @@ export class ExportService {
     const filteredStudents = students.filter(s => 
       s.counselingRoundId && 
       roundIds.includes(s.counselingRoundId) &&
-      (s.allocationStatus === 'allotted' || s.allocationStatus === 'not_allotted')
+      (s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted' || s.allocationStatus === 'not_allotted')
     );
 
     return new Promise((resolve, reject) => {
@@ -220,7 +220,7 @@ export class ExportService {
     doc.moveDown(2);
 
     // Statistics Cards
-    const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
+    const allottedStudents = students.filter(s => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted');
     const notAllottedStudents = students.filter(s => s.allocationStatus === 'not_allotted');
     const vacatedStudents = students.filter(s => s.allocationStatus === 'vacated');
 
@@ -429,7 +429,7 @@ export class ExportService {
     let districtText = student.allottedDistrict || '-';
     if (student.allocationStatus === 'not_allotted') {
        districtText = this.getNotAllottedReason(student, closingRanks);
-    } else if (student.allocationStatus === 'allotted') {
+    } else if (student.allocationStatus === 'allotted' || student.allocationStatus === 'admitted') {
        const choiceIdx = choices.findIndex(c => c === student.allottedDistrict);
        if (choiceIdx !== -1) {
            districtText = `Choice ${choiceIdx + 1} - ${student.allottedDistrict}`;
@@ -832,7 +832,7 @@ export class ExportService {
   async exportReportsPDF(academicYear: string, res: any) {
     const students = await this.storage.getStudents(10000, 0, academicYear);
     const vacancies = await this.storage.getVacancies(academicYear);
-    const allottedStudents = students.filter(s => s.allocationStatus === 'allotted');
+    const allottedStudents = students.filter(s => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted');
 
     const PDFDocument = (await import('pdfkit')).default;
     const doc = new PDFDocument({ margin: 30, size: 'A4' });
@@ -932,7 +932,7 @@ export class ExportService {
 
   async exportCustomCSV(academicYear: string, filters: any, columns: string[]): Promise<string> {
     const students = await this.storage.getStudents(10000, 0, academicYear);
-    const allotted = students.filter(s => s.allocationStatus === 'allotted');
+    const allotted = students.filter(s => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted');
     
     // Filter by criteria
     const filtered = allotted.filter(s => 
@@ -985,7 +985,7 @@ export class ExportService {
 
   async exportCustomPDF(academicYear: string, filters: any, columns: string[], res: any) {
     const students = await this.storage.getStudents(10000, 0, academicYear);
-    const allotted = students.filter(s => s.allocationStatus === 'allotted');
+    const allotted = students.filter(s => s.allocationStatus === 'allotted' || s.allocationStatus === 'admitted');
     
     const filtered = allotted.filter(s => 
       (!filters.districts?.length || filters.districts.includes(s.allottedDistrict || '')) &&

@@ -116,6 +116,8 @@ export default function StudentPreferenceManagement() {
   const [vacateTargetId, setVacateTargetId] = useState<string | null>(null);
 
   // Bulk scanner state
+  const [omrProgress, setOmrProgress] = useState<{current: number, total: number} | null>(null);
+  const [isGeneratingOMR, setIsGeneratingOMR] = useState(false);
   const [isBulkScannerOpen, setIsBulkScannerOpen] = useState(false);
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
   const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
@@ -595,8 +597,25 @@ export default function StudentPreferenceManagement() {
 
   const handleBulkDownloadOMR = async () => {
     if (selectedStudentIds.length === 0) return;
+    let intervalId: any = null;
     try {
-      const response = await fetch(`/api/students/bulk-omr-form`, {
+      setIsGeneratingOMR(true);
+      const jobId = `pdf_job_${Date.now()}`;
+      setOmrProgress({ current: 0, total: selectedStudentIds.length });
+      
+      intervalId = setInterval(async () => {
+         try {
+            const progRes = await fetch(`/api/omr/progress/${jobId}`, {
+               headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+            });
+            if (progRes.ok) {
+               const data = await progRes.json();
+               if (data) setOmrProgress({current: data.current, total: data.total});
+            }
+         } catch(e){}
+      }, 1000);
+
+      const response = await fetch(`/api/students/bulk-omr-form?jobId=${jobId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -608,13 +627,8 @@ export default function StudentPreferenceManagement() {
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `bulk_omr_forms_${new Date().getTime()}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 
       toast({
         title: "Success",
@@ -627,13 +641,34 @@ export default function StudentPreferenceManagement() {
         description: error.message || "Could not download bulk OMR forms",
         variant: "destructive",
       });
+    } finally {
+      if (intervalId) clearInterval(intervalId);
+      setIsGeneratingOMR(false);
+      setOmrProgress(null);
     }
   };
 
   const handleTestScenariosDownload = async () => {
     if (selectedStudentIds.length === 0) return;
+    let intervalId: any = null;
     try {
-      const response = await fetch(`/api/omr/test-scenarios`, {
+      setIsGeneratingOMR(true);
+      const jobId = `pdf_job_${Date.now()}`;
+      setOmrProgress({ current: 0, total: selectedStudentIds.length });
+      
+      intervalId = setInterval(async () => {
+         try {
+            const progRes = await fetch(`/api/omr/progress/${jobId}`, {
+               headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
+            });
+            if (progRes.ok) {
+               const data = await progRes.json();
+               if (data) setOmrProgress({current: data.current, total: data.total});
+            }
+         } catch(e){}
+      }, 1000);
+
+      const response = await fetch(`/api/omr/test-scenarios?jobId=${jobId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -645,13 +680,8 @@ export default function StudentPreferenceManagement() {
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `mock_scenarios_${selectedStudentIds.length}_students.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 
       toast({
         title: "Success",
@@ -664,6 +694,10 @@ export default function StudentPreferenceManagement() {
         description: error.message || "Could not download mock testing forms",
         variant: "destructive",
       });
+    } finally {
+      if (intervalId) clearInterval(intervalId);
+      setIsGeneratingOMR(false);
+      setOmrProgress(null);
     }
   };
 
@@ -710,6 +744,10 @@ export default function StudentPreferenceManagement() {
     return false;
   };
 
+  const hasRegisteredStudents = selectedStudentIds.length > 0 && selectedStudentIds.some(id => {
+    const s = (studentsData as any)?.students?.find((st: Student) => st.id === id);
+    return s?.allocationStatus === 'registered';
+  });
 
   return (
     <div className="flex-1 flex flex-col">
@@ -882,13 +920,13 @@ export default function StudentPreferenceManagement() {
                 </span>
                 {selectedStudentIds.length > 0 && (
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <Button onClick={handleTestScenariosDownload} variant="secondary" size="icon" title={`Mock OMRs (${selectedStudentIds.length})`} className="border-primary/20 text-primary">
+                    <Button onClick={handleTestScenariosDownload} disabled={isGeneratingOMR} variant="secondary" size="icon" title={`Mock OMRs (${selectedStudentIds.length})`} className="border-primary/20 text-primary">
                       <DownloadCloud className="w-4 h-4" />
                     </Button>
-                    <Button onClick={handleBulkDownloadOMR} size="icon" title={`Blank OMRs (${selectedStudentIds.length})`} variant="outline" className="text-primary border-primary hover:bg-primary/10">
+                    <Button onClick={handleBulkDownloadOMR} disabled={isGeneratingOMR} size="icon" title={`Blank OMRs (${selectedStudentIds.length})`} variant="outline" className="text-primary border-primary hover:bg-primary/10">
                       <DownloadCloud className="w-4 h-4" />
                     </Button>
-                    {user?.role === 'central_admin' && (
+                    {user?.role === 'central_admin' && !hasRegisteredStudents && (
                       <>
                         <Button 
                           onClick={() => bulkLockMutation.mutate(selectedStudentIds)} 
@@ -2179,6 +2217,29 @@ export default function StudentPreferenceManagement() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* OMR Generation Loading Overlay */}
+      {isGeneratingOMR && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <h2 className="text-xl font-semibold">Generating OMR PDFs...</h2>
+          {omrProgress && omrProgress.total > 0 && (
+             <div className="w-64 mt-4">
+               <div className="flex justify-between text-sm mb-1 font-medium">
+                 <span>{Math.round((omrProgress.current / omrProgress.total) * 100)}%</span>
+                 <span>{omrProgress.current} / {omrProgress.total}</span>
+               </div>
+               <div className="w-full bg-muted rounded-full h-2">
+                 <div 
+                   className="bg-primary h-2 rounded-full transition-all duration-300" 
+                   style={{ width: `${Math.min((omrProgress.current / omrProgress.total) * 100, 100)}%` }}
+                 ></div>
+               </div>
+             </div>
+          )}
+          <p className="text-muted-foreground mt-4">Please wait while the documents are compiled.</p>
+        </div>
+      )}
     </div>
   );
 }
