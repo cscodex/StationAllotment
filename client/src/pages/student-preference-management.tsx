@@ -819,9 +819,13 @@ export default function StudentPreferenceManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="registered">Registered</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="allotted">Allotted</SelectItem>
                       <SelectItem value="not_allotted">Not Allotted</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="admitted">Admitted</SelectItem>
+                      <SelectItem value="not_admitted">Not Admitted</SelectItem>
+                      <SelectItem value="vacated">Vacated</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -836,7 +840,7 @@ export default function StudentPreferenceManagement() {
                         <SelectItem value="all">All Rounds</SelectItem>
                         {roundsData.map((r: any) => (
                           <SelectItem key={r.id} value={r.id}>
-                            {r.roundName}
+                            Round {r.roundNumber}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1076,7 +1080,7 @@ export default function StudentPreferenceManagement() {
                                   </Button>
                                 </>
                               )}
-                              {user?.role === 'central_admin' && student.allocationStatus !== 'pending' && student.allocationStatus !== 'allotted' && student.allocationStatus !== 'registered' && (
+                              {user?.role === 'central_admin' && (student.allocationStatus === 'vacated' || student.allocationStatus === 'not_admitted') && (
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-xs text-amber-600" title="Reset to Pending" onClick={() => resetStatusMutation.mutate(student.id)}>
                                   <RefreshCw className="w-4 h-4" />
                                 </Button>
