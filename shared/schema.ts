@@ -76,6 +76,7 @@ export const counselingRounds = pgTable("counseling_rounds", {
   isAllocationFinalized: boolean("is_allocation_finalized").default(false), // Whether allocation has been finalized by admin
   allocationFinalizedAt: timestamp("allocation_finalized_at"), // When allocation was finalized
   allocationFinalizedBy: varchar("allocation_finalized_by").references(() => users.id), // Admin who finalized allocation
+  preSnapshotData: jsonb("pre_snapshot_data"),
   snapshotData: jsonb("snapshot_data"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

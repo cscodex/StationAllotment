@@ -46,7 +46,8 @@ import {
   UserMinus,
   MoreVertical,
   HelpCircle,
-  Info
+  Info,
+  BarChart3
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Student } from "@shared/schema";
@@ -54,6 +55,7 @@ import { SCHOOL_DISTRICTS, COUNSELING_DISTRICTS } from "@shared/schema";
 import OMRScannerModal from "@/components/dashboard/omr-scanner-modal";
 import { BulkScannerModal, type ScannedPageInfo } from "@/components/dashboard/bulk-scanner-modal";
 import { LiveOMRScannerModal } from "@/components/dashboard/live-omr-scanner";
+import { LifecycleStatsOverlay } from "@/components/LifecycleStatsOverlay";
 
 const DISTRICTS = SCHOOL_DISTRICTS;
 const STREAMS = ["NA", "Medical", "Non-Medical", "Commerce"];
@@ -122,6 +124,7 @@ export default function StudentPreferenceManagement() {
   const [isLiveScannerOpen, setIsLiveScannerOpen] = useState(false);
   const [isGlobalImageScanOpen, setIsGlobalImageScanOpen] = useState(false);
   const [isHelpFlowOpen, setIsHelpFlowOpen] = useState(false);
+  const [isLifecycleStatsOpen, setIsLifecycleStatsOpen] = useState(false);
 
   const handleBulkSave = async (pages: ScannedPageInfo[]) => {
     let successCount = 0;
@@ -173,7 +176,7 @@ export default function StudentPreferenceManagement() {
 
   const { toggleMobile: toggleSidebar } = useSidebarToggle();
   const { user } = useAuth();
-  const { activeTitle } = useCounseling();
+  const { activeTitle, titles } = useCounseling();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -794,6 +797,14 @@ export default function StudentPreferenceManagement() {
 
                 {/* BULK SCAN BUTTON */}
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title="Lifecycle Stats Tracker"
+                    onClick={() => setIsLifecycleStatsOpen(true)}
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                  </Button>
                   <Button
                     variant="outline"
                     size="icon"
@@ -2240,6 +2251,12 @@ export default function StudentPreferenceManagement() {
           <p className="text-muted-foreground mt-4">Please wait while the documents are compiled.</p>
         </div>
       )}
+      <LifecycleStatsOverlay
+        open={isLifecycleStatsOpen}
+        onOpenChange={setIsLifecycleStatsOpen}
+        counselingTitles={titles}
+        defaultTitleId={activeTitle?.id || "current"}
+      />
     </div>
   );
 }

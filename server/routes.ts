@@ -1157,7 +1157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const existingStudent = await storage.getStudent(id);
-      if (existingStudent && (existingStudent.allocationStatus === 'not_allotted' || existingStudent.allocationStatus === 'vacated')) {
+      if (existingStudent && (existingStudent.allocationStatus === 'not_allotted' || existingStudent.allocationStatus === 'vacated' || existingStudent.allocationStatus === 'registered')) {
         preferences.allocationStatus = 'pending';
         preferences.counselingRoundId = null;
         preferences.counselingRoundNumber = null;
@@ -1248,6 +1248,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             message: "Cannot lock student: All 10 district preferences must be set before locking"
           });
         }
+      }
+
+      // Ensure student transitions to 'pending' immediately if they are still marked 'registered' during locking
+      if (isLocked && student.allocationStatus === 'registered') {
+        await storage.updateStudent(id, { allocationStatus: 'pending' });
       }
 
       const updatedStudent = isLocked
@@ -1398,7 +1403,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const updatedStudent = await storage.updateStudent(id, {
-        lockedBy: req.session.userId
+        lockedBy: req.session.userId,
+        ...(student.allocationStatus === 'registered' ? { allocationStatus: 'pending' } : {})
       });
 
       await auditService.log(req.session.userId, 'student_lock', 'students', id, {
@@ -1847,13 +1853,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Fetch exact current state of all students for snapshotting
       const currentStudents = await storage.getStudents(10000, 0, academicYear);
-      // We take a full snapshot backup of all processed statuses
-      const snapshotStudents = currentStudents.filter(s => 
-        s.allocationStatus === 'allotted' || 
-        s.allocationStatus === 'admitted' || 
-        s.allocationStatus === 'vacated' || 
-        s.allocationStatus === 'not_allotted'
-      );
+      // Determine relevant counseling title scoped bounds.
+      const snapshotStudents = activeRound.counselingTitleId 
+        ? currentStudents.filter(s => s.counselingTitleId === activeRound.counselingTitleId)
+        : currentStudents;
 
       // Set allocation as finalized on the active round
       await storage.updateCounselingRound(activeRound.id, {
@@ -2930,6 +2933,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Wire real-time progress: allocation service calls onProgress, we write to in-memory store
       setProgress(id, { status: 'starting', queues: {}, processed: 0, total: 0, allottedCount: 0, notAllottedCount: 0, logs: [], startedAt: Date.now() });
 
+      // Before kicking off allocation algorithm, snapshot the exact live student state
+      const preCurrentStudents = await storage.getStudents(10000, 0, academicYear);
+      const preSnapshotStudents = activeRound.counselingTitleId 
+        ? preCurrentStudents.filter(s => s.counselingTitleId === activeRound.counselingTitleId)
+        : preCurrentStudents;
+
+      await storage.updateCounselingRound(activeRound.id, {
+        preSnapshotData: preSnapshotStudents
+      });
+
       // RUN IN BACKGROUND - DO NOT AWAIT to prevent browser timeout on long pauses
       allocationService.runAllocation(academicYear, activeRound.roundNumber, activeRound.id, (event) => {
         setProgress(id, {
@@ -3165,6 +3178,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get allocation status error:", error);
       res.status(500).json({ message: "Failed to fetch allocation status" });
+    }
+  });
+
+  app.get('/api/allocation/lifecycle-stats', isAuthenticated, async (req: any, res) => {
+    try {
+      const { counselingTitleId, roundId, timing } = req.query;
+      
+      if (!counselingTitleId) {
+        return res.status(400).json({ message: "counselingTitleId is required" });
+      }
+
+      // 1. Get total from entrance result for baseline tracking
+      const totalStudents = await storage.getStudentsEntranceResultsCount(counselingTitleId as string);
+
+      let workingSet: any[] = [];
+      
+      if (roundId && roundId !== 'current') {
+        const round = await storage.getCounselingRound(roundId as string);
+        if (!round) return res.status(404).json({ message: "Round not found" });
+        
+        if (timing === 'before') {
+          workingSet = (round.preSnapshotData as any[]) || [];
+        } else {
+          workingSet = (round.snapshotData as any[]) || [];
+        }
+      } else {
+        // If no round selected, we show CURRENT LIVE DATA
+        workingSet = await storage.getStudents(10000, 0, undefined, undefined, undefined, undefined, undefined, counselingTitleId as string);
+      }
+
+      // Initialize counter
+      const stats = {
+        total: totalStudents,
+        registered: 0,
+        pending: 0,
+        locked: 0, // In db, locked status is actually allocationStatus = pending && isLocked = true
+        allotted: 0,
+        not_allotted: 0,
+        admitted: 0,
+        not_admitted: 0,
+        vacated: 0
+      };
+
+      // Count actuals
+      let trackedInSystem = 0;
+      workingSet.forEach(student => {
+        trackedInSystem++;
+        // If they are locked...
+        if (student.allocationStatus === 'pending' && student.isLocked) {
+          stats.locked++;
+        } else if (student.allocationStatus === 'pending') {
+          stats.pending++;
+        } else if (student.allocationStatus === 'registered') {
+          stats.registered++;
+        } else if (student.allocationStatus === 'allotted') {
+          stats.allotted++;
+        } else if (student.allocationStatus === 'not_allotted') {
+          stats.not_allotted++;
+        } else if (student.allocationStatus === 'admitted') {
+          stats.admitted++;
+        } else if (student.allocationStatus === 'not_admitted') {
+          stats.not_admitted++;
+        } else if (student.allocationStatus === 'vacated') {
+          stats.vacated++;
+        }
+      });
+      
+      // Anyone who isn't even in the students table yet is effectively 'registered' awaiting preference entry
+      stats.registered += Math.max(0, totalStudents - trackedInSystem);
+
+      return res.json(stats);
+    } catch (error) {
+      console.error("Lifecycle stats error:", error);
+      res.status(500).json({ message: "Failed to fetch lifecycle stats" });
     }
   });
 
