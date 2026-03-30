@@ -712,7 +712,20 @@ export default function StudentPreferenceManagement() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (student: Student) => {
+    let status = student.allocationStatus || 'registered';
+
+    // Auto-escalate the visual status before allocation matches
+    if (status === 'registered' || status === 'pending') {
+      if (student.lockedBy) {
+        return <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">Locked</Badge>;
+      } else if (student.choice1 && student.stream) {
+        status = 'pending';
+      } else {
+        status = 'registered';
+      }
+    }
+
     switch (status) {
       case 'registered':
         return <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">Registered</Badge>;
@@ -721,7 +734,7 @@ export default function StudentPreferenceManagement() {
       case 'not_allotted':
         return <Badge variant="destructive">Not Allotted</Badge>;
       case 'pending':
-        return <Badge variant="outline" className="text-amber-600 border-amber-300">Pending</Badge>;
+        return <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">Pending</Badge>;
       case 'admitted':
         return <Badge variant="default" className="bg-emerald-600">Admitted</Badge>;
       case 'not_admitted':
@@ -729,7 +742,7 @@ export default function StudentPreferenceManagement() {
       case 'vacated':
         return <Badge variant="secondary" className="bg-gray-200 text-gray-700">Vacated</Badge>;
       default:
-        return <Badge variant="outline">{status || 'registered'}</Badge>;
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -1101,7 +1114,7 @@ export default function StudentPreferenceManagement() {
                           <div className="mt-3 ml-6 space-y-2 text-sm">
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                               <div><span className="text-muted-foreground">Merit #:</span> <span className="font-mono">{student.meritNumber}</span></div>
-                              <div><span className="text-muted-foreground">Status:</span> {getStatusBadge(student.allocationStatus || 'pending')}</div>
+                              <div><span className="text-muted-foreground">Status:</span> {getStatusBadge(student)}</div>
                               <div><span className="text-muted-foreground">District:</span> {normalizeDistrict(student.counselingDistrict) || 'N/A'}</div>
                               <div><span className="text-muted-foreground">Admin:</span> {student.districtAdmin || 'N/A'}</div>
                             </div>
@@ -1231,7 +1244,7 @@ export default function StudentPreferenceManagement() {
                             )}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
-                            {getStatusBadge(student.allocationStatus || 'pending')}
+                            {getStatusBadge(student)}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             {student.counselingRoundNumber ? (

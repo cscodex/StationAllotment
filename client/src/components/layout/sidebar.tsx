@@ -256,14 +256,6 @@ export default function Sidebar({ className, isCollapsed = false, onToggleCollap
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="font-mono">Build: {typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : 'Dev'}</span>
-                  <div className="flex items-center gap-1">
-                    <Database className="w-3 h-3" />
-                    {dbHealth?.status === 'ok' ? (
-                      <span className="text-green-500 font-medium">Online ✅</span>
-                    ) : (
-                      <span className="text-red-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[60px]" title={dbHealth?.error || 'Offline'}>Offline ❌</span>
-                    )}
-                  </div>
                 </div>
               </div>
             </div>

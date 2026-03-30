@@ -129,15 +129,13 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
                   size="sm" 
                   className="flex items-center space-x-2" 
                   data-testid="button-database-status"
+                  title={`[${dbHealth?.instanceId || 'unknown'}]`}
                 >
                   <Database className={`w-4 h-4 ${dbHealth?.status === 'online' ? 'text-green-600' : dbHealth?.status === 'offline' ? 'text-red-600' : 'text-gray-400'}`} />
                   {dbHealthLoading ? (
                     <span className="text-muted-foreground">Checking...</span>
                   ) : (
                     <>
-                      <span className="font-mono font-bold text-xs uppercase text-slate-500">
-                        [{dbHealth?.instanceId || 'unknown'}]
-                      </span>
                       <span className={dbHealth?.status === 'online' ? 'text-green-600 font-bold' : dbHealth?.status === 'offline' ? 'text-red-600 font-bold' : 'text-muted-foreground'}>
                         {dbHealth?.status === 'online' ? 'Online' : dbHealth?.status === 'offline' ? 'Offline' : 'Unknown'}
                       </span>
@@ -211,9 +209,14 @@ export default function Header({ title, breadcrumbs = [], onMobileMenuToggle }: 
                 <Button variant="ghost" size="sm" className="flex items-center space-x-2" data-testid="button-locked-students-status">
                   <Lock className="w-4 h-4" />
                   <span>{lockedStudents}/{totalStudents}</span>
-                  <Badge variant={unlockedStudents > 0 ? "secondary" : "default"} className="ml-1">
-                    {unlockedStudents > 0 ? "Unlocked" : "All Locked"}
-                  </Badge>
+                  <span className="ml-1 hidden sm:inline">Locked</span>
+                  {unlockedStudents > 0 ? (
+                    <Badge variant="secondary" className="ml-1 text-amber-700 bg-amber-100 hover:bg-amber-200">
+                      {unlockedStudents} Unlocked
+                    </Badge>
+                  ) : (
+                    <Badge variant="default" className="ml-1">All Locked</Badge>
+                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-80" align="end">

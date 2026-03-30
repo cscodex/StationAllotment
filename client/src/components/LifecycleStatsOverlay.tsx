@@ -21,7 +21,8 @@ export function LifecycleStatsOverlay({
 
   // Fetch rounds for the selected title
   const { data: rounds = [] } = useQuery<any[]>({
-    queryKey: ["/api/counseling-rounds", selectedTitleId],
+    // Counseling rounds API doesn't currently strictly require `?counselingTitleId` but we'll include it for the queryClient standard
+    queryKey: ["/api/counseling-rounds", { counselingTitleId: selectedTitleId }],
     enabled: !!selectedTitleId && selectedTitleId !== "current"
   });
 
@@ -30,7 +31,7 @@ export function LifecycleStatsOverlay({
 
   // Fetch metrics data
   const { data: stats, isLoading } = useQuery<any>({
-    queryKey: ["/api/allocation/lifecycle-stats", effectiveTitleId, selectedRoundId, timing],
+    queryKey: ["/api/allocation/lifecycle-stats", { counselingTitleId: effectiveTitleId, roundId: selectedRoundId, timing }],
     enabled: !!effectiveTitleId && effectiveTitleId !== "current",
   });
 
@@ -107,39 +108,39 @@ export function LifecycleStatsOverlay({
               </thead>
               <tbody className="divide-y">
                 <tr className="bg-slate-50/50">
-                  <td className="px-6 py-3 font-semibold text-slate-800">Total Valid Students</td>
+                  <td className="px-6 py-3 font-semibold text-slate-800">Total Valid Students [Total Tracked]</td>
                   <td className="px-6 py-3 font-bold text-slate-800 text-right text-base">{stats?.total?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-blue-500 mr-2"></span>Registered <span className="text-muted-foreground text-xs ml-2">(Awaiting Preference Upload)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-blue-500 mr-2"></span>Registered <span className="text-muted-foreground text-xs ml-2">[Awaiting Preference Upload]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-blue-700">{stats?.registered?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Pending <span className="text-muted-foreground text-xs ml-2">(Unlocked Preferences Available)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Pending <span className="text-muted-foreground text-xs ml-2">[Unlocked Preferences Available]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-amber-700">{stats?.pending?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-orange-600 mr-2"></span>Locked <span className="text-muted-foreground text-xs ml-2">(Drafts Finalized & Locked)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-orange-600 mr-2"></span>Locked <span className="text-muted-foreground text-xs ml-2">[Drafts Finalized & Locked]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-orange-700">{stats?.locked?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-emerald-500 mr-2"></span>Allotted <span className="text-muted-foreground text-xs ml-2">(Algorithm Matched Seat)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-emerald-500 mr-2"></span>Allotted <span className="text-muted-foreground text-xs ml-2">[Algorithm Matched Seat]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-emerald-700">{stats?.allotted?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-slate-300 mr-2"></span>Not Allotted <span className="text-muted-foreground text-xs ml-2">(Algorithm Skipped/Exhausted)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-slate-300 mr-2"></span>Not Allotted <span className="text-muted-foreground text-xs ml-2">[Algorithm Skipped/Exhausted]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-slate-700">{stats?.not_allotted?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-green-600 mr-2"></span>Admitted <span className="text-muted-foreground text-xs ml-2">(Seat Officially Claimed)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-green-600 mr-2"></span>Admitted <span className="text-muted-foreground text-xs ml-2">[Seat Officially Claimed]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-green-700">{stats?.admitted?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-red-600 mr-2"></span>Not Admitted <span className="text-muted-foreground text-xs ml-2">(No Show Record)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-red-600 mr-2"></span>Not Admitted <span className="text-muted-foreground text-xs ml-2">[No Show Record]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-red-700">{stats?.not_admitted?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-purple-600 mr-2"></span>Vacated <span className="text-muted-foreground text-xs ml-2">(Seat Formally Discarded)</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-purple-600 mr-2"></span>Vacated <span className="text-muted-foreground text-xs ml-2">[Seat Formally Discarded]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-purple-700">{stats?.vacated?.toLocaleString() ?? "-"}</td>
                 </tr>
               </tbody>
