@@ -3225,10 +3225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let trackedInSystem = 0;
       workingSet.forEach(student => {
         trackedInSystem++;
-        // If they are locked...
-        if (student.allocationStatus === 'pending' && student.isLocked) {
-          stats.locked++;
-        } else if (student.allocationStatus === 'pending') {
+        if (student.allocationStatus === 'pending') {
           stats.pending++;
         } else if (student.allocationStatus === 'registered') {
           stats.registered++;

@@ -112,16 +112,12 @@ export function LifecycleStatsOverlay({
                   <td className="px-6 py-3 font-bold text-slate-800 text-right text-base">{stats?.total?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-blue-500 mr-2"></span>Registered <span className="text-muted-foreground text-xs ml-2">[Awaiting Preference Upload]</span></td>
+                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-blue-500 mr-2"></span>Registered <span className="text-muted-foreground text-xs ml-2">[No Action Taken]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-blue-700">{stats?.registered?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
                   <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-amber-500 mr-2"></span>Pending <span className="text-muted-foreground text-xs ml-2">[Unlocked Preferences Available]</span></td>
                   <td className="px-6 py-3 font-medium text-right text-amber-700">{stats?.pending?.toLocaleString() ?? "-"}</td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-orange-600 mr-2"></span>Locked <span className="text-muted-foreground text-xs ml-2">[Drafts Finalized & Locked]</span></td>
-                  <td className="px-6 py-3 font-medium text-right text-orange-700">{stats?.locked?.toLocaleString() ?? "-"}</td>
                 </tr>
                 <tr>
                   <td className="px-6 py-3 whitespace-nowrap"><span className="inline-flex w-3 h-3 rounded-full bg-emerald-500 mr-2"></span>Allotted <span className="text-muted-foreground text-xs ml-2">[Algorithm Matched Seat]</span></td>

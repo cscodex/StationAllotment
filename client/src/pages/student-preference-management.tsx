@@ -181,15 +181,10 @@ export default function StudentPreferenceManagement() {
   const queryClient = useQueryClient();
 
   // Helper function to check if student preferences are complete
+  // Allow locking if they have stream and at least the first choice
   const areAllPreferencesFilled = (student: Student) => {
     if (!student.stream || !student.stream.trim()) return false;
-
-    const choices = [
-      student.choice1, student.choice2, student.choice3, student.choice4, student.choice5,
-      student.choice6, student.choice7, student.choice8, student.choice9, student.choice10
-    ];
-
-    return choices.every(choice => choice && choice.trim());
+    return !!(student.choice1 && student.choice1.trim());
   };
 
   // Form setup for edit modal
@@ -716,14 +711,11 @@ export default function StudentPreferenceManagement() {
     let status = student.allocationStatus || 'registered';
 
     // Auto-escalate the visual status before allocation matches
-    if (status === 'registered' || status === 'pending') {
-      if (student.lockedBy) {
-        return <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">Locked</Badge>;
-      } else if (student.choice1 && student.stream) {
-        status = 'pending';
-      } else {
-        status = 'registered';
-      }
+    // Note: Locked is a parallel data state, not an exclusive allocation status.
+    if ((status === 'registered' || status === 'pending') && student.choice1 && student.stream) {
+      status = 'pending';
+    } else if (status === 'pending' && (!student.choice1 || !student.stream)) {
+      status = 'registered';
     }
 
     switch (status) {
