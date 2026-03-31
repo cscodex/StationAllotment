@@ -1231,7 +1231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Validate that all preferences including stream are set before locking
+      // Validate that stream and at least one choice are set before locking
       if (isLocked) {
         if (!student.stream) {
           return res.status(400).json({
@@ -1239,13 +1239,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        const hasAllChoices = student.choice1 && student.choice2 && student.choice3 &&
-          student.choice4 && student.choice5 && student.choice6 &&
-          student.choice7 && student.choice8 && student.choice9 && student.choice10;
-
-        if (!hasAllChoices) {
+        if (!student.choice1) {
           return res.status(400).json({
-            message: "Cannot lock student: All 10 district preferences must be set before locking"
+            message: "Cannot lock student: At least the first district preference must be set before locking"
           });
         }
       }
@@ -1818,8 +1814,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Server-side validation: Check if there are locked students
-      const students = await storage.getStudents(10000, 0);
+      // Server-side validation: Check if there are locked students (scoped to counseling title)
+      const students = counselingTitleId
+        ? await storage.getStudents(10000, 0, undefined, undefined, undefined, undefined, undefined, counselingTitleId as string)
+        : await storage.getStudents(10000, 0, academicYear);
       const lockedStudents = students.filter(s => s.isLocked && s.choice1);
 
       if (lockedStudents.length === 0) {

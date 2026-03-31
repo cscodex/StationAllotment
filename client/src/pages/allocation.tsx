@@ -182,9 +182,14 @@ export default function Allocation() {
   const allDistrictsFinalized = totalDistricts > 0 && finalizedDistricts === totalDistricts;
   const pendingDistricts = eligibleDistrictStatuses.filter(ds => !ds.isFinalized) || [];
 
-  // Check if there are locked students in any district (including central admin managed districts)
+  // Check if there are locked students for the current round/title
+  // Only count students belonging to this counseling title with isLocked=true and at least one choice
   const lockedStudents = students?.filter((student: any) =>
-    student.isLocked && student.choice1 // Only require student to be locked and have preferences
+    student.isLocked && student.choice1 &&
+    (!allocationStatus?.roundId || !student.counselingRoundId || student.counselingRoundId === allocationStatus?.roundId ||
+      // Also count students not yet assigned to any round (new students for this round)
+      !student.counselingRoundNumber || student.counselingRoundNumber === allocationStatus?.roundNumber
+    )
   ) || [];
   const hasLockedStudents = lockedStudents.length > 0;
 
